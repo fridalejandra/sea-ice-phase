@@ -1,0 +1,28 @@
+
+---
+
+### 📁 `.gitignore`
+```gitignore
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.Rhistory
+*.RData
+*.Rproj.user
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Data files
+data/*.nc
+data/*.csv
+*.h5
+*.zip
+
+# PyCharm & system
+.idea/
+.DS_Store
+.env
+.env.*
+
+
