@@ -1,11 +1,16 @@
 import numpy as np
 import xarray as xr
+import os
 
 THRESHOLD = 0.15
 WINDOW = 5
 
 # Load your dataset
-data = xr.open_dataset('/Users/fridaperez/Developer/repos/phase_project/Stammerjohn_2008/merged_bootsstrap.nc')
+DATA_DIR = '/home/falejandraperez/sea-ice-phase/data/bootstrap_smmr/'
+RESULTS_DIR = '/home/falejandraperez/sea-ice-phase/results/bootstrap_smmr/'
+DATA_FILE = DATA_DIR + 'merged_bootsstrap.nc'
+
+data = xr.open_dataset(DATA_FILE)
 
 # Preprocess data
 data = data.sortby('time')
@@ -45,7 +50,7 @@ def save_phases_to_netcdf(phases, year):
         attrs={"description": f"Sea Ice Phases (threshold: {THRESHOLD}, window: {WINDOW} days) for year {year}"}
     )
     filename = f"seaice_phases_SMMR_{year}.nc"
-    ds.to_netcdf(f'/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR/{filename}')
+    ds.to_netcdf(os.path.join(RESULTS_DIR, filename))
     print(f"Phases saved for year {year}")
 
 # Loop through all years in the dataset
