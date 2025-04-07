@@ -26,3 +26,4 @@ data/*.csv
 .env.*
 
 
+data/bootstrap_smmr/*.nc
