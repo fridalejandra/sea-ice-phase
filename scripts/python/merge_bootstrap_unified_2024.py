@@ -3,7 +3,7 @@ import xarray as xr
 import os
 import datetime
 import pandas as pd
-
+import numpy as np
 # ======== CONFIGURATION ========
 EXISTING_FILE = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/merged_bootsstrap.nc"
 DOWNLOAD_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/test_downloads/"

@@ -6,9 +6,9 @@ THRESHOLD = 0.15
 WINDOW = 5
 
 # Load your dataset
-DATA_DIR = '/home/falejandraperez/sea-ice-phase/data/bootstrap_smmr/'
-RESULTS_DIR = '/home/falejandraperez/sea-ice-phase/results/bootstrap_smmr/'
-DATA_FILE = DATA_DIR + 'merged_bootsstrap.nc'
+DATA_DIR = '/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/'
+RESULTS_DIR = '/user/geog/falejandraperez/sea-ice-phase/results/SMMR/'
+DATA_FILE = DATA_DIR + 'merged_bootstrap_extended_SH.nc'
 
 data = xr.open_dataset(DATA_FILE)
 
