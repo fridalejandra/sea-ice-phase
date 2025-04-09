@@ -1,79 +1,99 @@
-import numpy as np
 import xarray as xr
+import numpy as np
+from tqdm import tqdm
 import os
 
+# === SETTINGS === #
+INPUT_FILE = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/merged_bootstrap_SH_1979_06302024.nc"
+OUTPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
+CONC_VAR = "N07_ICECON"
 THRESHOLD = 0.15
-WINDOW = 5
+WINDOW = 5  # consecutive days
 
-# Load your dataset
-DATA_DIR = '/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/'
-RESULTS_DIR = '/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/test_downloads/'
-DATA_FILE = DATA_DIR + 'merged_bootstrap_extended_SH.nc'
+# Time search windows (DOY)
+RETREAT_START_DOY = 240  # August 27
+RETREAT_END_DOY = 365
+ADVANCE_START_DOY = 30   # Jan 30
+ADVANCE_END_DOY = 180
 
-data = xr.open_dataset(DATA_FILE)
+# For early melt and late freeze (optional refinements)
+EARLY_MELT_START_DOY = 120
+EARLY_MELT_END_DOY = 180
+LATE_FREEZE_START_DOY = 0
+LATE_FREEZE_END_DOY = 90
 
-# Preprocess data
-data = data.sortby('time')
-data = data.sel(time=~data.get_index("time").duplicated())
+# === HELPER FUNCTION === #
+def find_first_event(data, threshold, window, above=True):
+    """Find the first day where condition is met for `window` consecutive days."""
+    condition = data > threshold if above else data < threshold
+    rolling = condition.rolling(time=window).construct("window")
+    hits = rolling.all("window")
+    result = hits.argmax("time").item()
+    if not hits.any():
+        return np.nan
+    return int(result)
 
-sic_xr = data.N07_ICECON
+# === LOAD DATA === #
+ds = xr.open_dataset(INPUT_FILE)
+ice = ds[CONC_VAR].astype("float32") * 1.0  # unpack
+ice = ice.where(ice < 1.1)  # remove land/missing
 
-# Reverse latitude if necessary
-if sic_xr.y[0] > sic_xr.y[-1]:
-    sic_xr = sic_xr.sel(y=slice(None, None, -1))
+# === PREPARE OUTPUT === #
+years = np.unique(ds.time.dt.year.values)
+x, y = ds.x.size, ds.y.size
 
-def compute_phase_metric(da, threshold, window_size, condition='above'):
-    cond_met = da >= threshold if condition == 'above' else da <= threshold
-    cond_met_rolling = cond_met.rolling(time=window_size, center=True).sum() >= window_size
-    indices = xr.where(cond_met_rolling, da['time'].dt.dayofyear, np.nan)
-    first_occurrence = indices.min(dim='time', skipna=True)
-    return first_occurrence
+for year in tqdm(years, desc="Processing years"):
+    # Select full year slice
+    year_data = ice.sel(time=str(year))
 
-def compute_melt_end(da, threshold, window_size):
-    cond_met = da <= threshold
-    cond_met_reversed = cond_met.isel(time=slice(None, None, -1))
-    cond_met_rolling = cond_met_reversed.rolling(time=window_size, center=True).sum() >= window_size
-    indices = xr.where(cond_met_rolling, cond_met_reversed['time'].dt.dayofyear, np.nan)
-    last_occurrence = indices.max(dim='time', skipna=True)
-    return last_occurrence
+    # Calculate day of year
+    doy = year_data.time.dt.dayofyear
 
-def apply_masks(phase_da, yearly_da, threshold):
-    annual_min = yearly_da.min(dim='time')
-    annual_max = yearly_da.max(dim='time')
-    open_ocean_mask = annual_max < threshold
-    continent_mask = annual_min > threshold
-    return phase_da.where(~open_ocean_mask & ~continent_mask)
+    # Prepare arrays to store output
+    early_melt = np.full((y, x), np.nan)
+    retreat = np.full((y, x), np.nan)
+    advance = np.full((y, x), np.nan)
+    late_freeze = np.full((y, x), np.nan)
 
-def save_phases_to_netcdf(phases, year):
-    ds = xr.Dataset(
-        phases,
-        attrs={"description": f"Sea Ice Phases (threshold: {THRESHOLD}, window: {WINDOW} days) for year {year}"}
+    for j in range(y):
+        for i in range(x):
+            ts = year_data[:, j, i]
+            if ts.isnull().all():
+                continue
+
+            try:
+                # Subset for each search window
+                def sub_doy(start, end): return ts[(doy >= start) & (doy <= end)]
+
+                # Early Melt (first below threshold in spring)
+                em = sub_doy(EARLY_MELT_START_DOY, EARLY_MELT_END_DOY)
+                early_melt[j, i] = em.time[find_first_event(em, THRESHOLD, WINDOW, above=False)].dt.dayofyear.item()
+
+                # Retreat (main melt period)
+                rt = sub_doy(RETREAT_START_DOY, RETREAT_END_DOY)
+                retreat[j, i] = rt.time[find_first_event(rt, THRESHOLD, WINDOW, above=False)].dt.dayofyear.item()
+
+                # Advance (main freeze-up)
+                ad = sub_doy(ADVANCE_START_DOY, ADVANCE_END_DOY)
+                advance[j, i] = ad.time[find_first_event(ad, THRESHOLD, WINDOW, above=True)].dt.dayofyear.item()
+
+                # Late Freeze (second freeze-up attempt)
+                lf = sub_doy(LATE_FREEZE_START_DOY, LATE_FREEZE_END_DOY)
+                late_freeze[j, i] = lf.time[find_first_event(lf, THRESHOLD, WINDOW, above=True)].dt.dayofyear.item()
+
+            except:
+                continue
+
+    # === SAVE OUTPUT === #
+    out_ds = xr.Dataset(
+        {
+            "early_melt": (("y", "x"), early_melt),
+            "retreat": (("y", "x"), retreat),
+            "advance": (("y", "x"), advance),
+            "late_freeze": (("y", "x"), late_freeze),
+        },
+        coords={"x": ds.x, "y": ds.y},
+        attrs={"description": f"Sea ice phase dates (threshold: {THRESHOLD}, window: {WINDOW} days) for year {year}"}
     )
-    filename = f"seaice_phases_SMMR_{year}.nc"
-    ds.to_netcdf(os.path.join(RESULTS_DIR, filename))
-    print(f"Phases saved for year {year}")
-
-# Loop through all years in the dataset
-years = np.unique(sic_xr.time.dt.year.values)
-
-for year in years:
-    print(f"Processing year {year}...")
-    yearly_da = sic_xr.sel(time=sic_xr.time.dt.year == year)
-
-    # Compute phases explicitly without month filtering
-    freeze_start = compute_phase_metric(yearly_da, THRESHOLD, WINDOW, 'above')
-    melt_start = compute_phase_metric(yearly_da, THRESHOLD, WINDOW, 'below')
-    melt_end = compute_melt_end(yearly_da, THRESHOLD, WINDOW)
-
-    # Apply masks explicitly
-    freeze_start_masked = apply_masks(freeze_start, yearly_da, THRESHOLD)
-    melt_start_masked = apply_masks(melt_start, yearly_da, THRESHOLD)
-    melt_end_masked = apply_masks(melt_end, yearly_da, THRESHOLD)
-
-    # Save all phases in a single NetCDF file
-    phases = {
-        'freeze_start': freeze_start_masked,
-        'melt_start': melt_start_masked,
-        'melt_end': melt_end_masked
-    }
-    save_phases_to_netcdf(phases, year)
+    out_ds.to_netcdf(os.path.join(OUTPUT_DIR, f"seaice_phases_SMMR_{year}.nc"))
+    print(f"✅ Saved seaice_phases_SMMR_{year}.nc")
