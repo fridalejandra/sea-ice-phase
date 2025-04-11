@@ -2,17 +2,18 @@ import xarray as xr
 import numpy as np
 from tqdm import tqdm
 import os
+import gc
 
 # === CONFIGURATION === #
 
 # ---- INPUT / OUTPUT PATHS ---- #
 # LOCAL:
-# INPUT_FILE = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/merged_bootstrap_SH_1979_06302024.nc"
-# OUTPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
+INPUT_FILE = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/merged_bootstrap_SH_1979_06302024.nc"
+OUTPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
 
 # CLUSTER:
-INPUT_FILE = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/merged_bootstrap_SH_1979_06302024.nc"
-OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
+# INPUT_FILE = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/merged_bootstrap_SH_1979_06302024.nc"
+# OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
 
 CONC_VAR = "N07_ICECON"
 THRESHOLD = 0.15
@@ -54,7 +55,8 @@ for year in tqdm(years, desc="Processing years"):
                 continue
 
             try:
-                def sub_doy(start, end): return ts[(doy >= start) & (doy <= end)]
+                def sub_doy(start, end):
+                    return ts[(doy >= start) & (doy <= end)]
 
                 # Retreat
                 rt = sub_doy(RETREAT_START_DOY, RETREAT_END_DOY)
@@ -75,9 +77,15 @@ for year in tqdm(years, desc="Processing years"):
             "retreat": (("y", "x"), retreat),
         },
         coords={"x": ds.x, "y": ds.y},
-        attrs={"description": f"SMMR advance/retreat timing (threshold: {THRESHOLD}, window: {WINDOW}) for {year}"}
+        attrs={
+            "description": f"SMMR advance/retreat timing (threshold: {THRESHOLD}, window: {WINDOW}) for {year}"
+        }
     )
 
     out_file = os.path.join(OUTPUT_DIR, f"seaice_phases_SMMR_{year}.nc")
     out_ds.to_netcdf(out_file)
     print(f"✅ Saved {out_file}")
+
+    # 🧹 Cleanup to prevent memory bloat
+    del advance, retreat, out_ds, year_data
+    gc.collect()
