@@ -46,7 +46,7 @@ else:
     run_script(merge_2024_script, env_vars={"END_DATE": END_DATE})
 
 # ---- STEP 3: MERGE INTO FINAL FILE ---- #
-merge_final_script = os.path.join(SCRIPT_DIR, "merge_SH_1979_2024.py")
+merge_final_script = os.path.join(SCRIPT_DIR, "2merge_SH_1979_2024.py")
 if os.path.exists(final_merged):
     print(f"✅ Final merged file already exists: {final_merged}. Skipping Step 3.")
 else:
