@@ -4,8 +4,8 @@ from tqdm import tqdm
 import os
 
 # === SETTINGS === #
-INPUT_FILE = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/merged_bootstrap_SH_1979_06302024.nc"
-OUTPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
+INPUT_FILE = "user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/merged_bootstrap_SH_1979_06302024.nc"
+OUTPUT_DIR = "user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
 CONC_VAR = "N07_ICECON"
 THRESHOLD = 0.15
 WINDOW = 5  # consecutive days
