@@ -8,12 +8,12 @@ from pathlib import Path
 # === CONFIG ===
 
 # LOCAL:
-INPUT_FILE = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/amsre/merged_amsre_SH_2012_2024.nc"
-OUTPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/AMSRE_phase/"
+# INPUT_FILE = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/amsre/merged_amsre_SH_2012_2024.nc"
+# OUTPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/AMSRE_phase/"
 
 # CLUSTER:
-# INPUT_FILE = "/user/geog/falejandraperez/sea-ice-phase/data/amsre/merged_amsre_SH_2012_2024.nc"
-# OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/results/AMSRE_phase/"
+INPUT_FILE = "/user/geog/falejandraperez/sea-ice-phase/data/amsre/merged_amsre_SH_2012_2024.nc"
+OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/results/AMSRE_phase/"
 
 THRESHOLD = 15  # Note: AMSRE is in % (not 0–1)
 WINDOW = 5

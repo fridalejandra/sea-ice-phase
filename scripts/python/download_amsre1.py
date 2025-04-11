@@ -1,4 +1,4 @@
-# download_amsre.py
+# download_amsre1.py
 
 import earthaccess
 from datetime import datetime
@@ -9,7 +9,7 @@ earthaccess.login()
 # === CONFIG ===
 
 # Date range (feel free to edit)
-start_date = "2024-01-02"
+start_date = "2024-07-09"
 end_date = datetime.today().strftime("%Y-%m-%d")
 
 # Output directory
