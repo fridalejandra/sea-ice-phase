@@ -1,0 +1,5 @@
+# Ignore all NetCDF output files
+*.nc
+
+# Except if you explicitly move them to a tracked directory
+!data/bootstrap_smmr/test_downloads/*.nc
