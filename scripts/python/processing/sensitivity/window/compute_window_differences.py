@@ -11,7 +11,7 @@ WINDOWS = [3, 5, 7]
 # === PATH SETUP === #
 BASEDIR = "/user/geog/falejandraperez/sea-ice-phase/results/sensitivity"
 INPUT_DIRS = {
-    w: f"{BASEDIR}/seaice_phases_{DATASET}_{YEARS}_{w}day" for w in WINDOWS
+    w: f"{BASEDIR}/seaice_phases_{DATASET}_{w}day" for w in WINDOWS
 }
 OUTDIR = f"{BASEDIR}/{DATASET}_window_comparison"
 os.makedirs(OUTDIR, exist_ok=True)
