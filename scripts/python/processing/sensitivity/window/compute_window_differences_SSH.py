@@ -10,9 +10,6 @@ WINDOWS = [3, 5, 7]
 
 # === PATH SETUP === #
 BASEDIR = f"/user/geog/falejandraperez/sea-ice-phase/results/sensitivity/{DATASET}_phase"
-INPUT_DIRS = {
-    w: f"{BASEDIR}/seaice_phases_{DATASET}_{w}day" for w in WINDOWS
-}
 OUTDIR = f"{BASEDIR}/{DATASET}_window_comparison"
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -22,9 +19,8 @@ diff_7_minus_5 = {}
 
 for year in YEARS:
     try:
-        # Construct file paths
         files = {
-            w: os.path.join(INPUT_DIRS[w], f"seaice_phases_{DATASET}_{year}_{w}day.nc")
+            w: os.path.join(BASEDIR, f"seaice_phases_{DATASET}_{year}_{w}day.nc")
             for w in WINDOWS
         }
 
