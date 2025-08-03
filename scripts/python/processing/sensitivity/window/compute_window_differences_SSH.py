@@ -9,7 +9,7 @@ YEARS = range(1979, 2024) if DATASET == "SMMR" else range(2012, 2024)
 WINDOWS = [3, 5, 7]
 
 # === PATH SETUP === #
-BASEDIR = "/user/geog/falejandraperez/sea-ice-phase/results/sensitivity"
+BASEDIR = f"/user/geog/falejandraperez/sea-ice-phase/results/sensitivity/{DATASET}_phase"
 INPUT_DIRS = {
     w: f"{BASEDIR}/seaice_phases_{DATASET}_{w}day" for w in WINDOWS
 }
