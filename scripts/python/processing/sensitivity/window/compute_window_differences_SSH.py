@@ -29,10 +29,10 @@ for year in YEARS:
         ds5 = xr.open_dataset(files[5])
         ds7 = xr.open_dataset(files[7])
 
-        varname = f"{PHASE}_{year}"
-        da3 = ds3[varname].load()
-        da5 = ds5[varname].load()
-        da7 = ds7[varname].load()
+
+        da3 = ds3[PHASE].load()
+        da5 = ds5[PHASE].load()
+        da7 = ds7[PHASE].load()
 
         # Compute pixelwise differences
         diff_3 = da3 - da5
