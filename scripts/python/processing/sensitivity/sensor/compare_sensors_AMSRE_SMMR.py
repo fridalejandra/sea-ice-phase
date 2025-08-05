@@ -8,7 +8,7 @@ import cartopy.feature as cfeature
 # === USER CONFIGURATION === #
 phase = "retreat"
 years = range(2012, 2024)
-output_dir = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/sensor_bias_retreat/"
+output_dir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/sensor_bias_retreat/"
 os.makedirs(output_dir, exist_ok=True)
 
 # === PLOTTING FUNCTION === #
