@@ -8,7 +8,7 @@ import cartopy.feature as cfeature
 # === USER CONFIGURATION === #
 phase = "retreat"
 years = range(2012, 2024)
-output_dir = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/sensor_bias/"
+output_dir = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/sensor_bias_retreat/"
 os.makedirs(output_dir, exist_ok=True)
 
 # === PLOTTING FUNCTION === #
@@ -42,8 +42,8 @@ clim_dict = {}
 # === MAIN LOOP OVER YEARS === #
 for year in years:
     varname = f"{phase}_{year}"
-    smmr_path = f"/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/seaice_phases_SMMR_{year}.nc"
-    amsre_path = f"/Users/fridaperez/Developer/repos/sea-ice-phase/results/AMSRE_phase/seaice_phases_AMSRE_{year}.nc"
+    smmr_path = f"/user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/seaice_phases_SMMR_{year}.nc"
+    amsre_path = f"/user/geog/falejandraperez/sea-ice-phase/results/AMSRE_phase/seaice_phases_AMSRE_{year}.nc"
 
     try:
         ds_smmr = xr.open_dataset(smmr_path)
@@ -97,3 +97,17 @@ plt.tight_layout()
 hist_path = os.path.join(output_dir, f"histogram_wrapped_bias_{phase}.png")
 plt.savefig(hist_path, dpi=300)
 plt.close()
+
+# === UPLOAD WITH RCLONE === #
+gdrive_path = "gdrive:sea-ice-phase/results/figures/sensor_bias_retreat/"
+
+print("\nUploading climatology map to Google Drive...")
+os.system(f"rclone copy '{clim_path}' '{gdrive_path}'")
+
+print("Uploading histogram to Google Drive...")
+os.system(f"rclone copy '{hist_path}' '{gdrive_path}'")
+
+print("Uploading all yearly bias maps to Google Drive...")
+os.system(f"rclone copy '{output_dir}' '{gdrive_path}' --include 'bias_map_wrapped_{phase}_*.png'")
+
+print("✅ All plots uploaded successfully.")
