@@ -4,7 +4,7 @@ import numpy as np
 
 # === USER CONFIGURATION === #
 DATASET = "SMMR"  # Change to "AMSRE"
-PHASE = "retreat"  # or "advance"
+PHASE = "advance"  # or "advance"
 YEARS = range(1979, 2024) if DATASET == "SMMR" else range(2012, 2024)
 WINDOWS = [3, 5, 7]
 

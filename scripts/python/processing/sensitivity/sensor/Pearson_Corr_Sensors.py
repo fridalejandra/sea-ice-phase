@@ -1,6 +1,6 @@
 import os
-import numpy as np
 import xarray as xr
+import numpy as np
 from scipy.stats import pearsonr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -9,7 +9,9 @@ import cartopy.feature as cfeature
 # === USER CONFIGURATION === #
 phase = "retreat"
 years = range(2012, 2024)
-output_dir = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/sensor_bias/"
+output_dir = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/sensor_bias_retreat/"
+os.makedirs(output_dir, exist_ok=True)
+
 smmr_base = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/seaice_phases_SMMR_{year}.nc"
 amsre_base = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/AMSRE_phase/seaice_phases_AMSRE_{year}.nc"
 
@@ -26,41 +28,37 @@ for year in years:
         smmr = ds_smmr[varname].load()
         amsre = ds_amsre[varname].load()
 
-        # Match grid shape
         ny, nx = amsre.shape
         if ny % 2 != 0:
             amsre = amsre.isel(y=slice(0, ny - 1))
         if nx % 2 != 0:
             amsre = amsre.isel(x=slice(0, nx - 1))
+
         amsre_coarse = amsre.coarsen(y=2, x=2, boundary="trim").mean()
 
-        # Append
         smmr_list.append(smmr)
         amsre_list.append(amsre_coarse)
 
     except Exception as e:
         print(f"Skipping {year} due to error: {e}")
 
-# === STACK INTO 3D ARRAYS === #
+# === STACK === #
 smmr_stack = xr.concat(smmr_list, dim="year")
 amsre_stack = xr.concat(amsre_list, dim="year")
 
-# === INITIALIZE CORRELATION ARRAY === #
+# === CORRELATION MAP === #
 ny, nx = smmr_stack.shape[1], smmr_stack.shape[2]
 correlation_map = np.full((ny, nx), np.nan)
 
-# === LOOP THROUGH PIXELS AND COMPUTE CORRELATION === #
 for j in range(ny):
     for i in range(nx):
         smmr_ts = smmr_stack[:, j, i].values
         amsre_ts = amsre_stack[:, j, i].values
-
         valid_mask = ~np.isnan(smmr_ts) & ~np.isnan(amsre_ts)
         if np.sum(valid_mask) >= 5:
             r, _ = pearsonr(smmr_ts[valid_mask], amsre_ts[valid_mask])
             correlation_map[j, i] = r
 
-# === WRAP IN XARRAY === #
 correlation_da = xr.DataArray(
     data=correlation_map,
     coords={"x": smmr_stack.x, "y": smmr_stack.y},
@@ -87,6 +85,13 @@ def plot_corr(corr, title, save_path):
     plt.savefig(save_path, dpi=400)
     plt.close()
 
-# === SAVE CORRELATION MAP === #
+# === SAVE === #
 corr_path = os.path.join(output_dir, f"correlation_map_{phase}_2012-2023.png")
 plot_corr(correlation_da, f"{phase.capitalize()} Timing Correlation (2012–2023)", corr_path)
+
+# === RCLONE UPLOAD === #
+gdrive_dir = f"gdrive:sea-ice-phase/results/figures/sensor_bias_{phase}/"
+
+print("\nUploading correlation map to Google Drive...")
+os.system(f"rclone copy '{corr_path}' '{gdrive_dir}'")
+print("✅ Upload complete.")
