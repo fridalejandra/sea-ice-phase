@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
-# === USER CONFIGURATION === #
+# === USER CONFIGURATION === ###
 phase = "retreat"
 years = range(2012, 2024)
 output_dir = f"/user/geog/falejandraperez/sea-ice-phase/results/figures/sensor_bias_{phase}/"
