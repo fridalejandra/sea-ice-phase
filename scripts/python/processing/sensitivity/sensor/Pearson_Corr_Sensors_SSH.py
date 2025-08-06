@@ -9,11 +9,11 @@ import cartopy.feature as cfeature
 # === USER CONFIGURATION === #
 phase = "retreat"
 years = range(2012, 2024)
-output_dir = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/sensor_bias_retreat/"
+output_dir = f"/user/geog/falejandraperez/sea-ice-phase/results/figures/sensor_bias_{phase}"
 os.makedirs(output_dir, exist_ok=True)
 
-smmr_base = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/seaice_phases_SMMR_{year}.nc"
-amsre_base = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/AMSRE_phase/seaice_phases_AMSRE_{year}.nc"
+smmr_base = "/user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/seaice_phases_SMMR_{year}.nc"
+amsre_base = "/user/geog/falejandraperez/sea-ice-phase/results/AMSRE_phase/seaice_phases_AMSRE_{year}.nc"
 
 smmr_list = []
 amsre_list = []
