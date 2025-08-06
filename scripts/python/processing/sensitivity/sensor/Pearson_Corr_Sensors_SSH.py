@@ -7,7 +7,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
 # === USER CONFIGURATION === ##
-phase = "retreat"
+phase = "advance"
 years = range(2012, 2024)
 output_dir = f"/user/geog/falejandraperez/sea-ice-phase/results/figures/sensor_bias_{phase}"
 os.makedirs(output_dir, exist_ok=True)
