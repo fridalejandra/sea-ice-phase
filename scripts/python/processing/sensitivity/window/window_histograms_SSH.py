@@ -7,13 +7,7 @@ import matplotlib.pyplot as plt
 DATASETS = ["SMMR", "AMSRE"]
 PHASES = ["advance", "retreat"]
 WINDOWS = [3, 5, 7]
-
-# === GOOGLE DRIVE FOLDER (MOUNTED) === #
-FIGDIR = "/mnt/gdrive/sea-ice-figures/window_histograms"
-os.makedirs(FIGDIR, exist_ok=True)
-
-# === OPTIONAL: Google Drive remote for rclone === #
-RCLONE_REMOTE = "gdrive:sea-ice-figures/window_histograms"
+RCLONE_REMOTE = "gdrive:sea-ice-phase/results/figures/window_histograms"
 
 for dataset in DATASETS:
     years = range(1979, 2024) if dataset == "SMMR" else range(2012, 2024)
@@ -68,13 +62,12 @@ for dataset in DATASETS:
         fig.suptitle(f"{phase.capitalize()} Timing Difference — {dataset}", fontsize=14)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-        # === Save and Upload === #
+        # === Save to temp + Upload to Google Drive === #
         fig_name = f"histogram_window_diff_{phase}_{dataset}.png"
-        save_path = os.path.join(FIGDIR, fig_name)
-        plt.savefig(save_path, dpi=300)
+        temp_path = f"/tmp/{fig_name}"
+        plt.savefig(temp_path, dpi=300)
         plt.close()
 
-        # Optional: Rclone upload
-        os.system(f"rclone copy '{save_path}' '{RCLONE_REMOTE}'")
-
-        print(f"✅ Saved and uploaded: {fig_name}")
+        # Upload using rclone
+        os.system(f"rclone copy '{temp_path}' '{RCLONE_REMOTE}'")
+        print(f"✅ Uploaded: {fig_name}")
