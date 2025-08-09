@@ -23,8 +23,8 @@ for dataset in DATASETS:
 
         for year in years:
             try:
-                f3 = os.path.join(base_dir, phase, f"diff_{phase}_3minus5_{year}.nc")
-                f7 = os.path.join(base_dir, phase, f"diff_{phase}_7minus5_{year}.nc")
+                f3 = os.path.join(base_dir, f"diff_{phase}_3minus5_{year}.nc")
+                f7 = os.path.join(base_dir, f"diff_{phase}_7minus5_{year}.nc")
 
                 diff3 = xr.open_dataset(f3)[f"diff_{phase}_3minus5"]
                 diff7 = xr.open_dataset(f7)[f"diff_{phase}_7minus5"]
