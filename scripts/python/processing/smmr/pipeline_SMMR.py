@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -18,6 +19,10 @@ Contract expected of component scripts:
 Author: Frida P.
 """
 
+=======
+
+import subprocess
+>>>>>>> 347f2d1 (Update SMMR pipeline (cluster-aware, consistent naming))
 import os
 import sys
 import shutil
