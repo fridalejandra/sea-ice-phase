@@ -1,0 +1,9 @@
+data/
+results/
+*.png
+*.nc
+*.he5
+*.h5
+*.nc4
+*.tmp
+.ipynb_checkpoints/
