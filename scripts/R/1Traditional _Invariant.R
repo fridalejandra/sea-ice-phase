@@ -22,7 +22,7 @@ average_annual_cycle <- df_csv %>% group_by(DOY) %>% summarize(mean_extent = mea
 df_csv <- df_csv %>% left_join(average_annual_cycle, by = "DOY") %>% rename(Predicted_Traditional = mean_extent)
 
 # Invariant Annual Cycle using cyclic cubic splines
-gam_model <- gam(Extent ~ s(DOY, bs = "cc", k = 25), data = df_csv)
+gam_model <- gam(Extent ~ s(DOY, bs = "cc", k = 25), data = df_csv) #k=14? 
 df_csv$Predicted_Invariant <- predict(gam_model, newdata = df_csv)
 
 # Group data by day of year for plotting averages across all years
