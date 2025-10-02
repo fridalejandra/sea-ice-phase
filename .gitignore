@@ -1,29 +1,48 @@
-
----
-
-### 📁 `.gitignore`
-```gitignore
-# Byte-compiled / cache
-__pycache__/
-*.py[cod]
-*.Rhistory
-*.RData
-*.Rproj.user
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
-
-# Data files
-data/*.nc
-data/*.csv
+# NetCDF and binary data files
+*.nc
+*.npz
+*.npy
+*.mat
+*.hdf
 *.h5
+
+# Plots and figures
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.pdf
+*.svg
+
+# Logs
+*.log
+*.out
+*.err
+
+# Intermediate results
+*.csv
+*.tsv
+*.txt
+
+# Compiled Python or R files
+__pycache__/
+*.pyc
+*.RData
+*.rds
+
+# Editor/IDE files
+.DS_Store
+.idea/
+.Rproj.user/
+*.swp
+
+# Environment files
+.env/
+.envrc
+.venv/
+*.tar.gz
 *.zip
 
-# PyCharm & system
-.idea/
-.DS_Store
-.env
-.env.*
-
-
-data/bootstrap_smmr/*.nc
+# Ignore generated sensitivity or ERA5 data folders (if needed)
+scripts/python/processing/sensitivity/
+scripts/python/processing/ERA5_Reanalysis/
