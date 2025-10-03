@@ -36,3 +36,9 @@ data/*.csv
 
 
 data/bootstrap_smmr/*.nc
+data/
+results/
+*.log
+*.out
+__pycache__/
+*.pyc
