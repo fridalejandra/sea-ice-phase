@@ -3,6 +3,15 @@
 
 ### 📁 `.gitignore`
 ```gitignore
+
+# cluster outputs
+data/
+results/
+*.log
+*.out
+
+*.pyc
+
 # Byte-compiled / cache
 __pycache__/
 *.py[cod]
