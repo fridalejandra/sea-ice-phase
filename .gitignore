@@ -1,44 +1,47 @@
+# ==========================
+# Core
+# ==========================
 
----
-
-### 📁 `.gitignore`
-```gitignore
-
-# cluster outputs
+# Ignore the entire data folder (big raw files)
 data/
-results/
+
+# Figures of all types, anywhere
+*.png
+*.pdf
+*.jpeg
+*.jpg
+
+# Logs
 *.log
-*.out
 
-*.pyc
+# Large scientific data formats
+*.nc
+*.he5
 
-# Byte-compiled / cache
-__pycache__/
-*.py[cod]
-*.Rhistory
-*.RData
-*.Rproj.user
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
-
-# Data files
-data/*.nc
-data/*.csv
-*.h5
-*.zip
-
-# PyCharm & system
-.idea/
+# ==========================
+# IDE / system cruft (safe defaults)
+# ==========================
 .DS_Store
-.env
-.env.*
-
-
-data/bootstrap_smmr/*.nc
-data/
-results/
-*.log
-*.out
 __pycache__/
-*.pyc
+.ipynb_checkpoints/
+.Rproj.user/
+.idea/
+.vscode/
+
+# ==========================
+# Optional: results/figures folder?
+# ==========================
+# If you want ALL results ignored:
+# results/
+# OR if you only want the images ignored (not metadata/code):
+ results/figures/*.png
+ results/figures/*.pdf
+ results/figures/*.jpeg
+
+# ==========================
+# Future structure
+# ==========================
+# Documents you DO want tracked:
+# documents/*.md   ← no ignore needed (they’ll be versioned)
+# Jupyter notebooks you DO want tracked:
+# notebooks/*.ipynb   ← no ignore needed (they’ll be versioned)
