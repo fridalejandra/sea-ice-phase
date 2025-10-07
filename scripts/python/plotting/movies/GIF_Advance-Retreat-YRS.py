@@ -7,8 +7,8 @@ import os
 from glob import glob
 
 # === CONFIG ===
-PHASE_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
-OUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/yearly_phase_maps/"
+PHASE_DIR = "/results/SMMR_phase/"
+OUT_DIR = "/results/figures/yearly_phase_maps/"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # === Plotting function ===

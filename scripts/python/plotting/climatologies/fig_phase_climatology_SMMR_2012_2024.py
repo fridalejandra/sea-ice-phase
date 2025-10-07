@@ -10,8 +10,8 @@ from matplotlib.path import Path
 import matplotlib.patches as mpatches
 
 # === CONFIG === #
-INPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
-SAVE_PATH = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/climatology/fig_phase_climatology_SMMR_2012_2024_round.png"
+INPUT_DIR = "/results/SMMR_phase/"
+SAVE_PATH = "/results/figures/climatology/fig_phase_climatology_SMMR_2012_2024_round.png"
 YEAR_START = 2012
 YEAR_END = 2024
 

@@ -7,7 +7,7 @@ import os
 from glob import glob
 
 # === CONFIG === #
-INPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
+INPUT_DIR = "/results/SMMR_phase/"
 MERGED_GRID = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/merged/SMMR_merged_1979_06302024.nc"
 SAVE_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/variability/"
 YEAR_START = 1979

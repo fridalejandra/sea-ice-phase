@@ -8,7 +8,7 @@ from glob import glob
 from matplotlib.colors import Normalize
 
 # === CONFIGURATION === #
-INPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
+INPUT_DIR = "/results/SMMR_phase/"
 SAVE_PATH = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/climatology/fig_phase_climatology_SMMR_1979_2024.png"
 YEAR_START = 1979
 YEAR_END = 2024

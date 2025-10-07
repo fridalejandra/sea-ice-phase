@@ -10,8 +10,8 @@ from matplotlib.path import Path
 import matplotlib.patches as mpatches
 
 # === CONFIG === #
-INPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
-OUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/yearly_phase_maps/"
+INPUT_DIR = "/results/SMMR_phase/"
+OUT_DIR = "/results/figures/yearly_phase_maps/"
 YEAR_START, YEAR_END = 1979, 2023
 os.makedirs(OUT_DIR, exist_ok=True)
 

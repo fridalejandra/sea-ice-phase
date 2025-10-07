@@ -6,7 +6,7 @@ import numpy as np
 import os
 
 # === CONFIG === #
-BASE_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
+BASE_DIR = "/results/SMMR_phase/"
 SAVE_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/anomalies_pairs/"
 os.makedirs(SAVE_DIR, exist_ok=True)
 

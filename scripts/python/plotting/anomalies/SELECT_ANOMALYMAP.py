@@ -12,8 +12,8 @@ from matplotlib.path import Path
 YEAR_TARGET = 2022  # 🔁 Change this year as needed
 YEAR_START, YEAR_END = 1979, 2024
 
-PHASE_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
-OUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/anomaly/"
+PHASE_DIR = "/results/SMMR_phase/"
+OUT_DIR = "/results/figures/anomaly/"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 OUTPUT_PATH = os.path.join(OUT_DIR, f"retreat_anomaly_{YEAR_TARGET}.png")

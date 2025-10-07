@@ -7,8 +7,8 @@ import os
 from glob import glob
 
 # === CONFIG === #
-INPUT_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/SMMR_phase/"
-SAVE_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/results/figures/trends/"
+INPUT_DIR = "/results/SMMR_phase/"
+SAVE_DIR = "/results/figures/trends/"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 YEAR_START = 1979
