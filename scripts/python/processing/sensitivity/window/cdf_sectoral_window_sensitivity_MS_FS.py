@@ -166,54 +166,75 @@ def diffs_for_metric_sector_mask(metric, sector_mask_2d):
     return v35, v75
 
 def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
-                                panel_size=(3.2, 2.6), grey_bold_axes=True):
+                                panel_size=(3.2, 2.6)):
     names = list(masks_dict.keys())
-    n = len(names); nrows = ceil(n / ncols)
-    fig_w = ncols * panel_size[0]; fig_h = nrows * panel_size[1]
-    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h), sharex=True, sharey=True)
+    n = len(names)
+    nrows = int(np.ceil(n / ncols))
+
+    fig_w = ncols * panel_size[0]
+    fig_h = nrows * panel_size[1]
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h),
+                             sharex=True, sharey=True)
     axes = np.atleast_2d(axes)
 
-    lines_for_legend = None
+    # collect a couple of line artists for a single legend
+    legend_artists = None
+
+    # --- simple debug summary ---
+    print(f"\n[{metric}] sector pixel counts (valid & in mask):")
+    print("sector".ljust(28), "n_pixels")
+
     for i, name in enumerate(names):
-        r, c = divmod(i, ncols); ax = axes[r, c]
+        r, c = divmod(i, ncols)
+        ax = axes[r, c]
+
         v35, v75 = diffs_for_metric_sector_mask(metric, masks_dict[name])
+        # counts after valid+mask
+        print(name.ljust(28), f"{(v35.size + v75.size)//2:,}")
+
         v35_clip, _ = ecdf_data(v35, MAX_X)
         v75_clip, _ = ecdf_data(v75, MAX_X)
 
         if v35_clip.size == 0 and v75_clip.size == 0:
-            ax.text(0.5, 0.5, "No data", transform=ax.transAxes, ha="center", va="center", color="0.4", fontsize=9)
-            ax.set_xlim(0, MAX_X); ax.set_ylim(0, 1.0)
-            ax.set_title(name, fontsize=10, pad=3, color="0.25")
-            continue
-
-        l1 = sns.ecdfplot(v35_clip, label="3 vs 5-day window", lw=2, ax=ax)
-        l2 = sns.ecdfplot(v75_clip, label="7 vs 5-day window", lw=2, ax=ax)
-        if lines_for_legend is None:
-            lines_for_legend = (l1, l2)
-
-        ax.set_xlim(0, MAX_X); ax.set_ylim(0, 1.0)
-        if grey_bold_axes:
-            ax.set_xlabel("Absolute timing difference (days)", fontsize=10, fontweight="bold", color="0.3")
-            ax.set_ylabel("Cumulative Fraction of Pixels",    fontsize=10, fontweight="bold", color="0.3")
+            ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
+                    ha="center", va="center", color="0.4", fontsize=9)
         else:
-            ax.set_xlabel("Absolute timing difference (days)")
-            ax.set_ylabel("Cumulative Fraction of Pixels")
+            l1 = sns.ecdfplot(v35_clip, label="3 vs 5-day window", lw=2, ax=ax)
+            l2 = sns.ecdfplot(v75_clip, label="7 vs 5-day window", lw=2, ax=ax)
+            if legend_artists is None:
+                legend_artists = (l1, l2)
+
+        # per-panel cosmetics
         ax.set_title(name, fontsize=10, pad=3, color="0.25")
         ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.82")
+        # don’t set per-axes x/y labels (we’ll use supxlabel/supylabel)
 
-    # hide empties (if any)
+    # hide unused panels if n not divisible by ncols
     total = nrows * ncols
     for j in range(n, total):
         r, c = divmod(j, ncols)
         axes[r, c].set_visible(False)
 
-    # one figure-level legend
-    if lines_for_legend is not None:
-        fig.legend(lines_for_legend, ["3 vs 5-day window", "7 vs 5-day window"],
-                   title="Window comparison", loc="upper right",
-                   bbox_to_anchor=(0.98, 0.98), frameon=True)
+    # --- enforce identical axes across panels ---
+    for ax in axes.ravel():
+        if ax.get_visible():
+            ax.set_xlim(0, MAX_X)
+            ax.set_ylim(0, 1.0)
+            ax.tick_params(labelsize=9)
 
-    fig.tight_layout()
+    # single set of axis labels for the whole figure
+    fig.supxlabel("Absolute timing difference (days)", fontsize=11, fontweight="bold", color="0.3")
+    fig.supylabel("Cumulative Fraction of Pixels",    fontsize=11, fontweight="bold", color="0.3")
+
+    # figure-level legend OUTSIDE the grid
+    if legend_artists is not None:
+        fig.legend(legend_artists, ["3 vs 5-day window", "7 vs 5-day window"],
+                   title="Window comparison", loc="upper center",
+                   bbox_to_anchor=(0.5, 1.02), ncol=2, frameon=True)
+
+    fig.tight_layout(rect=[0, 0, 1, 0.96])  # leave room for the legend above
+
+    # save + upload
     fname = f"CDF_sectors_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
     local_path = f"/tmp/{fname}"
     fig.savefig(local_path, dpi=dpi)
