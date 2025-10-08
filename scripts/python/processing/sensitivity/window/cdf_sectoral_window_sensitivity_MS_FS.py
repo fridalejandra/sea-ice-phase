@@ -184,14 +184,14 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
     print(f"\n[{metric}] sector pixel counts (valid & in mask):")
     print("sector".ljust(28), "n_pixels")
 
+    legend_handles = None
+    legend_labels = None
+
     for i, name in enumerate(names):
         r, c = divmod(i, ncols)
         ax = axes[r, c]
 
         v35, v75 = diffs_for_metric_sector_mask(metric, masks_dict[name])
-        # counts after valid+mask
-        print(name.ljust(28), f"{(v35.size + v75.size)//2:,}")
-
         v35_clip, _ = ecdf_data(v35, MAX_X)
         v75_clip, _ = ecdf_data(v75, MAX_X)
 
@@ -199,10 +199,9 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
             ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
                     ha="center", va="center", color="0.4", fontsize=9)
         else:
-            l1 = sns.ecdfplot(v35_clip, label="3 vs 5-day window", lw=2, ax=ax)
-            l2 = sns.ecdfplot(v75_clip, label="7 vs 5-day window", lw=2, ax=ax)
-            if legend_artists is None:
-                legend_artists = (l1, l2)
+            # draw the two ECDFs
+            sns.ecdfplot(v35_clip, label="3 vs 5-day window", lw=2, ax=ax)
+            sns.ecdfplot(v75_clip, label="7 vs 5-day window", lw=2, ax=ax)
 
         # per-panel cosmetics
         ax.set_title(name, fontsize=10, pad=3, color="0.25")
