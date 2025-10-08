@@ -125,48 +125,50 @@ def plot_cdf(metric):
     min_gap = 0.07                # minimum vertical separation between labels (in axes units)
     placed_y_axes = []            # track y positions already used (axes coords)
 
+    # --- annotations ---
+    xoff = 0.3                # horizontal text offset (days)
+    min_gap = 0.09            # minimum vertical separation (axes units)
+    placed = []               # store (y_axes) positions to avoid overlaps
+
     for m in MARKS:
         ax.axvline(m, ls="--", c="k", lw=1)
-
-        # numbers to show
         p35 = frac_within(v35_full, m)
         p75 = frac_within(v75_full, m)
 
-        # anchor near the higher CDF at the mark
-        f_anchor = max(ecdf_at(v35_full, m), ecdf_at(v75_full, m))
-        y_try = np.clip(f_anchor + 0.05, 0.06, 0.94)
+        # Anchor just above the higher CDF
+        f_anchor = max(np.mean(np.asarray(v35_full) <= m),
+                       np.mean(np.asarray(v75_full) <= m))
+        y_try = np.clip(f_anchor + 0.05, 0.05, 0.95)
 
-        # work in axes coords to keep spacing consistent
+        # Convert to axes coords for spacing logic
         _, y_axes = ax.transAxes.inverted().transform(ax.transData.transform([0, y_try]))
-        # nudge up until no overlap with already placed labels
-        while any(abs(y_axes - yy) < min_gap for yy in placed_y_axes):
+        # Push upward until not overlapping
+        while any(abs(y_axes - yy) < min_gap for yy in placed):
             y_axes += min_gap
-            if y_axes > 0.94:  # if we run out of headroom, place just below the anchor
-                y_axes = np.clip(f_anchor - 0.05, 0.06, 0.94)
+            if y_axes > 0.95:
+                y_axes = np.clip(f_anchor - 0.05, 0.05, 0.95)
                 break
-        placed_y_axes.append(y_axes)
-        # convert back to data coords for annotate
+        placed.append(y_axes)
         _, y_text = ax.transData.inverted().transform(ax.transAxes.transform([0, y_axes]))
 
-        # choose side so text doesn't run off the right edge
-        on_right = m > 0.85 * MAX_X
+        # Choose left/right placement based on proximity to right edge
+        on_right = m > 0.8 * MAX_X
         xt = m - xoff if on_right else m + xoff
         ha = "right" if on_right else "left"
 
         txt = f"{m} d:\n{p35:.1f}% (3–5)\n{p75:.1f}% (7–5)"
         ax.annotate(
-            txt,
-            xy=(m, f_anchor), xytext=(xt, y_text),
+            txt, xy=(m, f_anchor), xytext=(xt, y_text),
             ha=ha, va="center", fontsize=9,
-            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="0.7", alpha=0.9),
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="0.75", alpha=0.95),
             arrowprops=dict(arrowstyle="-", lw=0.8, color="0.3"),
         )
+
 
     # --- styling unchanged from your original ---
     ax.set_xlim(0, MAX_X); ax.set_ylim(0, 1.0)
     ax.set_xlabel("Absolute timing difference (days)")
     ax.set_ylabel("Cumulative Fraction of Pixels")
-    ax.set_title(f"Distribution of timing differences between smoothing windows (FS,15%)")
     ax.legend(frameon=True, title="Window comparison")
     plt.tight_layout()
 
