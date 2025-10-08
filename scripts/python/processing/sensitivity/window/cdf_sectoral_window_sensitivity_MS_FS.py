@@ -1,4 +1,4 @@
-# cdf_window_sensitivity_MS_FS_SECTORS.py
+# cdf_sectoral_window_sensitivity_MS_FS.py
 import os, re, glob
 import numpy as np
 import xarray as xr
@@ -11,16 +11,14 @@ SENSOR       = "SMMR"      # "SMMR" or "AMSRE"
 THRESH_PCT   = 15          # e.g., 10/15/20
 INPUT_ROOT   = f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase"
 RCLONE_DEST  = f"gdrive:sea-ice-phase/results/figures/cdf_ms_fs/{SENSOR}_thr{THRESH_PCT}"
+
 PERIOD       = 366         # DOY wrap
-MAX_X        = 30          # plot x-limit in days for |Δ|
-MARKS        = [2, 5, 10]  # (unused in sector figs since we skip annotations here)
-sns.set_context("talk"); sns.set_style("whitegrid")
+MAX_X        = 30          # x-limit in days for |Δ|
 
-# NSIDC daily file (ANY one on the same 25 km SH grid) used to derive lat/lon once.
 NSIDC_SAMPLE = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/raw/NSIDC0079_SEAICE_PS_S25km_20241228_v4.0.nc"
-LATLON_NPZ   = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/raw/latlon_grid_25km_epsg3412.npz"  # will be created if not present
+LATLON_NPZ   = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/raw/latlon_grid_25km_epsg3412.npz"
 
-# ----------------- SECTORS (lat, lon in degrees) -----------------
+# 5 sectors (lat, lon in degrees). Longitudes may wrap.
 SECTORS = {
     "East Antarctic":          dict(lats=(-90, -50), lons=( 70, 170)),
     "King Hakon VII":          dict(lats=(-90, -50), lons=(-10,  70)),
@@ -29,7 +27,11 @@ SECTORS = {
     "Weddell":                 dict(lats=(-90, -50), lons=(290, 349)),
 }
 
-# ----------------- HELPERS (your originals) -----------------
+# Aesthetics
+sns.set_context("talk")
+sns.set_style("whitegrid")
+
+# ----------------- HELPERS (from your original) -----------------
 year_re = re.compile(r"_(\d{4})\.nc$")
 
 def parse_year(path):
@@ -50,6 +52,7 @@ def load_window_dict(metric, kdays):
             continue
         try:
             with xr.open_dataset(f) as ds:
+                # variable must be exactly 'MS' or 'FS'. Change here if different.
                 da = ds[metric].load()
             d[yr] = da
         except Exception as e:
@@ -78,120 +81,124 @@ def ecdf_data(abs_diff, max_x=MAX_X):
     abs_diff = abs_diff[~np.isnan(abs_diff)]
     return abs_diff[abs_diff <= max_x], abs_diff
 
-def frac_within(arr, m):
-    if arr.size == 0: return np.nan
-    return (arr <= m).mean() * 100.0
-
-# ----------------- BASELINE: whole-Antarctica CDF (kept for reference) -----------------
-def diffs_for_metric(metric):
-    d3 = load_window_dict(metric, 3)
-    d5 = load_window_dict(metric, 5)
-    d7 = load_window_dict(metric, 7)
-    years = align_years([d3, d5, d7])
-    A3 = stack_years(d3, years, f"{metric}_k3")  # (year,y,x)
-    A5 = stack_years(d5, years, f"{metric}_k5")
-    A7 = stack_years(d7, years, f"{metric}_k7")
-
-    mask = (~np.isnan(A3)) & (~np.isnan(A5)) & (~np.isnan(A7))
-    d35 = wrapped_diff_np((A3 - A5).values)
-    d75 = wrapped_diff_np((A7 - A5).values)
-    v35 = np.abs(d35[mask.values]).ravel()
-    v75 = np.abs(d75[mask.values]).ravel()
-    return v35, v75
-
-# ----------------- NEW: build lat/lon once from NSIDC grid -----------------
+# ----------------- LAT/LON GRID (derived once) -----------------
 def ensure_latlon_npz(nsidc_path=NSIDC_SAMPLE, out_npz=LATLON_NPZ):
+    """Create lat/lon cache (npz) from NSIDC EPSG:3412 x/y if missing."""
     if os.path.exists(out_npz):
         return out_npz
-    # Derive lat/lon from EPSG:3412 using pyproj
     try:
         import pyproj
     except ImportError:
-        raise RuntimeError("pyproj is required to derive lat/lon. Install with: pip install pyproj")
-
+        raise RuntimeError("pyproj is required. Install: pip install --user pyproj")
     ds = xr.open_dataset(nsidc_path)
     x = ds["x"].values  # (316,)
     y = ds["y"].values  # (332,)
-    X, Y = np.meshgrid(x, y)  # (332,316)
-
+    X, Y = np.meshgrid(x, y)  # (y,x)
     tfm = pyproj.Transformer.from_crs("EPSG:3412", "EPSG:4326", always_xy=True)
-    lon, lat = tfm.transform(X, Y)  # each (332,316)
-
+    lon, lat = tfm.transform(X, Y)  # (y,x)
     np.savez(out_npz, lat=lat, lon=lon)
     print(f"✓ wrote lat/lon grids to {out_npz}  shape={lat.shape}")
     return out_npz
 
-# ----------------- NEW: build sector masks from lat/lon -----------------
 def build_sector_masks_from_npz(latlon_npz_path, sectors=SECTORS):
+    """Return dict[name -> bool (y,x)] sector masks built from cached lat/lon."""
     g = np.load(latlon_npz_path)
-    lat = g["lat"]        # (y,x)
-    lon = g["lon"]        # (y,x) in [-180,180]
+    lat = g["lat"]; lon = g["lon"]
     lon360 = (lon + 360.0) % 360.0
-
-    def lonrange_mask(lo, hi):
+    def lonmask(lo, hi):
         lo = lo % 360.0; hi = hi % 360.0
         if lo <= hi:
             return (lon360 >= lo) & (lon360 <= hi)
         else:
             return (lon360 >= lo) | (lon360 <= hi)
-
     masks = {}
     for name, spec in sectors.items():
         lat_lo, lat_hi = spec["lats"]; lon_lo, lon_hi = spec["lons"]
         m = (lat >= min(lat_lo, lat_hi)) & (lat <= max(lat_lo, lat_hi))
-        m &= lonrange_mask(lon_lo, lon_hi)
+        m &= lonmask(lon_lo, lon_hi)
         masks[name] = m.astype(bool)
     return masks
 
-# ----------------- NEW: sector diffs + faceted plot (NO annotations) -----------------
-def diffs_for_metric_sector_mask(metric, sector_mask_2d):
+# ----------------- DIFFS (whole domain + sector) -----------------
+def diffs_for_metric(metric):
+    """Whole Antarctica |Δ(3-5)| and |Δ(7-5)| flattened."""
     d3 = load_window_dict(metric, 3)
     d5 = load_window_dict(metric, 5)
     d7 = load_window_dict(metric, 7)
     years = align_years([d3, d5, d7])
-    A3 = stack_years(d3, years, f"{metric}_k3")  # (year,y,x)
+    A3 = stack_years(d3, years, f"{metric}_k3")
     A5 = stack_years(d5, years, f"{metric}_k5")
     A7 = stack_years(d7, years, f"{metric}_k7")
-
-    valid = (~np.isnan(A3)) & (~np.isnan(A5)) & (~np.isnan(A7))  # xr (year,y,x)
-    sm = xr.DataArray(sector_mask_2d, dims=("y","x"))
-    if sm.shape != valid.isel(year=0).shape:
-        raise ValueError(f"Sector mask shape {sm.shape} does not match grid {valid.isel(year=0).shape}")
-    valid &= sm
-
+    valid = (~np.isnan(A3)) & (~np.isnan(A5)) & (~np.isnan(A7))
     d35 = wrapped_diff_np((A3 - A5).values)
     d75 = wrapped_diff_np((A7 - A5).values)
     v35 = np.abs(d35[valid.values]).ravel()
     v75 = np.abs(d75[valid.values]).ravel()
     return v35, v75
 
+def diffs_for_metric_sector_mask(metric, sector_mask_2d):
+    """Sectoral |Δ(3-5)| and |Δ(7-5)| flattened (mask broadcast over years)."""
+    d3 = load_window_dict(metric, 3)
+    d5 = load_window_dict(metric, 5)
+    d7 = load_window_dict(metric, 7)
+    years = align_years([d3, d5, d7])
+    A3 = stack_years(d3, years, f"{metric}_k3")  # (year,y,x)
+    A5 = stack_years(d5, years, f"{metric}_k5")
+    A7 = stack_years(d7, years, f"{metric}_k7")
+    valid = (~np.isnan(A3)) & (~np.isnan(A5)) & (~np.isnan(A7))
+    sm = xr.DataArray(np.asarray(sector_mask_2d, dtype=bool), dims=("y","x"))
+    if sm.shape != valid.isel(year=0).shape:
+        raise ValueError(f"Sector mask shape {sm.shape} does not match grid {valid.isel(year=0).shape}")
+    valid &= sm
+    d35 = wrapped_diff_np((A3 - A5).values)
+    d75 = wrapped_diff_np((A7 - A5).values)
+    v35 = np.abs(d35[valid.values]).ravel()
+    v75 = np.abs(d75[valid.values]).ravel()
+    return v35, v75
+
+# ----------------- DIAGNOSTIC -----------------
+def debug_years(metric):
+    """Prints year coverage and overlap for k3/k5/k7 for the metric."""
+    d3 = load_window_dict(metric, 3)
+    d5 = load_window_dict(metric, 5)
+    d7 = load_window_dict(metric, 7)
+    s3, s5, s7 = set(d3.keys()), set(d5.keys()), set(d7.keys())
+    inter = s3 & s5 & s7
+    def rng(s):
+        return f"{min(s)}–{max(s)}" if s else "—"
+    print(f"\n[{metric}] years per window:")
+    print(f"  k3: {rng(s3)}  (n={len(s3)})")
+    print(f"  k5: {rng(s5)}  (n={len(s5)})")
+    print(f"  k7: {rng(s7)}  (n={len(s7)})")
+    print(f"  overlap: n={len(inter)}  {sorted(list(inter))[:8]}{' …' if len(inter)>8 else ''}")
+    if not inter:
+        print("!! No overlapping years across k3/k5/k7 — check file availability / THRESH_PCT / paths.")
+
+# ----------------- PLOTTING -----------------
 def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
                                 panel_size=(3.2, 2.6)):
+    """Faceted plot per sector (no annotations). Shared axes; figure-level legend."""
     names = list(masks_dict.keys())
-    n = len(names)
-    nrows = int(np.ceil(n / ncols))
+    n = len(names); nrows = ceil(n / ncols)
 
     fig_w = ncols * panel_size[0]
     fig_h = nrows * panel_size[1]
-    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h),
-                             sharex=True, sharey=True)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h), sharex=True, sharey=True)
     axes = np.atleast_2d(axes)
 
-    # collect a couple of line artists for a single legend
-    legend_artists = None
-
-    # --- simple debug summary ---
     print(f"\n[{metric}] sector pixel counts (valid & in mask):")
     print("sector".ljust(28), "n_pixels")
 
     legend_handles = None
-    legend_labels = None
+    legend_labels  = ["3 vs 5-day window", "7 vs 5-day window"]
 
     for i, name in enumerate(names):
         r, c = divmod(i, ncols)
         ax = axes[r, c]
 
         v35, v75 = diffs_for_metric_sector_mask(metric, masks_dict[name])
+        print(name.ljust(28), f"{(v35.size + v75.size)//2:,}")
+
         v35_clip, _ = ecdf_data(v35, MAX_X)
         v75_clip, _ = ecdf_data(v75, MAX_X)
 
@@ -199,39 +206,40 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
             ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
                     ha="center", va="center", color="0.4", fontsize=9)
         else:
-            # draw the two ECDFs
-            sns.ecdfplot(v35_clip, label="3 vs 5-day window", lw=2, ax=ax)
-            sns.ecdfplot(v75_clip, label="7 vs 5-day window", lw=2, ax=ax)
+            sns.ecdfplot(v35_clip, label=legend_labels[0], lw=2, ax=ax)
+            sns.ecdfplot(v75_clip, label=legend_labels[1], lw=2, ax=ax)
+            # capture line handles from FIRST axes only
+            if legend_handles is None:
+                legend_handles = [ax.lines[-2], ax.lines[-1]]
 
-        # per-panel cosmetics
         ax.set_title(name, fontsize=10, pad=3, color="0.25")
         ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.82")
-        # don’t set per-axes x/y labels (we’ll use supxlabel/supylabel)
 
-    # hide unused panels if n not divisible by ncols
+    # hide unused panels if any
     total = nrows * ncols
     for j in range(n, total):
         r, c = divmod(j, ncols)
         axes[r, c].set_visible(False)
 
-    # --- enforce identical axes across panels ---
+    # identical axes + ticks across panels
     for ax in axes.ravel():
         if ax.get_visible():
             ax.set_xlim(0, MAX_X)
             ax.set_ylim(0, 1.0)
             ax.tick_params(labelsize=9)
 
-    # single set of axis labels for the whole figure
+    # figure-level x/y labels (no per-axes labels)
     fig.supxlabel("Absolute timing difference (days)", fontsize=11, fontweight="bold", color="0.3")
     fig.supylabel("Cumulative Fraction of Pixels",    fontsize=11, fontweight="bold", color="0.3")
 
-    # figure-level legend OUTSIDE the grid
-    if legend_artists is not None:
-        fig.legend(legend_artists, ["3 vs 5-day window", "7 vs 5-day window"],
-                   title="Window comparison", loc="upper center",
-                   bbox_to_anchor=(0.5, 1.02), ncol=2, frameon=True)
-
-    fig.tight_layout(rect=[0, 0, 1, 0.96])  # leave room for the legend above
+    # legend outside the grid
+    if legend_handles is not None:
+        fig.legend(legend_handles, legend_labels, title="Window comparison",
+                   loc="upper center", bbox_to_anchor=(0.5, 1.02),
+                   ncol=2, frameon=True)
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
+    else:
+        fig.tight_layout()
 
     # save + upload
     fname = f"CDF_sectors_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
@@ -241,13 +249,54 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
     os.system(f"rclone copy '{local_path}' '{RCLONE_DEST}'")
     print(f"✓ Uploaded: {fname}")
 
+def plot_cdf_single_sector(metric, name, mask_2d,
+                           figsize=(5.0, 3.5), dpi=300, save=True):
+    """Bigger, single-sector panel (no annotations)."""
+    v35, v75 = diffs_for_metric_sector_mask(metric, mask_2d)
+    v35_clip, _ = ecdf_data(v35, MAX_X)
+    v75_clip, _ = ecdf_data(v75, MAX_X)
+    fig, ax = plt.subplots(figsize=figsize)
+    if v35_clip.size == 0 and v75_clip.size == 0:
+        ax.text(0.5, 0.5, "No data", transform=ax.transAxes, ha="center", va="center", color="0.4", fontsize=10)
+    else:
+        # plot and create legend with real line handles
+        sns.ecdfplot(v35_clip, label="3 vs 5-day window", lw=2, ax=ax)
+        sns.ecdfplot(v75_clip, label="7 vs 5-day window", lw=2, ax=ax)
+        handles = [ax.lines[-2], ax.lines[-1]]
+        ax.legend(handles=handles, labels=["3 vs 5-day window", "7 vs 5-day window"],
+                  title="Window comparison", frameon=True, loc="lower right")
+    ax.set_xlim(0, MAX_X); ax.set_ylim(0, 1.0)
+    ax.set_xlabel("Absolute timing difference (days)", fontsize=11, fontweight="bold", color="0.3")
+    ax.set_ylabel("Cumulative Fraction of Pixels",    fontsize=11, fontweight="bold", color="0.3")
+    ax.set_title(f"{name} • {metric}", fontsize=11, color="0.25", pad=3)
+    ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.82")
+    fig.tight_layout()
+    if save:
+        fname = f"CDF_sector_{name.replace(' ','_')}_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
+        local_path = f"/tmp/{fname}"
+        fig.savefig(local_path, dpi=dpi)
+        plt.close(fig)
+        os.system(f"rclone copy '{local_path}' '{RCLONE_DEST}'")
+        print(f"✓ Uploaded: {fname}")
+    else:
+        plt.show()
+
 # ----------------- RUN -----------------
 if __name__ == "__main__":
-    # 1) Ensure we have lat/lon cached (once)
+    # 1) Ensure lat/lon cache exists
     ensure_latlon_npz(NSIDC_SAMPLE, LATLON_NPZ)
 
-    # 2) Build sector masks from lat/lon
+    # 2) Build sector masks
     SECTOR_MASKS = build_sector_masks_from_npz(LATLON_NPZ)
 
-    # 3) Make the faceted figures (no annotations)
-    plot_cdf_sectors_with_masks("MS", SECTOR_MASKS, ncols=3)  # me_
+    # 3) Quick diagnostics (helps if FS "doesn't run")
+    debug_years("MS")
+    debug_years("FS")
+
+    # 4) Faceted figures (no annotations)
+    plot_cdf_sectors_with_masks("MS", SECTOR_MASKS, ncols=3)
+    plot_cdf_sectors_with_masks("FS", SECTOR_MASKS, ncols=3)
+
+    # 5) Optional: zoom into a single sector for detail
+    # plot_cdf_single_sector("MS", "Weddell", SECTOR_MASKS["Weddell"])
+    # plot_cdf_single_sector("FS", "East Antarctic", SECTOR_MASKS["East Antarctic"])
