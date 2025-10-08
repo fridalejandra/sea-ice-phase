@@ -112,8 +112,8 @@ def plot_cdf(metric):
     plt.figure(figsize=(8, 6))
     ax = plt.gca()
 
-    sns.ecdfplot(v35_clip, label="3-day vs 5-day window", lw=2, ax=ax)
-    sns.ecdfplot(v75_clip, label="7-day vs 5-day window", lw=2, ax=ax)
+    sns.ecdfplot(v35_clip, label="3 vs 5-day window", lw=2, ax=ax)
+    sns.ecdfplot(v75_clip, label="7 vs 5-day window", lw=2, ax=ax)
 
     # helper: empirical CDF value at x
     def ecdf_at(vals, x):
