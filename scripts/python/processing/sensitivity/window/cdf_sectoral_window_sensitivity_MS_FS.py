@@ -288,6 +288,11 @@ if __name__ == "__main__":
 
     # 2) Build sector masks
     SECTOR_MASKS = build_sector_masks_from_npz(LATLON_NPZ)
+    # Make individual sector figures first (MS and then FS)
+    for metric in ["MS", "FS"]:
+        print(f"\n=== Individual sector plots: {metric} ===")
+        for name, mask in SECTOR_MASKS.items():
+            plot_cdf_single_sector(metric, name, mask, figsize=(5.5, 4.0), dpi=300, save=True)
 
     # 3) Quick diagnostics (helps if FS "doesn't run")
     debug_years("MS")
