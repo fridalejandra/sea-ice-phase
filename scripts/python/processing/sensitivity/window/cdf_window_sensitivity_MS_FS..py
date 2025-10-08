@@ -120,50 +120,34 @@ def plot_cdf(metric):
         arr = np.asarray(vals)
         return float(np.mean(arr <= x))
 
-    # --- annotations (simple + robust) ---
-    xoff = 0.3                    # horizontal offset for text (days)
-    min_gap = 0.07                # minimum vertical separation between labels (in axes units)
-    placed_y_axes = []            # track y positions already used (axes coords)
+    # --- annotations: fixed staggered y-levels near the bottom ---
+    xoff = 0.3  # horizontal text offset (days)
+    base_y = 0.12  # first label y (in data coords; 0..1 since CDF)
+    step_y = 0.10  # vertical spacing between labels (in data coords)
 
-    # --- annotations ---
-    xoff = 0.3                # horizontal text offset (days)
-    min_gap = 0.09            # minimum vertical separation (axes units)
-    placed = []               # store (y_axes) positions to avoid overlaps
-
-    for m in MARKS:
+    for i, m in enumerate(MARKS):
         ax.axvline(m, ls="--", c="k", lw=1)
+
         p35 = frac_within(v35_full, m)
         p75 = frac_within(v75_full, m)
 
-        # Anchor just above the higher CDF
-        f_anchor = max(np.mean(np.asarray(v35_full) <= m),
-                       np.mean(np.asarray(v75_full) <= m))
-        y_try = np.clip(f_anchor + 0.05, 0.05, 0.95)
+        # put each label on its own horizontal band
+        y_text = base_y + i * step_y
+        y_text = max(0.06, min(0.94, y_text))  # stay on-axes
 
-        # Convert to axes coords for spacing logic
-        _, y_axes = ax.transAxes.inverted().transform(ax.transData.transform([0, y_try]))
-        # Push upward until not overlapping
-        while any(abs(y_axes - yy) < min_gap for yy in placed):
-            y_axes += min_gap
-            if y_axes > 0.95:
-                y_axes = np.clip(f_anchor - 0.05, 0.05, 0.95)
-                break
-        placed.append(y_axes)
-        _, y_text = ax.transData.inverted().transform(ax.transAxes.transform([0, y_axes]))
-
-        # Choose left/right placement based on proximity to right edge
-        on_right = m > 0.8 * MAX_X
+        # flip to left side if near the right edge
+        on_right = m > 0.80 * MAX_X
         xt = m - xoff if on_right else m + xoff
         ha = "right" if on_right else "left"
 
         txt = f"{m} d:\n{p35:.1f}% (3–5)\n{p75:.1f}% (7–5)"
         ax.annotate(
-            txt, xy=(m, f_anchor), xytext=(xt, y_text),
+            txt,
+            xy=(m, y_text), xytext=(xt, y_text),  # horizontal arrow at a fixed y
             ha=ha, va="center", fontsize=9,
             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="0.75", alpha=0.95),
             arrowprops=dict(arrowstyle="-", lw=0.8, color="0.3"),
         )
-
 
     # --- styling unchanged from your original ---
     ax.set_xlim(0, MAX_X); ax.set_ylim(0, 1.0)
