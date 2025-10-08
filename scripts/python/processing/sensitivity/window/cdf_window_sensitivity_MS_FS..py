@@ -123,7 +123,7 @@ def plot_cdf(metric):
     # --- annotations: fixed staggered y-levels near the bottom ---
     xoff = 0.3  # horizontal text offset (days)
     base_y = 0.12  # first label y (in data coords; 0..1 since CDF)
-    step_y = 0.10  # vertical spacing between labels (in data coords)
+    step_y = 0.12  # vertical spacing between labels (in data coords)
 
     for i, m in enumerate(MARKS):
         ax.axvline(m, ls="--", c="k", lw=1)
