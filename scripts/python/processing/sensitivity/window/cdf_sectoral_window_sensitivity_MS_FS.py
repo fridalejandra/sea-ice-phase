@@ -15,17 +15,11 @@ RCLONE_DEST  = f"figures/cdf_ms_fs/{SENSOR}_thr{THRESH_PCT}"
 PERIOD       = 366         # DOY wrap
 MAX_X        = 30          # x-limit in days for |Δ|
 
-NSIDC_SAMPLE = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/raw/NSIDC0079_SEAICE_PS_S25km_20241228_v4.0.nc"
-LATLON_NPZ   = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/raw/latlon_grid_25km_epsg3412.npz"
+# --- NEW: canonical sector file ---
+CANONICAL = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
 
-# 5 sectors (lat, lon in degrees). Longitudes may wrap.
-SECTORS = {
-    "East Antarctic":          dict(lats=(-90, -50), lons=( 70, 170)),
-    "King Hakon VII":          dict(lats=(-90, -50), lons=(-10,  70)),
-    "Ross–Amundsen":           dict(lats=(-90, -50), lons=(165, 250)),
-    "Amundsen–Bellingshausen": dict(lats=(-90, -50), lons=(250, 290)),
-    "Weddell":                 dict(lats=(-90, -50), lons=(290, 349)),
-}
+# rclone destination (must include remote alias, not just a folder)
+RCLONE_DEST = "gdrive:sea-ice-phase/results/cdf_ms_fs/SMMR_thr15"  # edit as needed
 
 # Aesthetics
 sns.set_context("talk")
@@ -81,43 +75,34 @@ def ecdf_data(abs_diff, max_x=MAX_X):
     abs_diff = abs_diff[~np.isnan(abs_diff)]
     return abs_diff[abs_diff <= max_x], abs_diff
 
-# ----------------- LAT/LON GRID (derived once) -----------------
-def ensure_latlon_npz(nsidc_path=NSIDC_SAMPLE, out_npz=LATLON_NPZ):
-    """Create lat/lon cache (npz) from NSIDC EPSG:3412 x/y if missing."""
-    if os.path.exists(out_npz):
-        return out_npz
-    try:
-        import pyproj
-    except ImportError:
-        raise RuntimeError("pyproj is required. Install: pip install --user pyproj")
-    ds = xr.open_dataset(nsidc_path)
-    x = ds["x"].values  # (316,)
-    y = ds["y"].values  # (332,)
-    X, Y = np.meshgrid(x, y)  # (y,x)
-    tfm = pyproj.Transformer.from_crs("EPSG:3412", "EPSG:4326", always_xy=True)
-    lon, lat = tfm.transform(X, Y)  # (y,x)
-    np.savez(out_npz, lat=lat, lon=lon)
-    print(f"✓ wrote lat/lon grids to {out_npz}  shape={lat.shape}")
-    return out_npz
+# ----------------- SECTOR MASKS (from canonical file) -----------------
+SECTOR_ID_TO_NAME = {
+    1: "Amundsen–Bellingshausen",
+    2: "Weddell",
+    3: "King Haakon VII",
+    4: "East Antarctic",
+    5: "Ross–Amundsen",
+}
 
-def build_sector_masks_from_npz(latlon_npz_path, sectors=SECTORS):
-    """Return dict[name -> bool (y,x)] sector masks built from cached lat/lon."""
-    g = np.load(latlon_npz_path)
-    lat = g["lat"]; lon = g["lon"]
-    lon360 = (lon + 360.0) % 360.0
-    def lonmask(lo, hi):
-        lo = lo % 360.0; hi = hi % 360.0
-        if lo <= hi:
-            return (lon360 >= lo) & (lon360 <= hi)
-        else:
-            return (lon360 >= lo) | (lon360 <= hi)
+
+def load_sector_masks(canonical_path=CANONICAL):
+    ds = xr.open_dataset(canonical_path).load()
+    sid = ds["sector_id"].astype(np.int16)
+    valid_ocean = ds["valid_ocean"].astype(bool) if "valid_ocean" in ds else xr.ones_like(sid, dtype=bool)
     masks = {}
-    for name, spec in sectors.items():
-        lat_lo, lat_hi = spec["lats"]; lon_lo, lon_hi = spec["lons"]
-        m = (lat >= min(lat_lo, lat_hi)) & (lat <= max(lat_lo, lat_hi))
-        m &= lonmask(lon_lo, lon_hi)
-        masks[name] = m.astype(bool)
+    for k, name in SECTOR_ID_TO_NAME.items():
+        m = (sid == k) & valid_ocean
+        masks[name] = m.values.astype(bool)
+    ds.close()
     return masks
+
+def rclone_copy(local_path, remote_dir=RCLONE_DEST):
+    cmd = f"rclone copy '{local_path}' '{remote_dir}' --transfers=8 --checkers=8 --fast-list"
+    rc = os.system(cmd)
+    if rc != 0:
+        print(f"!! rclone failed (code {rc}) for {local_path}")
+
+
 
 # ----------------- DIFFS (whole domain + sector) -----------------
 def diffs_for_metric(metric):
@@ -146,10 +131,12 @@ def diffs_for_metric_sector_mask(metric, sector_mask_2d):
     A5 = stack_years(d5, years, f"{metric}_k5")
     A7 = stack_years(d7, years, f"{metric}_k7")
     valid = (~np.isnan(A3)) & (~np.isnan(A5)) & (~np.isnan(A7))
-    sm = xr.DataArray(np.asarray(sector_mask_2d, dtype=bool), dims=("y","x"))
+    sm = xr.DataArray(np.asarray(sector_mask_2d, dtype=bool), dims=("y", "x"))
     if sm.shape != valid.isel(year=0).shape:
         raise ValueError(f"Sector mask shape {sm.shape} does not match grid {valid.isel(year=0).shape}")
-    valid &= sm
+
+    sector_mask = sm.broadcast_like(valid)
+    valid = valid & sector_mask
     d35 = wrapped_diff_np((A3 - A5).values)
     d75 = wrapped_diff_np((A7 - A5).values)
     v35 = np.abs(d35[valid.values]).ravel()
@@ -173,6 +160,7 @@ def debug_years(metric):
     print(f"  overlap: n={len(inter)}  {sorted(list(inter))[:8]}{' …' if len(inter)>8 else ''}")
     if not inter:
         print("!! No overlapping years across k3/k5/k7 — check file availability / THRESH_PCT / paths.")
+
 
 # ----------------- PLOTTING -----------------
 def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
@@ -283,25 +271,19 @@ def plot_cdf_single_sector(metric, name, mask_2d,
 
 # ----------------- RUN -----------------
 if __name__ == "__main__":
-    # 1) Ensure lat/lon cache exists
-    ensure_latlon_npz(NSIDC_SAMPLE, LATLON_NPZ)
+    # Build sector masks from canonical file
+    SECTOR_MASKS = load_sector_masks(CANONICAL)
 
-    # 2) Build sector masks
-    SECTOR_MASKS = build_sector_masks_from_npz(LATLON_NPZ)
-    # Make individual sector figures first (MS and then FS)
+    # Individual sector plots
     for metric in ["MS", "FS"]:
         print(f"\n=== Individual sector plots: {metric} ===")
         for name, mask in SECTOR_MASKS.items():
             plot_cdf_single_sector(metric, name, mask, figsize=(5.5, 4.0), dpi=300, save=True)
 
-    # 3) Quick diagnostics (helps if FS "doesn't run")
+    # Diagnostics
     debug_years("MS")
     debug_years("FS")
 
-    # 4) Faceted figures (no annotations)
+    # Faceted figures
     plot_cdf_sectors_with_masks("MS", SECTOR_MASKS, ncols=3)
     plot_cdf_sectors_with_masks("FS", SECTOR_MASKS, ncols=3)
-
-    # 5) Optional: zoom into a single sector for detail
-    # plot_cdf_single_sector("MS", "Weddell", SECTOR_MASKS["Weddell"])
-    # plot_cdf_single_sector("FS", "East Antarctic", SECTOR_MASKS["East Antarctic"])
