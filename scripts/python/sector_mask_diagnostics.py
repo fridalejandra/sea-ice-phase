@@ -204,10 +204,11 @@ def main(cfg=CFG):
 
     # --- Plot PNG ---
     plt.figure(figsize=(7.6, 6.6))
-    plt.imshow(ds["valid_ocean"], origin="lower", cmap="gray", vmin=0, vmax=1)
+
+    plt.imshow(ds["valid_ocean"], origin="upper", cmap="gray", vmin=0, vmax=1)
     overlay = ds["sector_id"].where(ds["sector_id"] > 0).values
     cmap = plt.get_cmap("tab10")
-    plt.imshow(overlay, origin="lower", alpha=0.6, cmap=cmap, vmin=1, vmax=5)
+    plt.imshow(overlay, origin="upper", alpha=0.6, cmap=cmap, vmin=1, vmax=5)
     for b in boundaries:
         line = np.abs((ds["lonE"].values - b + 540) % 360 - 180) < 0.25
         yy, xx = np.where(line & ds["valid_ocean"].values)
