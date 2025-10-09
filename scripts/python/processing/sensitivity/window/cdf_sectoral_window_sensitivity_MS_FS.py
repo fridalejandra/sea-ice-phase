@@ -10,7 +10,7 @@ from math import ceil
 SENSOR       = "SMMR"      # "SMMR" or "AMSRE"
 THRESH_PCT   = 15          # e.g., 10/15/20
 INPUT_ROOT   = f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase"
-RCLONE_DEST  = f"gdrive:sea-ice-phase/results/figures/cdf_ms_fs/{SENSOR}_thr{THRESH_PCT}"
+RCLONE_DEST  = f"figures/cdf_ms_fs/{SENSOR}_thr{THRESH_PCT}"
 
 PERIOD       = 366         # DOY wrap
 MAX_X        = 30          # x-limit in days for |Δ|

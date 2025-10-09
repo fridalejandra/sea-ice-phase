@@ -1,218 +1,227 @@
 #!/usr/bin/env python3
-# sector_mask_diagnostics.py
-# ------------------------------------------------------------
-# Purpose:
-#   Prove that sector masks are correct and actually applied.
-#   - Build masks from a cached lat/lon grid
-#   - Check sizes, overlaps, and alignment with data files
-#   - Print lon/lat stats and random sample coords per sector
-#   - Compare valid pixel-year coverage per sector
-#   - Save per-sector binary mask PNGs (quick eyeball check)
-#
-# Dependencies:
-#   numpy, xarray, matplotlib, (optional) pyproj for building the npz
-# ------------------------------------------------------------
+"""
+build_canonical_sectors.py
+Author: Frida A. Perez (2025)
 
-import os, re, glob, warnings
+Creates a reusable NetCDF with:
+  - lat(y,x), lon(y,x), lonE(y,x)
+  - area_m2(y,x)
+  - valid_ocean(y,x)
+  - sector_id(y,x) : int8 (exclusive)
+  - w_AB, w_WE, w_KH, w_EA, w_RA : fractional weights (sum≈1 over ocean)
+
+Also produces a PNG map with the sector wedges and
+uploads it to Google Drive via rclone.
+"""
+
+from pathlib import Path
+import subprocess
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
-from pathlib import Path
+from datetime import datetime
 
-# ----------------- USER CONFIG -----------------
-SENSOR       = "SMMR"      # "SMMR" or "AMSRE"
-THRESH_PCT   = 15
-INPUT_ROOT   = f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase"
+# ================================================================
+# CONFIGURATION
+# ================================================================
+CFG = {
+    # ---- INPUT FILES ----
+    "latlon_file": "/user/geog/falejandraperez/sea-ice-phase/data/NSIDC0771_LatLon_PS_S25km_v1.1.nc",
+    "lat_var": "latitude",      # variable name in the file (check with xarray.open_dataset)
+    "lon_var": "longitude",     # variable name in the file
+    "area_file": "/user/geog/falejandraperez/sea-ice-phase/data/NSIDC0771_CellArea_PS_S25km_v1.0.nc",
+    "valid_file": None,         # optional; will infer from lat/lon if None
 
-NSIDC_SAMPLE = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/raw/NSIDC0079_SEAICE_PS_S25km_20241228_v4.0.nc"
-LATLON_NPZ   = "/user/geog/falejandraperez/sea-ice-phase/data/bootstrap_smmr/raw/latlon_grid_25km_epsg3412.npz"
+    # ---- OUTPUTS ----
+    "out_netcdf": "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc",
+    "out_png": "/user/geog/falejandraperez/sea-ice-phase/results/canonical_sectors.png",
 
-OUT_DIR      = Path(f"/tmp/sector_mask_diagnostics/{SENSOR}_thr{THRESH_PCT}")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+    # ---- SECTOR BOUNDS ----
+    "sector_bounds": {
+        1: {"name": "Amundsen–Bellingshausen", "intervals": [(250.0, 290.0)]},
+        2: {"name": "Weddell",                  "intervals": [(290.0, 346.0)]},
+        3: {"name": "King Haakon VII",          "intervals": [(346.0, 360.0), (0.0, 71.0)]},
+        4: {"name": "East Antarctica",          "intervals": [(71.0, 162.0)]},
+        5: {"name": "Ross–Amundsen",            "intervals": [(162.0, 250.0)]},
+    },
 
-# Sectors (lat, lon in degrees). Longitudes may wrap.
-SECTORS = {
-    "East Antarctic":          dict(lats=(-90, -50), lons=( 70, 170)),
-    "King Hakon VII":          dict(lats=(-90, -50), lons=(-10,  70)),
-    "Ross–Amundsen":           dict(lats=(-90, -50), lons=(165, 250)),
-    "Amundsen–Bellingshausen": dict(lats=(-90, -50), lons=(250, 290)),
-    "Weddell":                 dict(lats=(-90, -50), lons=(290, 349)),
+    "boundary_eps_deg": 1.0,   # tolerance for splitting boundary pixels 50/50
+
+    # ---- RCLONE SETTINGS ----
+    "rclone": {
+        "enabled": True,
+        "remote": "gdrive",                   # rclone remote alias (e.g., gdrive)
+        "dst_dir": "sea-ice-phase/results/",  # remote folder path
+        "dry_run": False,
+        "extra_flags": ["--transfers=8", "--checkers=8", "--fast-list"]
+    },
+
+    "dpi": 180
 }
 
-# ----------------- UTILS -----------------
-year_re = re.compile(r"_(\d{4})\.nc$")
+# ================================================================
+# HELPERS
+# ================================================================
+def to_lonE(lon):
+    return (lon % 360 + 360) % 360
 
-def parse_year(path):
-    m = year_re.search(os.path.basename(path))
-    return int(m.group(1)) if m else None
+def in_half_open(x, a, b):
+    return (x >= a) & (x < b)
 
-def ensure_latlon_npz(nsidc_path=NSIDC_SAMPLE, out_npz=LATLON_NPZ):
-    """Build a lat/lon cache (npz) from an EPSG:3412 reference file if missing."""
-    if os.path.exists(out_npz):
-        return out_npz
-    try:
-        import pyproj
-    except ImportError:
-        raise RuntimeError("pyproj is required to build the cache. Install: pip install --user pyproj")
-    ds = xr.open_dataset(nsidc_path)
-    x = ds["x"].values
-    y = ds["y"].values
-    X, Y = np.meshgrid(x, y)  # (y,x)
-    tfm = pyproj.Transformer.from_crs("EPSG:3412", "EPSG:4326", always_xy=True)
-    lon, lat = tfm.transform(X, Y)
-    np.savez(out_npz, lat=lat, lon=lon)
-    print(f"✓ wrote lat/lon grids to {out_npz}  shape={lat.shape}")
-    return out_npz
-
-def build_sector_masks_from_npz(latlon_npz_path, sectors=SECTORS):
-    """Return dict[name -> bool (y,x)] sector masks built from cached lat/lon, handling lon wrap."""
-    g = np.load(latlon_npz_path)
-    lat = g["lat"]; lon = g["lon"]
-    lon360 = (lon + 360.0) % 360.0
-
-    def lonmask(lo, hi):
-        lo = lo % 360.0; hi = hi % 360.0
-        if lo <= hi:
-            return (lon360 >= lo) & (lon360 <= hi)
+def belongs_to_sector(lonE, sector_def):
+    mask = np.zeros(lonE.shape, dtype=bool)
+    for (a, b) in sector_def["intervals"]:
+        if a <= b:
+            mask |= in_half_open(lonE, a, b)
         else:
-            return (lon360 >= lo) | (lon360 <= hi)
+            mask |= in_half_open(lonE, a, 360.0) | in_half_open(lonE, 0.0, b)
+    return mask
 
-    masks = {}
-    for name, spec in sectors.items():
-        lat_lo, lat_hi = spec["lats"]; lon_lo, lon_hi = spec["lons"]
-        m = (lat >= min(lat_lo, lat_hi)) & (lat <= max(lat_lo, lat_hi))
-        m &= lonmask(lon_lo, lon_hi)
-        masks[name] = m.astype(bool)
-    return masks, lat, lon
+def nearest_boundary_distance(lonE, boundaries):
+    dmin = np.full(lonE.shape, 9999.0)
+    for b in boundaries:
+        d = np.abs((lonE - b + 540.0) % 360.0 - 180.0)
+        dmin = np.minimum(dmin, d)
+    return dmin
 
-def open_any_data(metric="FS", kdays=5):
-    """
-    Open one k=5 file (reference) for shape/NaN checks.
-    We just need shape + valid mask; pick the first available year.
-    """
-    folder = os.path.join(INPUT_ROOT, f"{metric}_thr{THRESH_PCT}_k{kdays}")
-    files = sorted(glob.glob(os.path.join(folder, f"{metric}_*.nc")))
-    if not files:
-        raise FileNotFoundError(f"No files in {folder}")
-    f = files[0]
-    with xr.open_dataset(f) as ds:
-        if metric not in ds:
-            raise KeyError(f"{metric} not in {f}")
-        da = ds[metric]
-        shape = tuple(da.shape)
-        vmin = float(da.min().values) if np.isfinite(da.min()) else np.nan
-        vmax = float(da.max().values) if np.isfinite(da.max()) else np.nan
-        print(f"sample file: {os.path.basename(f)}  var={metric}  shape={shape}  range=[{vmin:.1f},{vmax:.1f}]")
-        valid = ~np.isnan(da)
-    return shape, valid
+def push_png(path_png, cfg):
+    rc = cfg["rclone"]
+    if not rc.get("enabled", False):
+        print("[rclone] disabled; skipping upload.")
+        return
+    dst = f"{rc['remote']}:{rc['dst_dir']}"
+    cmd = ["rclone", "copy", str(path_png), dst] + rc.get("extra_flags", [])
+    if rc.get("dry_run"): cmd.insert(1, "--dry-run")
+    print("[rclone]", " ".join(cmd))
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"[rclone] ERROR: {res.stderr.strip()}")
+        raise SystemExit(1)
 
-def plot_mask(mask, title, out_png, alpha=0.9):
-    """Save a binary mask as a PNG for quick eyeballing (imshow in grid coordinates)."""
-    fig, ax = plt.subplots(figsize=(5.0, 4.2))
-    ax.imshow(mask, origin="lower", interpolation="nearest", alpha=alpha)
-    ax.set_title(title, fontsize=11)
-    ax.set_xlabel("x"); ax.set_ylabel("y")
-    ax.grid(False)
-    fig.tight_layout()
-    fig.savefig(out_png, dpi=200)
-    plt.close(fig)
+# ================================================================
+# MAIN
+# ================================================================
+def main(cfg=CFG):
 
-def rand_coords(mask, lat, lon, n=6, seed=42):
-    """Return up to n random (lat,lon) from True pixels of mask (for spot checks)."""
-    idx = np.argwhere(mask)
-    if idx.size == 0:
-        return []
-    rng = np.random.default_rng(seed)
-    sel = idx[rng.choice(idx.shape[0], size=min(n, idx.shape[0]), replace=False)]
-    out = []
-    for y, x in sel:
-        out.append((float(lat[y, x]), float(lon[y, x])))
-    return out
+    out_nc  = Path(cfg["out_netcdf"])
+    out_png = Path(cfg["out_png"])
+    out_nc.parent.mkdir(parents=True, exist_ok=True)
+    out_png.parent.mkdir(parents=True, exist_ok=True)
 
-# ----------------- MAIN DIAGNOSTIC -----------------
-def main():
-    warnings.filterwarnings("ignore", ".*converting a masked element to nan.*")
+    # --- Load lat/lon from single file ---
+    ds_grid = xr.open_dataset(cfg["latlon_file"])
+    lat = ds_grid[cfg["lat_var"]]
+    lon = ds_grid[cfg["lon_var"]]
+    ds_grid.close()
 
-    # 1) Ensure we have lat/lon (or build it once)
-    ensure_latlon_npz(NSIDC_SAMPLE, LATLON_NPZ)
+    lonE = xr.apply_ufunc(to_lonE, lon)
 
-    # 2) Build masks
-    masks, lat, lon = build_sector_masks_from_npz(LATLON_NPZ, SECTORS)
-    H, W = lat.shape
-    print(f"grid shape (lat/lon): {H}x{W}")
-    print(f"lat range: [{lat.min():.2f}, {lat.max():.2f}]  lon range: [{lon.min():.2f}, {lon.max():.2f}]")
+    # --- Load area and valid mask ---
+    area = None
+    if cfg["area_file"]:
+        ds_area = xr.open_dataset(cfg["area_file"])
+        area = ds_area[list(ds_area.data_vars)[0]].astype(np.float32)
+        ds_area.close()
 
-    # 3) Save each mask as quick-look PNG + print counts and lon/lat stats
-    total_union = np.zeros((H, W), dtype=int)
-    for name, m in masks.items():
-        total_union += m.astype(int)
+    if cfg["valid_file"]:
+        ds_valid = xr.open_dataset(cfg["valid_file"])
+        valid = ds_valid[list(ds_valid.data_vars)[0]].astype(bool)
+        ds_valid.close()
+    else:
+        valid = xr.DataArray(
+            np.isfinite(lat.values) & np.isfinite(lon.values),
+            dims=lat.dims, coords=lat.coords, name="valid_ocean"
+        )
 
-        count = int(m.sum())
-        if count == 0:
-            print(f"[{name}] mask has ZERO pixels — check sector lon/lat bounds")
-        lat_vals = lat[m]; lon_vals = lon[m]
-        lon360 = (lon_vals + 360.0) % 360.0
+    # --- Build exclusive sector_id ---
+    sid = xr.zeros_like(lonE, dtype=np.int8)
+    for k, info in cfg["sector_bounds"].items():
+        sid.values[belongs_to_sector(lonE.values, info)] = np.int8(k)
 
-        print(f"\n{name}")
-        print(f"  pixels in mask: {count:,}")
-        print(f"  lat  median={np.nanmedian(lat_vals):6.2f}  q5={np.nanpercentile(lat_vals,5):6.2f}  q95={np.nanpercentile(lat_vals,95):6.2f}")
-        print(f"  lon°E median={np.nanmedian(lon360):6.2f}  q5={np.nanpercentile(lon360,5):6.2f}  q95={np.nanpercentile(lon360,95):6.2f}")
+    # --- Identify near-boundary pixels and split 50/50 ---
+    boundaries = sorted(set([b for s in cfg["sector_bounds"].values() for inter in s["intervals"] for b in inter]))
+    dmin = nearest_boundary_distance(lonE.values, boundaries)
+    near = dmin <= cfg["boundary_eps_deg"]
 
-        # random coordinate samples for eyeballing
-        samples = rand_coords(m, lat, lon, n=6)
-        for j, (la, lo) in enumerate(samples, 1):
-            lo360 = (lo + 360) % 360
-            print(f"    sample{j}: lat={la:7.3f}, lon={lo:8.3f}  (lon°E={lo360:7.3f})")
+    w = {k: xr.zeros_like(lonE, dtype=np.float32) for k in cfg["sector_bounds"].keys()}
+    for k in w.keys():
+        w[k].values[sid.values == k] = 1.0
 
-        # write mask image
-        out_png = OUT_DIR / f"mask_{name.replace(' ','_')}.png"
-        plot_mask(m, f"{name} (mask)", out_png)
-        print(f"  ✓ wrote {out_png}")
+    eps = 0.5
+    lonE_left  = (lonE.values - eps) % 360.0
+    lonE_right = (lonE.values + eps) % 360.0
+    left_id  = np.zeros(sid.shape, dtype=np.int8)
+    right_id = np.zeros(sid.shape, dtype=np.int8)
+    for k in cfg["sector_bounds"].keys():
+        left_id[belongs_to_sector(lonE_left,  cfg["sector_bounds"][k])] = np.int8(k)
+        right_id[belongs_to_sector(lonE_right, cfg["sector_bounds"][k])] = np.int8(k)
 
-    # 4) Overlap & coverage diagnostics (union/overlap counts)
-    n_unassigned = int((total_union == 0).sum())
-    n_overlap    = int((total_union > 1).sum())
-    print(f"\nPixels in NO sector: {n_unassigned:,}")
-    print(f"Pixels in >1 sector: {n_overlap:,} (should be ~0; small boundary overlaps are acceptable)")
+    mask_split = near & (left_id > 0) & (right_id > 0) & valid.values
+    for k in w.keys():
+        arr = w[k].values
+        arr[mask_split] = 0.0
+        w[k].values = arr
+    for k in w.keys():
+        arr = w[k].values
+        arr[mask_split & (left_id == k)]  += 0.5
+        arr[mask_split & (right_id == k)] += 0.5
+        arr[~valid.values] = 0.0
+        w[k].values = arr
 
-    # 5) Check alignment with data grid: open one FS k=5 file
-    shape, valid = open_any_data(metric="FS", kdays=5)
-    if shape[-2:] != (H, W):
-        raise ValueError(f"Data grid shape {shape[-2:]} != lat/lon grid shape {(H,W)}. Check the reference file & grid.")
+    w_sum = xr.zeros_like(lonE, dtype=np.float32)
+    for k in w.keys():
+        w_sum = w_sum + w[k]
+    max_dev = np.nanmax(np.abs(w_sum.where(valid).values - 1.0))
+    print(f"[check] max |sum(weights)-1| over valid ocean: {max_dev:.3e}")
 
-    # 6) For each sector: how many valid (non-NaN) pixels do we actually have in k=5?
-    valid = valid.compute() if hasattr(valid.data, "compute") else valid  # dask -> numpy if needed
-    print("\n[FS k=5] valid pixel counts per sector (single sample year):")
-    for name, m in masks.items():
-        n_mask   = int(m.sum())
-        n_valid  = int((valid.values & m).sum())
-        frac     = n_valid / n_mask if n_mask else np.nan
-        print(f"  {name:28s} mask px={n_mask:7d}  valid px={n_valid:7d}  frac={frac:5.2f}")
+    if area is None:
+        area = xr.full_like(lonE, 1.0, dtype=np.float32).rename("area_m2")
 
-    # 7) Optional: write a composite figure with all masks tiled
-    cols = 3
-    names = list(masks.keys())
-    rows = int(np.ceil(len(names)/cols))
-    fig, axes = plt.subplots(rows, cols, figsize=(cols*4.2, rows*3.6), sharex=True, sharey=True)
-    axes = np.atleast_2d(axes)
-    for i, name in enumerate(names):
-        r, c = divmod(i, cols)
-        ax = axes[r, c]
-        ax.imshow(masks[name], origin="lower", interpolation="nearest")
-        ax.set_title(name, fontsize=10); ax.set_xticks([]); ax.set_yticks([])
-    # blank any unused
-    for j in range(len(names), rows*cols):
-        r, c = divmod(j, cols)
-        axes[r, c].axis("off")
-    fig.suptitle(f"Sector masks • {SENSOR} thr{THRESH_PCT}", fontsize=12)
-    fig.tight_layout(rect=[0,0,1,0.96])
-    composite = OUT_DIR / "masks_composite.png"
-    fig.savefig(composite, dpi=200)
-    plt.close(fig)
-    print(f"✓ wrote {composite}")
+    # --- Build dataset ---
+    ds = xr.Dataset()
+    ds["lat"] = lat.astype(np.float32)
+    ds["lon"] = lon.astype(np.float32)
+    ds["lonE"] = lonE.astype(np.float32)
+    ds["area_m2"] = area
+    ds["valid_ocean"] = valid.astype(bool)
+    ds["sector_id"] = sid
+    name_map = {1:"AB", 2:"WE", 3:"KH", 4:"EA", 5:"RA"}
+    for k, tag in name_map.items():
+        ds[f"w_{tag}"] = w[k].astype(np.float32)
 
-    print("\nDone. If counts, lon/lat stats, and valid fractions look sensible—and the PNGs look distinct—you are truly slicing sectors.")
+    ds.attrs.update({
+        "title": "Canonical Antarctic Sectors (exclusive IDs + fractional weights)",
+        "created": datetime.utcnow().isoformat() + "Z",
+        "lon_convention": "lon in [-180,180], lonE in [0,360)",
+        "sector_bounds_degE": "AB:[250,290), WE:[290,346), KH:[346,360)∪[0,71), EA:[71,162), RA:[162,250)",
+        "rule": "Half-open; meridian belongs to sector on its right",
+    })
+    for k, info in cfg["sector_bounds"].items():
+        ds[f"sector_{k}_name"] = info["name"]
 
-# ----------------- ENTRY -----------------
+    ds.to_netcdf(out_nc)
+    print(f"[OK] wrote NetCDF: {out_nc}")
+
+    # --- Plot PNG ---
+    plt.figure(figsize=(7.6, 6.6))
+    plt.imshow(ds["valid_ocean"], origin="lower", cmap="gray", vmin=0, vmax=1)
+    overlay = ds["sector_id"].where(ds["sector_id"] > 0).values
+    cmap = plt.get_cmap("tab10")
+    plt.imshow(overlay, origin="lower", alpha=0.6, cmap=cmap, vmin=1, vmax=5)
+    for b in boundaries:
+        line = np.abs((ds["lonE"].values - b + 540) % 360 - 180) < 0.25
+        yy, xx = np.where(line & ds["valid_ocean"].values)
+        if yy.size > 0:
+            plt.scatter(xx, yy, s=1, c="k")
+    plt.title("Canonical Antarctic Sectors (IDs + meridian boundaries)")
+    plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=cfg["dpi"])
+    plt.close()
+    print(f"[OK] wrote PNG: {out_png}")
+
+    # --- Push PNG to rclone remote ---
+    push_png(out_png, cfg)
+
 if __name__ == "__main__":
     main()
