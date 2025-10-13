@@ -169,10 +169,16 @@ def compute_maps_for_metric(metric, cano, cfg=CFG):
 # MAPPING (Cartopy)
 # ======================
 def draw_sector_meridians(ax):
+    import numpy as np
+    lats = np.linspace(-90, -45, 256)               # only the visible dome
     for bE in SECTOR_BOUNDARIES_E:
+        # convert degE to [-180, 180] for plotting
         lon = bE if bE <= 180 else bE - 360
-        ax.plot([lon, lon], [-90, -45], transform=ccrs.PlateCarree(),
-                color="k", linewidth=0.6, alpha=0.8)
+        lons = np.full_like(lats, lon, dtype=float)
+        # plot as geodesic so Cartopy handles wrap/segmenting correctly
+        ax.plot(lons, lats, transform=ccrs.Geodetic(),
+                color="grey", linewidth=0.6, alpha=0.5, zorder=6,linestyle="--")
+
 
 def _round_polar_axes(ax):
     # Circular boundary (like your screenshot)
