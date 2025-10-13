@@ -3,13 +3,9 @@
 window_sensitivity_maps.py
 
 Outputs:
-  1) Per-pixel PNG maps (Cartopy) for mean(|Δ|), std(|Δ|), frac(|Δ|>5) for {MS,FS} × {3v5,7v5}
+  1) Per-pixel PNG maps (Cartopy) for mean(|Δ|), std(|Δ|), q95(|Δ|) for {MS,FS} × {3v5,7v5}
   2) CSV with sectoral + circumpolar summaries (median, p95, mean, N)
   3) (Optional) rclone upload of PNGs to a remote folder
-
-Assumptions:
-  - Phase date NetCDFs are in INPUT_ROOT with subdirs like "MS_thr15_k3", files like "MS_1980.nc" (var name == "MS" or "FS")
-  - Canonical sector file provides: sector_id(0..5), valid_ocean(bool), lon, lat, lonE, area_m2
 """
 
 from pathlib import Path
@@ -19,24 +15,26 @@ import xarray as xr
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Cartopy (publication-quality maps)
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import matplotlib.path as mpath
 
 # =========================
 # CONFIG — EDIT THIS BLOCK
 # =========================
 CFG = {
-    "SENSOR": "SMMR",                      # "SMMR", "AMSRE", etc
-    "THRESH_PCT": 15,                      # e.g., 10/15/20
+    "SENSOR": "SMMR",
+    "THRESH_PCT": 15,
     "INPUT_ROOT": "/user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase",
     "CANONICAL":  "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc",
 
     "OUT_DIR": "/user/geog/falejandraperez/sea-ice-phase/results/window_sensitivity",
-    "PERIOD": 366,                         # day-of-year wrap
-    "GT_THRESH_DAYS": 5,                   # threshold for 'unstable' fraction
-    "MEAN_VMAX": 10,                       # colorbar max for mean(|Δ|)
-    "STD_VMAX": 8,                         # colorbar max for std(|Δ|)
+    "PERIOD": 366,
+
+    # styling
+    "MEAN_VMAX": 10,   # colorbar max for mean(|Δ|)
+    "STD_VMAX": 8,     # colorbar max for std(|Δ|)
+    "Q95_VMAX": 10,    # colorbar max for q95(|Δ|)
     "DPI": 180,
 
     # rclone (PNG upload)
@@ -49,7 +47,6 @@ CFG = {
     }
 }
 
-# Sector ID → name (must match your canonical file construction)
 SECTOR_ID_TO_NAME = {
     1: "Amundsen–Bellingshausen",
     2: "Weddell",
@@ -127,10 +124,10 @@ def to_lon_deg(lonE):
 # ======================
 def compute_maps_for_metric(metric, cano, cfg=CFG):
     """
-    Returns a dict of per-pixel maps for the metric (MS/FS):
-      { "3v5": {"mean": DA, "std": DA, "frac_gt": DA},
-        "7v5": {"mean": DA, "std": DA, "frac_gt": DA} }
-    All maps share dims (y,x) and the canonical grid/coords.
+    Returns per-pixel maps for the metric (MS/FS):
+      { "3v5": {"mean": DA, "std": DA, "q95": DA},
+        "7v5": {"mean": DA, "std": DA, "q95": DA},
+        "years": [int,...] }
     """
     d3 = open_phase_dict(metric, 3, cfg)
     d5 = open_phase_dict(metric, 5, cfg)
@@ -148,23 +145,23 @@ def compute_maps_for_metric(metric, cano, cfg=CFG):
     D35 = xr.apply_ufunc(wrapped_abs_diff, A3, A5, period, dask="allowed")
     D75 = xr.apply_ufunc(wrapped_abs_diff, A7, A5, period, dask="allowed")
 
-    # reduce across years
+    # Reduce across years
     mean35 = D35.mean(dim="year", skipna=True)
     std35  = D35.std(dim="year",  skipna=True)
-    frac35 = (D35 > cfg["GT_THRESH_DAYS"]).sum(dim="year") / D35.count(dim="year")
+    q95_35 = D35.quantile(0.95, dim="year", skipna=True)
 
     mean75 = D75.mean(dim="year", skipna=True)
     std75  = D75.std(dim="year",  skipna=True)
-    frac75 = (D75 > cfg["GT_THRESH_DAYS"]).sum(dim="year") / D75.count(dim="year")
+    q95_75 = D75.quantile(0.95, dim="year", skipna=True)
 
     # mask to valid ocean
     vo = cano["valid_ocean"].astype(bool)
-    for da in [mean35, std35, frac35, mean75, std75, frac75]:
+    for da in [mean35, std35, q95_35, mean75, std75, q95_75]:
         da.values[~vo.values] = np.nan
 
     return {
-        "3v5": {"mean": mean35, "std": std35, "frac_gt": frac35},
-        "7v5": {"mean": mean75, "std": std75, "frac_gt": frac75},
+        "3v5": {"mean": mean35, "std": std35, "q95": q95_35},
+        "7v5": {"mean": mean75, "std": std75, "q95": q95_75},
         "years": years
     }
 
@@ -177,27 +174,47 @@ def draw_sector_meridians(ax):
         ax.plot([lon, lon], [-90, -45], transform=ccrs.PlateCarree(),
                 color="k", linewidth=0.6, alpha=0.8)
 
-def plot_map_cartopy(da, cano, title, out_png, vmin, vmax, cmap="viridis", cfg=CFG):
+def _round_polar_axes(ax):
+    # Circular boundary (like your screenshot)
+    theta = np.linspace(0, 2*np.pi, 200)
+    center, radius = [0.5, 0.5], 0.5
+    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    circle = mpath.Path(verts * radius + center)
+    ax.set_boundary(circle, transform=ax.transAxes)
+
+def plot_map_cartopy(da, cano, title, out_png, vmin, vmax, cmap="viridis", white_under=True, cfg=CFG):
     proj = ccrs.SouthPolarStereo()
-    fig, ax = plt.subplots(figsize=(6.6, 6.6), subplot_kw={"projection": proj})
+    fig, ax = plt.subplots(figsize=(6.8, 6.8), subplot_kw={"projection": proj})
 
     # base: land + coastlines
-    ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="k", linewidth=0.3)
-    ax.coastlines(resolution="110m", color="k", linewidth=0.4)
+    ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="0.2", linewidth=0.4, zorder=2)
+    ax.coastlines(resolution="110m", color="0.2", linewidth=0.5, zorder=3)
 
-    # data (lat/lon centers)
+    # data
     lon = cano["lon"]; lat = cano["lat"]
-    pc = ax.pcolormesh(lon, lat, da, transform=ccrs.PlateCarree(),
-                       vmin=vmin, vmax=vmax, cmap=cmap)
-    cb = plt.colorbar(pc, ax=ax, shrink=0.6, pad=0.05)
-    cb.ax.set_ylabel(title.split("•")[0].split("(")[0].strip())
+    cmap_obj = plt.get_cmap(cmap).copy()
+    if white_under:
+        cmap_obj.set_under("white")
+    # tiny epsilon so zeros render as 'under' (white)
+    eps = 1e-6 if vmin == 0 else 0.0
+    pc = ax.pcolormesh(lon, lat, da,
+                       transform=ccrs.PlateCarree(),
+                       vmin=vmin + eps, vmax=vmax,
+                       cmap=cmap_obj, zorder=4)
+
+    # colorbar (horizontal for cleaner layout)
+    cb = plt.colorbar(pc, ax=ax, orientation="horizontal", pad=0.02, shrink=0.85)
+    cb.ax.set_xlabel(title.split("•")[0].strip(), fontsize=9)
 
     # sector meridians
     draw_sector_meridians(ax)
 
-    # extent and cosmetics
+    # extent + round frame
     ax.set_extent([-180, 180, -90, -45], ccrs.PlateCarree())
-    ax.set_title(title, fontsize=10)
+    _round_polar_axes(ax)
+
+    # title
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=6)
     plt.tight_layout()
     Path(out_png).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_png, dpi=cfg["DPI"])
@@ -247,7 +264,7 @@ def main(cfg=CFG):
     out_dir.mkdir(parents=True, exist_ok=True)
     maps_dir.mkdir(parents=True, exist_ok=True)
 
-    cano = xr.open_dataset(cfg["CANONICAL"]).load()  # lat, lon, lonE, valid_ocean, sector_id, area_m2
+    cano = xr.open_dataset(cfg["CANONICAL"]).load()
 
     all_rows = []
 
@@ -255,37 +272,35 @@ def main(cfg=CFG):
         maps = compute_maps_for_metric(metric, cano, cfg)
 
         for difftype, group in [("3v5", maps["3v5"]), ("7v5", maps["7v5"])]:
-            # 1) maps → PNG
+            # === maps → PNG ===
             plot_map_cartopy(group["mean"], cano,
                              title=f"mean(|Δ|) days • {metric} • {difftype}",
                              out_png=maps_dir / f"mean_absdiff_{metric}_{difftype}.png",
-                             vmin=0, vmax=cfg["MEAN_VMAX"], cmap="viridis", cfg=cfg)
+                             vmin=0, vmax=cfg["MEAN_VMAX"], cmap="viridis", white_under=True, cfg=cfg)
 
             plot_map_cartopy(group["std"], cano,
                              title=f"std(|Δ|) days • {metric} • {difftype}",
                              out_png=maps_dir / f"std_absdiff_{metric}_{difftype}.png",
-                             vmin=0, vmax=cfg["STD_VMAX"], cmap="magma", cfg=cfg)
+                             vmin=0, vmax=cfg["STD_VMAX"], cmap="magma", white_under=True, cfg=cfg)
 
-            plot_map_cartopy(group["frac_gt"], cano,
-                             title=f"fraction(|Δ|>{cfg['GT_THRESH_DAYS']}d) • {metric} • {difftype}",
-                             out_png=maps_dir / f"frac_gt{cfg['GT_THRESH_DAYS']}_absdiff_{metric}_{difftype}.png",
-                             vmin=0, vmax=1, cmap="plasma", cfg=cfg)
+            plot_map_cartopy(group["q95"], cano,
+                             title=f"q95(|Δ|) days • {metric} • {difftype}",
+                             out_png=maps_dir / f"q95_absdiff_{metric}_{difftype}.png",
+                             vmin=0, vmax=cfg["Q95_VMAX"], cmap="plasma", white_under=True, cfg=cfg)
 
-            # 2) stats → rows
+            # === stats → rows ===
             all_rows += summarize_to_rows(group["mean"], cano, metric, difftype, statname="mean_absdiff")
             all_rows += summarize_to_rows(group["std"],  cano, metric, difftype, statname="std_absdiff")
-            # For fraction, report as “days” fields but they are fractions; keep columns consistent
-            rows_frac = summarize_to_rows(group["frac_gt"], cano, metric, difftype, statname=f"frac_gt{cfg['GT_THRESH_DAYS']}")
-            all_rows += rows_frac
+            all_rows += summarize_to_rows(group["q95"],  cano, metric, difftype, statname="q95_absdiff")
 
-    # Write CSV
+    # CSV
     df = pd.DataFrame(all_rows,
         columns=["Metric","DiffType","Sector","Stat","MedianDays","P95Days","MeanDays","Npixels"])
     csv_path = out_dir / "summary_stats.csv"
     df.to_csv(csv_path, index=False)
     print(f"[OK] wrote {csv_path}")
 
-    # Also dump a small JSON with year coverage for provenance
+    # Minimal provenance: year coverage
     meta = {"years_MS": None, "years_FS": None}
     try:
         meta["years_MS"] = compute_maps_for_metric("MS", cano, cfg)["years"]
