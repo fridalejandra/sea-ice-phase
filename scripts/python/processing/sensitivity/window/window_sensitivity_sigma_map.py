@@ -18,6 +18,8 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.path as mpath
+from matplotlib.colors import LogNorm
+
 
 # =========================
 # CONFIG — EDIT THIS BLOCK
@@ -165,6 +167,157 @@ def compute_maps_for_metric(metric, cano, cfg=CFG):
         "years": years
     }
 
+def compute_year_series_for_metric(metric, cano, cfg=CFG):
+    """
+    Returns a DataFrame with per-year mean(|Δ|) for circumpolar and per-sector,
+    for both 3v5 and 7v5. Columns: year, Metric, DiffType, Region, MeanAbsDiff
+    """
+    d3 = open_phase_dict(metric, 3, cfg)
+    d5 = open_phase_dict(metric, 5, cfg)
+    d7 = open_phase_dict(metric, 7, cfg)
+    years = align_years([d3, d5, d7])
+
+    A3 = stack_years(d3, years, f"{metric}_k3")  # (year,y,x)
+    A5 = stack_years(d5, years, f"{metric}_k5")
+    A7 = stack_years(d7, years, f"{metric}_k7")
+
+    valid = (~np.isnan(A3)) & (~np.isnan(A5)) & (~np.isnan(A7))
+    A3 = A3.where(valid); A5 = A5.where(valid); A7 = A7.where(valid)
+
+    period = cfg["PERIOD"]
+    D35 = xr.apply_ufunc(wrapped_abs_diff, A3, A5, period, dask="allowed")  # (year,y,x)
+    D75 = xr.apply_ufunc(wrapped_abs_diff, A7, A5, period, dask="allowed")
+
+    vo  = cano["valid_ocean"].astype(bool)
+    sid = cano["sector_id"].astype(np.int16)
+
+    rows = []
+    for yi, yr in enumerate(D35["year"].values):
+        # circumpolar
+        v35 = D35.isel(year=yi).where(vo).values
+        v75 = D75.isel(year=yi).where(vo).values
+        v35 = v35[np.isfinite(v35)]
+        v75 = v75[np.isfinite(v75)]
+        if v35.size:
+            rows.append({"year": int(yr), "Metric": metric, "DiffType": "3v5",
+                         "Region": "Circumpolar", "MeanAbsDiff": float(np.nanmean(v35))})
+        if v75.size:
+            rows.append({"year": int(yr), "Metric": metric, "DiffType": "7v5",
+                         "Region": "Circumpolar", "MeanAbsDiff": float(np.nanmean(v75))})
+
+        # per-sector
+        for k, name in SECTOR_ID_TO_NAME.items():
+            mask_k = ((sid == k) & vo).values
+            sv35 = D35.isel(year=yi).values
+            sv75 = D75.isel(year=yi).values
+            a35 = sv35[mask_k]; a75 = sv75[mask_k]
+            a35 = a35[np.isfinite(a35)]; a75 = a75[np.isfinite(a75)]
+            if a35.size:
+                rows.append({"year": int(yr), "Metric": metric, "DiffType": "3v5",
+                             "Region": name, "MeanAbsDiff": float(np.nanmean(a35))})
+            if a75.size:
+                rows.append({"year": int(yr), "Metric": metric, "DiffType": "7v5",
+                             "Region": name, "MeanAbsDiff": float(np.nanmean(a75))})
+    return pd.DataFrame(rows)
+
+
+def plot_trend_lines(df, out_png, title, cfg=CFG, per_sector=False):
+    """
+    If per_sector=False: circumpolar only (two lines: 3v5, 7v5) per metric.
+    If per_sector=True : small multiples, one panel per sector.
+    """
+    import matplotlib.pyplot as plt
+    years = sorted(df["year"].unique())
+
+    if not per_sector:
+        fig, ax = plt.subplots(figsize=(7.5, 3.6))
+        for difftype, style in [("3v5", "-"), ("7v5", "--")]:
+            sub = df[(df["Region"]=="Circumpolar") & (df["DiffType"]==difftype)]
+            # average both metrics if both present? — here caller should pass filtered df per metric.
+            sub = sub.groupby("year")["MeanAbsDiff"].mean().reindex(years)
+            ax.plot(years, sub.values, style, lw=2, label=difftype)
+        ax.set_xlabel("Year"); ax.set_ylabel("mean(|Δ|) (days)")
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
+        ax.legend(title="Diff")
+        plt.tight_layout()
+        plt.savefig(out_png, dpi=cfg["DPI"])
+        plt.close()
+        rclone_copy(out_png, cfg)
+        print(f"[OK] wrote {out_png}")
+        return
+
+    # per-sector small multiples
+    sectors = list(SECTOR_ID_TO_NAME.values())
+    n = len(sectors)
+    ncols = 3; nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3.2, nrows*2.6), sharex=True, sharey=True)
+    axes = np.atleast_2d(axes)
+    for i, name in enumerate(sectors):
+        r, c = divmod(i, ncols)
+        ax = axes[r, c]
+        for difftype, style in [("3v5", "-"), ("7v5", "--")]:
+            sub = df[(df["Region"]==name) & (df["DiffType"]==difftype)]
+            sub = sub.groupby("year")["MeanAbsDiff"].mean().reindex(years)
+            ax.plot(years, sub.values, style, lw=1.8, label=difftype)
+        ax.set_title(name, fontsize=9)
+        ax.grid(True, alpha=0.3)
+    # hide extras
+    total = nrows*ncols
+    for j in range(n, total):
+        r, c = divmod(j, ncols)
+        axes[r, c].set_visible(False)
+    fig.supxlabel("Year"); fig.supylabel("mean(|Δ|) (days)")
+    handles, labels = axes[0,0].get_legend_handles_labels()
+    fig.legend(handles, labels, ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.02), frameon=True)
+    plt.tight_layout(rect=[0,0,1,0.96])
+    plt.savefig(out_png, dpi=cfg["DPI"])
+    plt.close()
+    rclone_copy(out_png, cfg)
+    print(f"[OK] wrote {out_png}")
+
+
+def plot_joint_hist(da_mean35, da_mean75, cano, metric, out_png, cfg=CFG):
+    """
+    Hexbin joint histogram of per-pixel mean |Δ₃₋₅| (x) vs mean |Δ₇₋₅| (y).
+    Annotates slope, intercept, and Pearson r.
+    """
+    vo = cano["valid_ocean"].astype(bool).values
+    x = da_mean35.where(vo).values.ravel()
+    y = da_mean75.where(vo).values.ravel()
+    m = np.isfinite(x) & np.isfinite(y)
+    x, y = x[m], y[m]
+
+    # stats
+    if x.size > 0:
+        slope, intercept = np.polyfit(x, y, 1)
+        r = np.corrcoef(x, y)[0,1]
+    else:
+        slope, intercept, r = np.nan, np.nan, np.nan
+
+    fig, ax = plt.subplots(figsize=(4.8, 4.6))
+    hb = ax.hexbin(x, y, gridsize=60, norm=LogNorm(), mincnt=1)
+    cb = plt.colorbar(hb, ax=ax)
+    cb.set_label("pixel count (log)")
+
+    lim = max(np.nanmax(x), np.nanmax(y))
+    lim = 0 if not np.isfinite(lim) else float(lim)
+    lim = max(lim, 6)  # give some headroom
+    ax.plot([0, lim], [0, lim], "k--", lw=1, alpha=0.6, label="1:1")
+    xx = np.linspace(0, lim, 100)
+    ax.plot(xx, slope*xx + intercept, color="C1", lw=1.6, label=f"fit: y={slope:.2f}x+{intercept:.2f}")
+    ax.set_xlim(0, lim); ax.set_ylim(0, lim)
+    ax.set_xlabel("mean(|Δ₃₋₅|) (days)")
+    ax.set_ylabel("mean(|Δ₇₋₅|) (days)")
+    ax.set_title(f"Joint histogram • {metric}\n$r={r:.2f}$")
+    ax.legend(loc="lower right", frameon=True)
+    ax.grid(True, alpha=0.2)
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=cfg["DPI"])
+    plt.close()
+    rclone_copy(out_png, cfg)
+    print(f"[OK] wrote {out_png}")
+
 # ======================
 # MAPPING (Cartopy)
 # ======================
@@ -306,6 +459,45 @@ def main(cfg=CFG):
     df.to_csv(csv_path, index=False)
     print(f"[OK] wrote {csv_path}")
 
+    # === TEMPORAL TRENDS & JOINT HISTOGRAMS ===
+    trend_rows = []
+    trends_dir = out_dir / "trends"
+    trends_dir.mkdir(exist_ok=True, parents=True)
+    joint_dir = out_dir / "joint"
+    joint_dir.mkdir(exist_ok=True, parents=True)
+
+    for metric in ["MS", "FS"]:
+        # Yearly circumpolar + sector series
+        df_year = compute_year_series_for_metric(metric, cano, cfg)
+        trend_rows.append(df_year)
+
+        # Plot circumpolar trend (two lines: 3v5, 7v5)
+        df_circ = df_year[df_year["Region"]=="Circumpolar"]
+        plot_trend_lines(df_circ,
+                         out_png=trends_dir / f"trend_circ_{metric}.png",
+                         title=f"Circumpolar mean(|Δ|) per year • {metric}",
+                         cfg=cfg, per_sector=False)
+
+        # Optional: sector small multiples
+        plot_trend_lines(df_year,
+                         out_png=trends_dir / f"trend_sectors_{metric}.png",
+                         title=f"Sectoral mean(|Δ|) per year • {metric}",
+                         cfg=cfg, per_sector=True)
+
+        # Joint histogram inputs: per-pixel mean across years
+        maps = compute_maps_for_metric(metric, cano, cfg)
+        mean35 = maps["3v5"]["mean"]  # already mean over years
+        mean75 = maps["7v5"]["mean"]
+        plot_joint_hist(mean35, mean75, cano,
+                        metric=metric,
+                        out_png=joint_dir / f"joint_hist_mean_absdiff_{metric}.png",
+                        cfg=cfg)
+
+    # Write trends CSV
+    df_trends = pd.concat(trend_rows, ignore_index=True)
+    df_trends.to_csv(out_dir / "trend_timeseries.csv", index=False)
+    print(f"[OK] wrote {out_dir / 'trend_timeseries.csv'}")
+
     # Minimal provenance: year coverage
     meta = {"years_MS": None, "years_FS": None}
     try:
@@ -315,6 +507,7 @@ def main(cfg=CFG):
         pass
     with open(out_dir / "summary_meta.json", "w") as f:
         json.dump(meta, f, indent=2)
+
 
 if __name__ == "__main__":
     main()
