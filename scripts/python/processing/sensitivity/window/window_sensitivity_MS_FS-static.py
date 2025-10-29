@@ -1,36 +1,50 @@
-# cdf_sectoral_window_sensitivity_MS_FS.py
-import os, re, glob
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Window / Threshold Sensitivity – Static Method (Slope + Persistence Version)
+Frida A. Perez — updated for version tagging and rclone sync
+"""
+
+import os, re, glob, subprocess
 import numpy as np
 import xarray as xr
 import seaborn as sns
 import matplotlib.pyplot as plt
 from math import ceil
 
-# ----------------- USER CONFIG -----------------
-SENSOR       = "SMMR"      # "SMMR" or "AMSRE"
-THRESH_PCT   = 15          # e.g., 10/15/20
-INPUT_ROOT   = f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase"
-RCLONE_DEST  = f"figures/cdf_ms_fs/{SENSOR}_thr{THRESH_PCT}"
+# ----------------- RUN CONTEXT -----------------
+VERSION_TAG   = "static_v2_slopeH"           # identifies slope + persistence version
+SENSOR        = "SMMR"                       # "SMMR" or "AMSRE"
+THRESH_PCT    = 15                           # e.g., 10/15/20
+PERIOD        = 366                          # DOY wrap
+MAX_X         = 30                           # x-limit in days for |Δ|
 
-PERIOD       = 366         # DOY wrap
-MAX_X        = 30          # x-limit in days for |Δ|
+# --- paths ---
+INPUT_ROOT    = f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase"
+OUTDIR_FIGS   = f"figures/{VERSION_TAG}/{SENSOR}_thr{THRESH_PCT}"
+OUTDIR_RESULTS= f"results/{VERSION_TAG}/{SENSOR}_thr{THRESH_PCT}"
+os.makedirs(OUTDIR_FIGS, exist_ok=True)
+os.makedirs(OUTDIR_RESULTS, exist_ok=True)
 
-# --- NEW: canonical sector file ---
-CANONICAL = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
+# --- canonical sector file ---
+CANONICAL     = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
 
-# rclone destination (must include remote alias, not just a folder)
-RCLONE_DEST = "gdrive:sea-ice-phase/results/cdf_ms_fs/SMMR_thr15"  # edit as needed
+# --- Google Drive (rclone) ---
+RCLONE_REMOTE = "gdrive"                     # your rclone remote name
+RCLONE_PATH   = f"sea-ice-phase/results/{VERSION_TAG}/{SENSOR}_thr{THRESH_PCT}"
+# note: final upload command will be "rclone copy results/static_v2_slopeH/... gdrive:sea-ice-phase/results/static_v2_slopeH/..."
 
-# Aesthetics
+# --- aesthetics ---
 sns.set_context("talk")
 sns.set_style("whitegrid")
 
-# ----------------- HELPERS (from your original) -----------------
+# ----------------- HELPERS -----------------
 year_re = re.compile(r"_(\d{4})\.nc$")
 
 def parse_year(path):
     m = year_re.search(os.path.basename(path))
-    if not m: return None
+    if not m:
+        return None
     return int(m.group(1))
 
 def load_window_dict(metric, kdays):
@@ -230,12 +244,16 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
         fig.tight_layout()
 
     # save + upload
-    fname = f"CDF_sectors_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
-    local_path = f"/tmp/{fname}"
+    fname = f"{VERSION_TAG}_CDF_sectors_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
+    local_path = os.path.join(OUTDIR_FIGS, fname)
     fig.savefig(local_path, dpi=dpi)
     plt.close(fig)
-    os.system(f"rclone copy '{local_path}' '{RCLONE_DEST}'")
-    print(f"✓ Uploaded: {fname}")
+
+    # Upload to Google Drive (mirror folder structure)
+    remote_dest = f"{RCLONE_REMOTE}:{RCLONE_PATH}/figures/"
+    os.system(f"rclone copy '{local_path}' '{remote_dest}' --progress")
+    print(f"✓ Saved and uploaded: {fname}")
+
 
 def plot_cdf_single_sector(metric, name, mask_2d,
                            figsize=(5.0, 3.5), dpi=300, save=True):
@@ -260,14 +278,17 @@ def plot_cdf_single_sector(metric, name, mask_2d,
     ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.82")
     fig.tight_layout()
     if save:
-        fname = f"CDF_sector_{name.replace(' ','_')}_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
-        local_path = f"/tmp/{fname}"
+        fname = f"{VERSION_TAG}_CDF_sector_{name.replace(' ', '_')}_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
+        local_path = os.path.join(OUTDIR_FIGS, fname)
         fig.savefig(local_path, dpi=dpi)
         plt.close(fig)
-        os.system(f"rclone copy '{local_path}' '{RCLONE_DEST}'")
-        print(f"✓ Uploaded: {fname}")
+
+        remote_dest = f"{RCLONE_REMOTE}:{RCLONE_PATH}/figures/"
+        os.system(f"rclone copy '{local_path}' '{remote_dest}' --progress")
+        print(f"✓ Saved and uploaded: {fname}")
     else:
         plt.show()
+
 
 # ----------------- RUN -----------------
 if __name__ == "__main__":
