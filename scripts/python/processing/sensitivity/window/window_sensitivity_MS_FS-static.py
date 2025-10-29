@@ -32,6 +32,8 @@ CANONICAL     = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors
 # --- Google Drive (rclone) ---
 RCLONE_REMOTE = "gdrive"                     # your rclone remote name
 RCLONE_PATH   = f"sea-ice-phase/results/{VERSION_TAG}/{SENSOR}_thr{THRESH_PCT}"
+RCLONE_DEST = f"{RCLONE_REMOTE}:{RCLONE_PATH}"
+
 # note: final upload command will be "rclone copy results/static_v2_slopeH/... gdrive:sea-ice-phase/results/static_v2_slopeH/..."
 
 # --- aesthetics ---
