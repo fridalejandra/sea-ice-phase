@@ -28,13 +28,21 @@ from matplotlib.colors import LogNorm
 # =========================
 # CONFIG — EDIT THIS BLOCK
 # =========================
+
+VERSION_TAG  = "static_v2_slopeH"     # identifies slope + persistence version
+SENSOR       = "SMMR"                 # "SMMR" or "AMSRE"
+THRESH_PCT   = 15                     # threshold percentage
+BASE_REMOTE  = "gdrive:sea-ice-phase" # your Google Drive rclone remote
+OUT_ROOT     = f"/user/geog/falejandraperez/sea-ice-phase/results/{VERSION_TAG}/window_sensitivity/{SENSOR}_thr{THRESH_PCT}"
+REMOTE_PATH  = f"{BASE_REMOTE}/results/{VERSION_TAG}/window_sensitivity/{SENSOR}_thr{THRESH_PCT}"
+
 CFG = {
-    "SENSOR": "SMMR",   # e.g., "SMMR", "AMSRE"
-    "THRESH_PCT": 15,
-    "INPUT_ROOT": "/user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase",
+    "SENSOR": SENSOR,
+    "THRESH_PCT": THRESH_PCT,
+    "INPUT_ROOT": f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase",
     "CANONICAL":  "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc",
 
-    "OUT_DIR": "/user/geog/falejandraperez/sea-ice-phase/results/window_sensitivity",
+    "OUT_DIR": OUT_ROOT,
     "PERIOD": 366,
 
     # colorbar ranges
@@ -53,12 +61,13 @@ CFG = {
     # rclone upload
     "RCLONE": {
         "enabled": True,
-        "remote": "gdrive",
-        "dst_dir": "sea-ice-phase/results/window_sensitivity/",
-        "extra_flags": ["--transfers=8","--checkers=8","--fast-list"],
+        "remote": BASE_REMOTE.split(":")[0],  # "gdrive"
+        "dst_dir": REMOTE_PATH,               # version-tagged Drive path
+        "extra_flags": ["--transfers=8", "--checkers=8", "--fast-list"],
         "dry_run": False
     }
 }
+
 
 # Sector ID → name (must match canonical_sectors.nc)
 SECTOR_ID_TO_NAME = {
