@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 window_sensitivity_maps.py
 
-Outputs under OUT_DIR:
+Outputs under OUT_DIR (local, for your records) and mirrored to Google Drive:
   - maps/:       mean/std/q95 per-pixel maps for {MS,FS} × {3v5,7v5}
   - cdf/:        CDF(|Δ|) per metric (active pixels only)
   - distributions/: signed-Δ histograms per metric (active pixels only)
@@ -14,7 +15,7 @@ Outputs under OUT_DIR:
 """
 
 from pathlib import Path
-import os, glob, re, json
+import os, glob, re, json, subprocess, shlex
 import numpy as np
 import xarray as xr
 import pandas as pd
@@ -29,18 +30,25 @@ from matplotlib.colors import LogNorm
 # CONFIG — EDIT THIS BLOCK
 # =========================
 
-VERSION_TAG  = "static_v2_slopeH"     # identifies slope + persistence version
-SENSOR       = "SMMR"                 # "SMMR" or "AMSRE"
-THRESH_PCT   = 15                     # threshold percentage
-BASE_REMOTE  = "gdrive:sea-ice-phase" # your Google Drive rclone remote
+# Version/provenance tag (used in local file names only; Drive folder is fixed below)
+VERSION_TAG  = "static_v2_slopeH"
+SENSOR       = "SMMR"   # "SMMR" or "AMSRE"
+THRESH_PCT   = 15       # threshold percentage
+
+# Input: where FS/MS NetCDFs (k=3/5/7) live
+INPUT_ROOT   = f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase"
+
+# Local outputs (kept for your archive); Drive upload path is separate
 OUT_ROOT     = f"/user/geog/falejandraperez/sea-ice-phase/results/{VERSION_TAG}/window_sensitivity/{SENSOR}_thr{THRESH_PCT}"
-REMOTE_PATH  = f"{BASE_REMOTE}/results/{VERSION_TAG}/window_sensitivity/{SENSOR}_thr{THRESH_PCT}"
+
+# Canonical sectors/masks
+CANONICAL    = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
 
 CFG = {
     "SENSOR": SENSOR,
     "THRESH_PCT": THRESH_PCT,
-    "INPUT_ROOT": f"/user/geog/falejandraperez/sea-ice-phase/results/{SENSOR}_phase",
-    "CANONICAL":  "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc",
+    "INPUT_ROOT": INPUT_ROOT,
+    "CANONICAL":  CANONICAL,
 
     "OUT_DIR": OUT_ROOT,
     "PERIOD": 366,
@@ -55,19 +63,18 @@ CFG = {
 
     "DPI": 180,
 
-    # subdirectories
+    # subdirectories (local)
     "SUBDIRS": {"cdf": "cdf", "dist": "distributions"},
 
-    # rclone upload
+    # rclone upload → FIXED Drive destination (per your request)
     "RCLONE": {
         "enabled": True,
-        "remote": BASE_REMOTE.split(":")[0],  # "gdrive"
-        "dst_dir": REMOTE_PATH,               # version-tagged Drive path
+        "remote": "gdrive",  # EXACTLY the name from `rclone listremotes` (no colon)
+        "dst_dir": "sea-ice-phase/results/Ch2_Figures/slope_window_sensitivity",
         "extra_flags": ["--transfers=8", "--checkers=8", "--fast-list"],
         "dry_run": False
     }
 }
-
 
 # Sector ID → name (must match canonical_sectors.nc)
 SECTOR_ID_TO_NAME = {
@@ -91,14 +98,27 @@ def parse_year(path):
     return int(m.group(1)) if m else None
 
 def rclone_copy(local_path, cfg=CFG):
+    """Upload a file to Google Drive under .../slope_window_sensitivity/<subfolder>,
+    where <subfolder> is the local parent directory name (maps, cdf, distributions, trends, joint)."""
     rc = cfg["RCLONE"]
     if not rc.get("enabled", False):
         return
-    dst = f"{rc['remote']}:{rc['dst_dir']}"
-    cmd = ["rclone", "copy", str(local_path), dst] + rc.get("extra_flags", [])
-    if rc.get("dry_run"): cmd.insert(1, "--dry-run")
-    print("[rclone]", " ".join(cmd))
-    os.system(" ".join(cmd))
+    remote   = rc["remote"]                      # e.g., "gdrive"
+    dst_root = rc["dst_dir"].lstrip("/")         # "sea-ice-phase/results/Ch2_Figures/slope_window_sensitivity"
+    sub = Path(local_path).parent.name           # subfolder name
+    dst = f"{remote}:{dst_root}/{sub}"
+
+    cmd = ["rclone", "copy", str(local_path), dst, "-vv"] + rc.get("extra_flags", [])
+    if rc.get("dry_run"):
+        cmd.insert(1, "--dry-run")
+
+    print("[rclone cmd]", " ".join(shlex.quote(c) for c in cmd))
+    res = subprocess.run(cmd, text=True, capture_output=True)
+    # Show tail of logs to help diagnose if anything goes sideways
+    print("[rclone stdout]\n", res.stdout[-1200:])
+    print("[rclone stderr]\n", res.stderr[-1200:])
+    if res.returncode != 0:
+        raise RuntimeError(f"rclone failed (code {res.returncode}). See logs above.")
 
 def open_phase_dict(metric, kdays, cfg=CFG):
     """Return {year: DataArray} for metric ('MS'/'FS') and window (3/5/7) with var name == metric."""
@@ -337,8 +357,14 @@ def plot_distribution_pairs(metric, d35, d75, out_png, cfg=CFG):
     for (data, label), ax in zip(panels, axs.ravel()):
         if data is None:
             ax.axis("off"); continue
+        data = np.asarray(data)
+        data = data[np.isfinite(data)]
+        if data.size == 0:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", color="0.5", transform=ax.transAxes)
+            ax.grid(False); continue
         ax.hist(data, bins=bins, density=True, alpha=0.9)
-        med = np.median(data); q25, q75 = np.percentile(data, [25, 75])
+        med = float(np.nanmedian(data))
+        q25, q75 = np.nanpercentile(data, [25, 75])
         pct5 = 100.0 * np.mean(np.abs(data) > 5)
         ax.axvline(med, color="k", lw=1)
         ax.axvline(q25, color="k", lw=1, ls=":")
@@ -499,17 +525,17 @@ def main(cfg=CFG):
         for difftype, group in [("3v5", maps["3v5"]), ("7v5", maps["7v5"])]:
             plot_map_cartopy(group["mean"], cano,
                              title=f"mean(|Δ|) days • {metric} • {difftype}",
-                             out_png=maps_dir / f"mean_absdiff_{metric}_{difftype}.png",
+                             out_png=maps_dir / f"{VERSION_TAG}_mean_absdiff_{metric}_{difftype}.png",
                              vmin=0, vmax=cfg["MEAN_VMAX"], cmap="viridis", white_under=True, cfg=cfg)
 
             plot_map_cartopy(group["std"], cano,
                              title=f"std(|Δ|) days • {metric} • {difftype}",
-                             out_png=maps_dir / f"std_absdiff_{metric}_{difftype}.png",
+                             out_png=maps_dir / f"{VERSION_TAG}_std_absdiff_{metric}_{difftype}.png",
                              vmin=0, vmax=cfg["STD_VMAX"], cmap="magma", white_under=True, cfg=cfg)
 
             plot_map_cartopy(group["q95"], cano,
                              title=f"q95(|Δ|) days • {metric} • {difftype}",
-                             out_png=maps_dir / f"q95_absdiff_{metric}_{difftype}.png",
+                             out_png=maps_dir / f"{VERSION_TAG}_q95_absdiff_{metric}_{difftype}.png",
                              vmin=0, vmax=cfg["Q95_VMAX"], cmap="plasma", white_under=True, cfg=cfg)
 
             # stats
@@ -517,16 +543,23 @@ def main(cfg=CFG):
             all_rows += summarize_to_rows(group["std"],  cano, metric, difftype, "std_absdiff")
             all_rows += summarize_to_rows(group["q95"],  cano, metric, difftype, "q95_absdiff")
 
-        # NEW: CDFs + distributions on active pixels
+        # CDFs + distributions on active pixels
         d35, d75, a35, a75 = compute_flat_deltas(metric, active_masks[metric], cfg)
-        plot_cdf_pairs(metric, a35, a75, out_png=cdf_dir / f"cdf_absdiff_{metric}.png", cfg=cfg)
-        plot_distribution_pairs(metric, d35, d75, out_png=dist_dir / f"dist_signed_delta_{metric}.png", cfg=cfg)
+        plot_cdf_pairs(metric, a35, a75, out_png=cdf_dir / f"{VERSION_TAG}_cdf_absdiff_{metric}.png", cfg=cfg)
+        plot_distribution_pairs(metric, d35, d75, out_png=dist_dir / f"{VERSION_TAG}_dist_signed_delta_{metric}.png", cfg=cfg)
 
     # Write map summary CSV
     df = pd.DataFrame(all_rows,
                       columns=["Metric","DiffType","Sector","Stat","MedianDays","P95Days","MeanDays","Npixels"])
-    csv_path = out_dir / "summary_stats.csv"; df.to_csv(csv_path, index=False)
+    csv_path = out_dir / f"{VERSION_TAG}_summary_stats.csv"; df.to_csv(csv_path, index=False)
     print(f"[OK] wrote {csv_path}")
+    # Upload CSV to Drive root (no subfolder inference here)
+    try:
+        rc = CFG["RCLONE"]
+        dst = f"{rc['remote']}:{rc['dst_dir']}"
+        subprocess.run(["rclone", "copy", str(csv_path), dst, "-vv"] + rc.get("extra_flags", []), check=False)
+    except Exception as e:
+        print(f"[rclone] CSV upload skipped: {e}")
 
     # TEMPORAL TRENDS + JOINT HISTOGRAMS (active pixels)
     trend_rows = []
@@ -537,34 +570,55 @@ def main(cfg=CFG):
         # circumpolar trend
         df_circ = df_year[df_year["Region"]=="Circumpolar"]
         plot_trend_lines(df_circ,
-                         out_png=trends_dir / f"trend_circ_{metric}.png",
+                         out_png=trends_dir / f"{VERSION_TAG}_trend_circ_{metric}.png",
                          title=f"Circumpolar mean(|Δ|) per year • {metric}",
                          cfg=cfg, per_sector=False)
 
         # sector panels
         plot_trend_lines(df_year,
-                         out_png=trends_dir / f"trend_sectors_{metric}.png",
+                         out_png=trends_dir / f"{VERSION_TAG}_trend_sectors_{metric}.png",
                          title=f"Sectoral mean(|Δ|) per year • {metric}",
                          cfg=cfg, per_sector=True)
 
         # joint histogram uses per-pixel means across years (already computed above in maps)
-        mean35 = compute_maps_for_metric(metric, cano, cfg, active_mask=active_masks[metric])["3v5"]["mean"]
-        mean75 = compute_maps_for_metric(metric, cano, cfg, active_mask=active_masks[metric])["7v5"]["mean"]
-        plot_joint_hist(mean35, mean75, cano, metric, out_png=joint_dir / f"joint_hist_mean_absdiff_{metric}.png", cfg=cfg)
+        # avoid recomputation: reuse 'maps'
+        mean35 = maps["3v5"]["mean"]
+        mean75 = maps["7v5"]["mean"]
+        plot_joint_hist(mean35, mean75, cano, metric, out_png=joint_dir / f"{VERSION_TAG}_joint_hist_mean_absdiff_{metric}.png", cfg=cfg)
 
     df_trends = pd.concat(trend_rows, ignore_index=True)
-    df_trends.to_csv(out_dir / "trend_timeseries.csv", index=False)
-    print(f"[OK] wrote {out_dir / 'trend_timeseries.csv'}")
+    ts_csv = out_dir / f"{VERSION_TAG}_trend_timeseries.csv"
+    df_trends.to_csv(ts_csv, index=False)
+    print(f"[OK] wrote {ts_csv}")
+    try:
+        rc = CFG["RCLONE"]
+        dst = f"{rc['remote']}:{rc['dst_dir']}"
+        subprocess.run(["rclone", "copy", str(ts_csv), dst, "-vv"] + rc.get("extra_flags", []), check=False)
+    except Exception as e:
+        print(f"[rclone] trends CSV upload skipped: {e}")
 
     # Provenance: year coverage
-    meta = {"years_MS": None, "years_FS": None}
+    meta = {"version_tag": VERSION_TAG, "years_MS": None, "years_FS": None}
     try:
         meta["years_MS"] = compute_maps_for_metric("MS", cano, cfg)["years"]
         meta["years_FS"] = compute_maps_for_metric("FS", cano, cfg)["years"]
     except Exception:
         pass
-    with open(out_dir / "summary_meta.json", "w") as f:
+    meta_json = out_dir / f"{VERSION_TAG}_summary_meta.json"
+    with open(meta_json, "w") as f:
         json.dump(meta, f, indent=2)
+    print(f"[OK] wrote {meta_json}")
+    try:
+        rc = CFG["RCLONE"]
+        dst = f"{rc['remote']}:{rc['dst_dir']}"
+        subprocess.run(["rclone", "copy", str(meta_json), dst, "-vv"] + rc.get("extra_flags", []), check=False)
+    except Exception as e:
+        print(f"[rclone] meta JSON upload skipped: {e}")
+
+    print("\n=== Completed window_sensitivity_maps.py ===")
+    print("Local out:", out_dir)
+    print("Drive out:", f"{CFG['RCLONE']['remote']}:{CFG['RCLONE']['dst_dir']}")
+    print("Figures mirrored by subfolder (maps/cdf/distributions/trends/joint)\n")
 
 if __name__ == "__main__":
     main()
