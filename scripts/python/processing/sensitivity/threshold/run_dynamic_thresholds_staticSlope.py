@@ -28,8 +28,8 @@ OUT_ROOT     = f"/user/geog/falejandraperez/sea-ice-phase/results/static_v2_slop
 
 # Years
 FULL_YEARS   = range(1979, 2025)
-YEARS_SAMPLE = [1984, 1992, 2007, 2016, 2023]  # tweak to taste
-USE_FULL_YEARS = False  # set True after quick check
+#YEARS_SAMPLE = [1984, 1992, 2007, 2016, 2023]  # tweak to taste
+USE_FULL_YEARS = True  # set True after quick check
 
 # Detector settings
 K            = 5               # persistence window (keep at 5 for speed)
