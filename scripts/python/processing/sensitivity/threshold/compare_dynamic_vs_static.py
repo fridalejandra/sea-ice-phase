@@ -64,7 +64,7 @@ plt.rcParams.update({
 })
 
 # rclone (optional)
-RCLONE = dict(enabled=False, remote="gdrive",
+RCLONE = dict(enabled=True, remote="gdrive",
               dst_dir="sea-ice-phase/results/Ch2_Figures/baseline_vs_dynamic",
               extra_flags=["--transfers=8","--checkers=8","--fast-list"],
               dry_run=False)
