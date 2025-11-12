@@ -138,6 +138,44 @@ def load_stack_years(files_glob, varname):
     arrs = [d[y].expand_dims(year=[y]) for y in years]
     return xr.concat(arrs, dim="year").rename(varname), years
 
+def load_classic_stack(classic_dir, phase):
+    """
+    Load the 'classic 15% (no slope)' baseline where variables are named
+    'advance_YYYY' (FS) and 'retreat_YYYY' (MS).
+
+    Returns
+    -------
+    stack : xarray.DataArray  [year, y, x]
+    years : list[int]
+    """
+    prefix = {"FS": "advance", "MS": "retreat"}[phase]
+    files = sorted(glob.glob(os.path.join(classic_dir, "seaice_phases_SMMR_*.nc")))
+    d = {}
+    for f in files:
+        y = parse_year(f)
+        if y is None:
+            continue
+        with xr.open_dataset(f) as ds:
+            vname = f"{prefix}_{y}"
+            if vname not in ds:
+                # some files might use capitalized keys; be defensive
+                alts = [vname, vname.upper(), vname.lower()]
+                hit = [a for a in alts if a in ds]
+                if not hit:
+                    raise KeyError(f"{f} has no variable '{vname}'")
+                vname = hit[0]
+            d[y] = ds[vname].load().rename(phase)
+
+    if not d:
+        raise FileNotFoundError("No classic baseline files found.")
+
+    years = sorted(d.keys())
+    if YEARS_LIMIT:
+        years = [yy for yy in years if yy in YEARS_LIMIT]
+    arrs = [d[yy].expand_dims(year=[yy]) for yy in years]
+    return xr.concat(arrs, dim="year"), years
+
+
 def theilsen_trend(stack, years):
     years = np.asarray(years, dtype=float)
     trend = np.full(stack.shape[1:], np.nan, dtype=float)
@@ -167,8 +205,8 @@ def main():
     summary_rows = []
 
     # -------- Load CLASSIC baseline stacks (no slope) --------
-    classic, years_c = load_stack_years(os.path.join(CLASSIC_DIR, "seaice_phases_SMMR_*.nc"), varname="FS")
-    classic_MS, _    = load_stack_years(os.path.join(CLASSIC_DIR, "seaice_phases_SMMR_*.nc"), varname="MS")
+    classic, years_c = load_classic_stack(CLASSIC_DIR, phase="FS")
+    classic_MS, _years = load_classic_stack(CLASSIC_DIR, phase="MS")
     # align dims
     classic = classic.transpose("year", ...); classic_MS = classic_MS.transpose("year", ...)
 
