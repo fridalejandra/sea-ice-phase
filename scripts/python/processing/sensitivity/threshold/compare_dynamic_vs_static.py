@@ -2,25 +2,31 @@
 # -*- coding: utf-8 -*-
 
 """
-Publication-ready figures for dynamic vs static threshold comparison
-with rclone uploads (per-file + final recursive copy).
+Overlay-only figure set for dynamic threshold comparisons.
+No difference maps; only overlays + standalone climatology/trend maps.
 
-Outputs are written under OUT_DIR and uploaded to RCLONE['remote']:RCLONE['dst_dir'].
+Outputs (per phase FS/MS):
+  ecdf/:    ECDF overlays of |Δ|
+  violin/:  Sectoral violin plots of |Δ|
+  joint/:   Joint histogram (agreement) of mean DOY
+  maps/:    Mean DOY and trend maps for Classic and Percentile (no deltas)
+
+All files are uploaded with rclone as they are written, plus a final folder sync.
 """
 
-import os, re, glob, shutil, subprocess
+import os, re, glob, subprocess
 from pathlib import Path
 import numpy as np
-import xarray as xr
 import pandas as pd
+import xarray as xr
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from scipy.stats import theilslopes
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-# ------------------------- MAIN CONFIG -------------------------
-OUT_DIR   = "/user/geog/falejandraperez/sea-ice-phase/results/Ch2_Figures/fig_set_v2"
+# ------------------------- CONFIG -------------------------
+OUT_DIR     = "/user/geog/falejandraperez/sea-ice-phase/results/Ch2_Figures/fig_set_overlay"
 CLASSIC_DIR = "/user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase"
 DYN_ROOT    = "/user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic"
 CANONICAL   = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
@@ -28,23 +34,20 @@ CANONICAL   = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.n
 # Preferred dynamic tags
 PREFERRED_TAG = dict(mu_sigma_k5="alpha1.0", quantile_k5="p0.7")
 
-# Blocks
-MAKE_B_DYNvDYN      = True
-MAKE_C_DYNvCLASSIC  = True
-MAKE_D_CLIM_TRENDS  = True
-MAKE_OPTIONAL_JOINT_CLASSIC = False
+# Which blocks to build
+MAKE_DYNvDYN      = True   # ECDF + joint hist (μ+σ vs percentile)
+MAKE_DYNvCLASSIC  = True   # ECDF + violins (percentile vs classic)
+MAKE_CLIM_TRENDS  = True   # Standalone maps (classic & percentile)
+MAKE_JOINT_CLASSIC = False # Optional joint hist: classic vs percentile
 
 PHASES = ["FS", "MS"]
 YEARS_LIMIT = None
 
-# Plot limits
+# Plot limits / aesthetics
 MAX_X = 30
 DOY_VMIN, DOY_VMAX = 0, 365
-DMAP_LIM = 10
-SMAP_LIM = 8
-TREND_LIM = 5
+TREND_LIM = 5    # days/decade (for single-method trends)
 
-# Seaborn style
 sns.set_theme(context="talk", style="whitegrid")
 sns.set_palette("colorblind")
 plt.rcParams.update({
@@ -57,11 +60,11 @@ plt.rcParams.update({
     "legend.fontsize": 8,
 })
 
-# ---- RCLONE CONFIG ----
+# ---- rclone ----
 RCLONE = dict(
     enabled=True,
     remote="gdrive",
-    dst_dir="sea-ice-phase/Results/Ch2_Figures/fig_set_v2",
+    dst_dir="sea-ice-phase/results/Ch2_Figures/fig_set_overlay",
     extra_flags=["--transfers=8","--checkers=8","--fast-list","--copy-links"]
 )
 
@@ -107,9 +110,9 @@ def theilsen_trend(stack, years):
         Y = stack[:, i, :].values
         m = np.isfinite(Y)
         for j in range(nx):
-            mask = m[:, j]
-            if mask.sum() > 10:
-                slope, *_ = theilslopes(Y[mask, j], yrs[mask])
+            mm = m[:, j]
+            if mm.sum() > 10:
+                slope, *_ = theilslopes(Y[mm, j], yrs[mm])
                 out[i, j] = slope * 10.0
     return xr.DataArray(out, dims=stack.dims[1:], coords={stack.dims[1]: stack.coords[stack.dims[1]],
                                                           stack.dims[2]: stack.coords[stack.dims[2]]})
@@ -178,7 +181,7 @@ def mask_valid(stack, VO):
         m &= VO
     return xr.DataArray(np.where(m, stack.values, np.nan), dims=stack.dims, coords=stack.coords)
 
-# ----- rclone helpers -----
+# ---- rclone helpers ----
 def rclone_available():
     try:
         subprocess.run(["rclone","version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
@@ -189,7 +192,7 @@ def rclone_available():
 def rclone_copy_file(local_path: Path):
     if not RCLONE.get("enabled", False): return
     if not rclone_available():
-        print("[rclone] not found on PATH; skipping upload for", local_path)
+        print("[rclone] not found; skipping", local_path)
         return
     dst = f"{RCLONE['remote']}:{RCLONE['dst_dir']}"
     cmd = ["rclone","copy",str(local_path),dst] + RCLONE.get("extra_flags",[])
@@ -202,8 +205,7 @@ def rclone_copy_file(local_path: Path):
 def rclone_copy_tree(local_root: Path):
     if not RCLONE.get("enabled", False): return
     if not rclone_available():
-        print("[rclone] not found on PATH; final sync skipped")
-        return
+        print("[rclone] not found; final sync skipped"); return
     dst = f"{RCLONE['remote']}:{RCLONE['dst_dir']}"
     cmd = ["rclone","copy",str(local_root),dst,"--create-empty-src-dirs"] + RCLONE.get("extra_flags",[])
     try:
@@ -218,7 +220,7 @@ def save(fig, path, dpi=300):
     plt.close(fig)
     rclone_copy_file(Path(path))
 
-# ------------------------- PLOTTING HELPERS -------------------------
+# ------------------------- PLOTTING -------------------------
 def plot_ecdf_overlay(vals_dict, title, outpath, xmax=MAX_X):
     fig, ax = plt.subplots(figsize=(6.2, 4.0))
     for lab, v in vals_dict.items():
@@ -246,23 +248,36 @@ def plot_violin_by_sector(df, title, outpath, ymax=MAX_X):
     save(fig, outpath)
 
 def plot_joint_hist(xvals, yvals, title, outpath):
+    # Clean mask & sanity check
+    mask = np.isfinite(xvals) & np.isfinite(yvals)
+    x = xvals[mask]; y = yvals[mask]
+    if x.size < 100:
+        fig, ax = plt.subplots(figsize=(5.6, 5.4))
+        ax.text(0.5, 0.5, "Insufficient data", ha="center", va="center")
+        ax.set_axis_off()
+        save(fig, outpath); return
+
+    # 2D histogram with fixed range for comparability
+    bins = 200
+    xrng = [DOY_VMIN, DOY_VMAX]
+    yrng = [DOY_VMIN, DOY_VMAX]
+    H, xedges, yedges = np.histogram2d(x, y, bins=bins, range=[xrng, yrng])
+
     fig, ax = plt.subplots(figsize=(5.6, 5.4))
-    sns.histplot(x=xvals, y=yvals, bins=200, pmax=0.999,
-                 cbar=True, cbar_kws={"label":"pixel count (log)"},
-                 norm=LogNorm(), cmap="mako", ax=ax)
+    m = ax.pcolormesh(xedges, yedges, H.T, norm=LogNorm(vmin=1), cmap="mako", shading="auto")
+    cb = fig.colorbar(m, ax=ax); cb.set_label("pixel count (log)")
+
+    # 1:1 + Theil–Sen fit
     ax.plot([DOY_VMIN, DOY_VMAX], [DOY_VMIN, DOY_VMAX], ls="--", lw=1, color="0.5", label="1:1")
     try:
-        m, b, *_ = theilslopes(yvals, xvals)
+        mfit, bfit, *_ = theilslopes(y, x)
     except Exception:
-        m, b = np.polyfit(xvals, yvals, 1)
+        mfit, bfit = np.polyfit(x, y, 1)
     xx = np.array([DOY_VMIN, DOY_VMAX])
-    ax.plot(xx, m*xx + b, lw=1.8, label=f"fit: y={m:.2f}x+{b:.2f}")
-    mask = np.isfinite(xvals) & np.isfinite(yvals)
-    if mask.sum() > 10:
-        r = np.corrcoef(xvals[mask], yvals[mask])[0,1]
-        ax.set_title(f"{title}\n$r = {r:.2f}$")
-    else:
-        ax.set_title(title)
+    ax.plot(xx, mfit*xx + bfit, lw=1.8, label=f"fit: y={mfit:.2f}x+{bfit:.2f}")
+
+    r = np.corrcoef(x, y)[0, 1]
+    ax.set_title(f"{title}\n$r = {r:.2f}$")
     ax.set_xlim(DOY_VMIN, DOY_VMAX); ax.set_ylim(DOY_VMIN, DOY_VMAX)
     ax.set_xlabel("Mean DOY • x-axis method")
     ax.set_ylabel("Mean DOY • y-axis method")
@@ -283,36 +298,38 @@ def plot_map_single(da, vmin, vmax, cmap, label, title, outpath):
 def run_for_phase(phase: str):
     base = Path(OUT_DIR)/phase
     paths = {
-        "maps": base/"maps",
         "ecdf": base/"ecdf",
         "violin": base/"violin",
         "joint": base/"joint",
-        "tables": base/"tables",
+        "maps": base/"maps",
     }
     for p in paths.values(): p.mkdir(parents=True, exist_ok=True)
 
+    # Masks / sectors
     cano = xr.open_dataset(CANONICAL).load()
     VO   = cano["valid_ocean"].astype(bool).values
     SID  = cano["sector_id"].astype(np.int16).values
-    SECT = {0:"Circumpolar", 1:"Amundsen–Bellingshausen", 2:"Weddell",
-            3:"King Haakon VII", 4:"East Antarctic", 5:"Ross–Amundsen"}
+    sector_names = {
+        1:"Amundsen–Bellingshausen", 2:"Weddell",
+        3:"King Haakon VII", 4:"East Antarctic", 5:"Ross–Amundsen"
+    }
+    ordered = ["Circumpolar","Amundsen–Bellingshausen","Weddell","King Haakon VII",
+               "East Antarctic","Ross–Amundsen"]
 
     # Classic baseline
-    classic, years_c = load_classic_stack(CLASSIC_DIR, phase=phase)
+    classic, yc = load_classic_stack(CLASSIC_DIR, phase=phase)
     # Percentile dynamic
     tagP = list_dyn_tag(DYN_ROOT, "quantile_k5", phase)
-    if tagP is None:
-        raise RuntimeError(f"No percentile tag found for {phase}")
-    dynP, years_p = load_stack_years(os.path.join(DYN_ROOT, "quantile_k5", phase, tagP, f"{phase}_*.nc"), phase)
-    # mu+sigma dynamic
+    if tagP is None: raise RuntimeError(f"No percentile tag for {phase}")
+    dynP, yp = load_stack_years(os.path.join(DYN_ROOT, "quantile_k5", phase, tagP, f"{phase}_*.nc"), phase)
+    # μ+σ dynamic
     tagM = list_dyn_tag(DYN_ROOT, "mu_sigma_k5", phase)
-    if tagM is None:
-        raise RuntimeError(f"No mu_sigma tag found for {phase}")
-    dynM, years_m = load_stack_years(os.path.join(DYN_ROOT, "mu_sigma_k5", phase, tagM, f"{phase}_*.nc"), phase)
+    if tagM is None: raise RuntimeError(f"No mu_sigma tag for {phase}")
+    dynM, ym = load_stack_years(os.path.join(DYN_ROOT, "mu_sigma_k5", phase, tagM, f"{phase}_*.nc"), phase)
 
-    years = sorted(set(years_c) & set(years_p) & set(years_m))
+    years = sorted(set(yc) & set(yp) & set(ym))
     if YEARS_LIMIT: years = [y for y in years if y in YEARS_LIMIT]
-    if not years: raise ValueError(f"No overlapping years for {phase}.")
+    if not years: raise ValueError(f"No overlapping years for {phase}")
     classic = classic.sel(year=years)
     dynP    = dynP.sel(year=years)
     dynM    = dynM.sel(year=years)
@@ -321,89 +338,75 @@ def run_for_phase(phase: str):
     dynP    = mask_valid(dynP, VO)
     dynM    = mask_valid(dynM, VO)
 
-    # ------- B. Dynamic vs Dynamic -------
-    if MAKE_B_DYNvDYN:
-        A = xr.apply_ufunc(wrapped_abs, dynM, dynP, dask="allowed").values
-        vals_dyn = {"μ+σ vs Percentile": A[np.isfinite(A)]}
-        plot_ecdf_overlay(vals_dyn, title=f"ECDF of |Δ| • μ+σ vs Percentile • {phase}",
-                          outpath=paths["ecdf"]/f"ecdf_muSigma_vs_percentile_{phase}.png")
-
-        A_da = xr.apply_ufunc(wrapped_abs, dynM, dynP, dask="allowed")
-        meanA = A_da.mean("year", skipna=True)
-        stdA  = A_da.std("year",  skipna=True)
-        q95A  = A_da.quantile(0.95, dim="year", skipna=True)
-        plot_map_single(meanA, 0, DMAP_LIM, "viridis",
-                        "|Δ| (days)", f"Volatility • mean(|Δ|) μ+σ vs Percentile • {phase}",
-                        paths["maps"]/f"volatility_mean_muSigma_vs_percentile_{phase}.png")
-        plot_map_single(stdA,  0, SMAP_LIM, "magma",
-                        "|Δ| (days)", f"Volatility • std(|Δ|) μ+σ vs Percentile • {phase}",
-                        paths["maps"]/f"volatility_std_muSigma_vs_percentile_{phase}.png")
-        plot_map_single(q95A, 0, DMAP_LIM, "plasma",
-                        "|Δ| (days)", f"Volatility • q95(|Δ|) μ+σ vs Percentile • {phase}",
-                        paths["maps"]/f"volatility_q95_muSigma_vs_percentile_{phase}.png")
+    # ---------- Dynamic vs Dynamic (μ+σ vs Percentile) ----------
+    if MAKE_DYNvDYN:
+        diff_dyn = xr.apply_ufunc(wrapped_abs, dynM, dynP, dask="allowed").values
+        vals_dyn = {"μ+σ vs Percentile": diff_dyn[np.isfinite(diff_dyn)]}
+        plot_ecdf_overlay(vals_dyn, f"ECDF of |Δ| • μ+σ vs Percentile • {phase}",
+                          paths["ecdf"]/f"ecdf_muSigma_vs_percentile_{phase}.png")
 
         meanP = dynP.mean("year", skipna=True).values.flatten()
         meanM = dynM.mean("year", skipna=True).values.flatten()
         msk = np.isfinite(meanP) & np.isfinite(meanM)
         plot_joint_hist(meanP[msk], meanM[msk],
-                        title=f"Joint histogram • Mean DOY • Percentile (x) vs μ+σ (y) • {phase}",
-                        outpath=paths["joint"]/f"joint_mean_doy_percentile_vs_muSigma_{phase}.png")
+                        f"Joint histogram • Mean DOY • Percentile (x) vs μ+σ (y) • {phase}",
+                        paths["joint"]/f"joint_mean_doy_percentile_vs_muSigma_{phase}.png")
 
-    # ------- C. Dynamic vs Classic -------
-    if MAKE_C_DYNvCLASSIC:
-        Aperc = xr.apply_ufunc(wrapped_abs, dynP, classic, dask="allowed").values
-        vals = {"Percentile vs Classic": Aperc[np.isfinite(Aperc)]}
-        plot_ecdf_overlay(vals, title=f"ECDF of |Δ| • Percentile vs Classic • {phase}",
-                          outpath=paths["ecdf"]/f"ecdf_percentile_vs_classic_{phase}.png")
+    # ---------- Dynamic vs Classic (Percentile vs Classic) ----------
+    if MAKE_DYNvCLASSIC:
+        dP = xr.apply_ufunc(wrapped_abs, dynP, classic, dask="allowed").values
+        vals = {"Percentile vs Classic": dP[np.isfinite(dP)]}
+        plot_ecdf_overlay(vals, f"ECDF of |Δ| • Percentile vs Classic • {phase}",
+                          paths["ecdf"]/f"ecdf_percentile_vs_classic_{phase}.png")
 
+        # Violin by sector
         rows = []
-        v = Aperc
-        if np.isfinite(v).any():
+        if np.isfinite(dP).any():
             rows.append(dict(sector="Circumpolar", method="Percentile vs Classic",
-                             absdiff=v[np.isfinite(v)].ravel()))
-            for sid, name in [(1,"Amundsen–Bellingshausen"), (2,"Weddell"),
-                              (3,"King Haakon VII"), (4,"East Antarctic"), (5,"Ross–Amundsen")]:
+                             absdiff=dP[np.isfinite(dP)].ravel()))
+            for sid, name in sector_names.items():
                 mask = (SID == sid)
-                vv = v[:, mask]
+                vv = dP[:, mask]
                 vv = vv[np.isfinite(vv)]
                 if vv.size:
                     rows.append(dict(sector=name, method="Percentile vs Classic", absdiff=vv))
         if rows:
             recs = []
             for r in rows:
-                vals1 = np.asarray(r["absdiff"]).ravel()
-                for val in vals1:
+                arr = np.asarray(r["absdiff"]).ravel()
+                for val in arr:
                     if np.isfinite(val):
                         recs.append({"sector": r["sector"], "method": r["method"], "absdiff": float(val)})
-            df = pd.DataFrame.from_records(recs)
-            order = ["Circumpolar","Amundsen–Bellingshausen","Weddell","King Haakon VII",
-                     "East Antarctic","Ross–Amundsen"]
-            df["sector"] = pd.Categorical(df["sector"], categories=order, ordered=True)
-            plot_violin_by_sector(df, title=f"Sectoral |Δ| • Percentile vs Classic • {phase}",
-                                  outpath=paths["violin"]/f"violin_percentile_vs_classic_{phase}.png")
+            dfv = pd.DataFrame.from_records(recs)
+            dfv["sector"] = pd.Categorical(dfv["sector"], categories=ordered, ordered=True)
+            plot_violin_by_sector(dfv, f"Sectoral |Δ| • Percentile vs Classic • {phase}",
+                                  paths["violin"]/f"violin_percentile_vs_classic_{phase}.png")
 
-        if MAKE_OPTIONAL_JOINT_CLASSIC:
+        if MAKE_JOINT_CLASSIC:
             meanP = dynP.mean("year", skipna=True).values.flatten()
             meanB = classic.mean("year", skipna=True).values.flatten()
             msk = np.isfinite(meanP) & np.isfinite(meanB)
             plot_joint_hist(meanB[msk], meanP[msk],
-                            title=f"Joint histogram • Mean DOY • Classic (x) vs Percentile (y) • {phase}",
-                            outpath=paths["joint"]/f"joint_mean_doy_classic_vs_percentile_{phase}.png")
+                            f"Joint histogram • Mean DOY • Classic (x) vs Percentile (y) • {phase}",
+                            paths["joint"]/f"joint_mean_doy_classic_vs_percentile_{phase}.png")
 
-    # ------- D. Climatology & Trends -------
-    if MAKE_D_CLIM_TRENDS:
+    # ---------- Standalone climatology & trends (no deltas) ----------
+    if MAKE_CLIM_TRENDS:
         meanClassic = classic.mean("year", skipna=True)
         plot_map_single(meanClassic, DOY_VMIN, DOY_VMAX, "cividis",
                         "DOY", f"Mean DOY • Classic • {phase}",
                         paths["maps"]/f"mean_doy_classic_{phase}.png")
+
         meanPerc = dynP.mean("year", skipna=True)
         plot_map_single(meanPerc, DOY_VMIN, DOY_VMAX, "cividis",
                         "DOY", f"Mean DOY • Percentile • {phase}",
                         paths["maps"]/f"mean_doy_percentile_{phase}.png")
+
         trendClassic = theilsen_trend(classic, years)
         plot_map_single(trendClassic, -TREND_LIM, TREND_LIM, "magma",
                         "days / decade", f"Trend • Classic • {phase}",
                         paths["maps"]/f"trend_classic_{phase}.png")
+
         trendPerc = theilsen_trend(dynP, years)
         plot_map_single(trendPerc, -TREND_LIM, TREND_LIM, "magma",
                         "days / decade", f"Trend • Percentile • {phase}",
@@ -414,7 +417,6 @@ def main():
         print(f"[INFO] Building figures for phase: {ph}")
         run_for_phase(ph)
     print(f"[OK] Finished. Outputs under: {OUT_DIR}")
-    # final recursive copy
     rclone_copy_tree(Path(OUT_DIR))
 
 if __name__ == "__main__":
