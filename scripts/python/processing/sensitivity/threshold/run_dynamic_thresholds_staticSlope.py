@@ -72,6 +72,21 @@ def find_first_event_dyn(ts, thr_scalar, k, above: bool):
         return np.nan
     return int(hits.argmax("time").item())
 
+def find_last_event_dyn(ts, thr_scalar, k, above: bool):
+    """
+    Return index of LAST k-day run meeting condition, else nan.
+    Mirror of find_first_event_dyn but from the end.
+    """
+    cond = (ts > thr_scalar) if above else (ts < thr_scalar)
+    hits = cond.rolling(time=k).construct("window").all("window")
+    if not bool(hits.any()):
+        return np.nan
+    idxs = np.where(hits.values)[0]
+    if idxs.size == 0:
+        return np.nan
+    return int(idxs[-1])
+
+
 def save_year_field(out_dir, year, arr, varname, template_ds):
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     xr.Dataset(
@@ -134,35 +149,44 @@ THR_BUILDERS = {
 }
 
 # ---------- per-year compute using dynamic T(y,x) ---------- #
-def compute_FS_MS_year_dyn(ice365, year, T_FS, T_MS, k, landmask, template_ds):
+def compute_FS_MS_ME_year_dyn(ice365, year, T_FS, T_MS, k, landmask, template_ds):
     ny, nx = ice365.y.size, ice365.x.size
     FS = np.full((ny, nx), np.nan, dtype=float)
     MS = np.full((ny, nx), np.nan, dtype=float)
+    ME = np.full((ny, nx), np.nan, dtype=float)
 
     y, y1 = year, year + 1
     ts_MS = slice_season(ice365, f"{y}{MS_START_MMDD}", f"{y1}{MS_END_MMDD}")
     ts_FS = slice_season(ice365, f"{y}{FS_START_MMDD}", f"{y}{FS_END_MMDD}")
 
-    if ts_MS.time.size < max(60,k) and ts_FS.time.size < max(60,k):
-        return FS, MS
+    if ts_MS.time.size < max(60, k) and ts_FS.time.size < max(60, k):
+        return FS, MS, ME
 
-    # Iterate; same cost as your static version
     for j in range(ny):
         col_MS = ts_MS.isel(y=j).transpose("time", "x")
         col_FS = ts_FS.isel(y=j).transpose("time", "x")
         for i in range(nx):
             if landmask[j, i]:
                 continue
-            # MS (retreat): first k-day run BELOW threshold
+
             thr_ms = float(T_MS.values[j, i])
+            thr_fs = float(T_FS.values[j, i])
             ts_r = col_MS[:, i]
+            ts_a = col_FS[:, i]
+
+            # MS: first k-day run BELOW threshold
             if np.isfinite(thr_ms) and bool((ts_r < thr_ms).any()):
                 idx = find_first_event_dyn(ts_r, thr_ms, k, above=False)
                 if not np.isnan(idx):
                     MS[j, i] = ts_r.time[int(idx)].dt.dayofyear.item()
-            # FS (advance): first k-day run ABOVE threshold
-            thr_fs = float(T_FS.values[j, i])
-            ts_a = col_FS[:, i]
+
+            # ME: last k-day run BELOW threshold
+            if np.isfinite(thr_ms) and bool((ts_r < thr_ms).any()):
+                idx_last = find_last_event_dyn(ts_r, thr_ms, k, above=False)
+                if not np.isnan(idx_last):
+                    ME[j, i] = ts_r.time[int(idx_last)].dt.dayofyear.item()
+
+            # FS: first k-day run ABOVE threshold
             if np.isfinite(thr_fs) and bool((ts_a > thr_fs).any()):
                 idx = find_first_event_dyn(ts_a, thr_fs, k, above=True)
                 if not np.isnan(idx):
@@ -170,7 +194,9 @@ def compute_FS_MS_year_dyn(ice365, year, T_FS, T_MS, k, landmask, template_ds):
 
     FS[landmask.values] = np.nan
     MS[landmask.values] = np.nan
-    return FS, MS
+    ME[landmask.values] = np.nan
+    return FS, MS, ME
+
 
 # ---------------- main runner ---------------- #
 def main():
@@ -191,8 +217,10 @@ def main():
         builder = THR_BUILDERS[scheme]
         out_dir_FS = os.path.join(OUT_ROOT, f"{scheme}_k{K}", "FS")
         out_dir_MS = os.path.join(OUT_ROOT, f"{scheme}_k{K}", "MS")
+        out_dir_ME = os.path.join(OUT_ROOT, f"{scheme}_k{K}", "ME")
         Path(out_dir_FS).mkdir(parents=True, exist_ok=True)
         Path(out_dir_MS).mkdir(parents=True, exist_ok=True)
+        Path(out_dir_ME).mkdir(parents=True, exist_ok=True)
 
         print(f"\n=== Running scheme: {scheme} | params={params} | k={K} ===")
         for year in tqdm(run_years, desc=f"{scheme}"):
@@ -200,11 +228,13 @@ def main():
             T_FS = builder(ice365, year, "FS", params)
             T_MS = builder(ice365, year, "MS", params)
 
-            FS, MS = compute_FS_MS_year_dyn(ice365, year, T_FS, T_MS, K, landmask, ds)
+            FS, MS, ME = compute_FS_MS_ME_year_dyn(ice365, year, T_FS, T_MS, K, landmask, ds)
 
-            tag = "_".join([f"{k}{v}" for k,v in params.items() if k in ("alpha","p","gamma")])
+            tag = "_".join([f"{k}{v}" for k, v in params.items() if k in ("alpha", "p", "gamma")])
             save_year_field(os.path.join(out_dir_FS, tag), year, FS, "FS", ds)
             save_year_field(os.path.join(out_dir_MS, tag), year, MS, "MS", ds)
+            save_year_field(os.path.join(out_dir_ME, tag), year, ME, "ME", ds)
+
             gc.collect()
 
     print("Done.")
