@@ -294,24 +294,33 @@ def run_phase_detection(thr: float,
 # =======================
 # CONVENIENCE DRIVERS
 # =======================
-def run_threshold_sweep(years, k=5, thresholds=(0.10, 0.15, 0.30)):
-    for thr in thresholds:
-        run_phase_detection(thr=thr, k=k, years=years)
-
-def run_window_sweep(years, thr=0.15, windows=(3, 5, 7)):
-    for k in windows:
-        run_phase_detection(thr=thr, k=k, years=years)
-
-# =======================
+# def run_threshold_sweep(years, k=5, thresholds=(0.10, 0.15, 0.30)):
+#     for thr in thresholds:
+#         run_phase_detection(thr=thr, k=k, years=years)
+#
+# def run_window_sweep(years, thr=0.15, windows=(3, 5, 7)):
+#     for k in windows:
+#         run_phase_detection(thr=thr, k=k, years=years)
+#
+# # =======================
 # EXAMPLE MAIN
 # =======================
+# if __name__ == "__main__":
+#     YEARS = range(1979, 2025)
+#
+#     # A) Threshold sensitivity at fixed k=5
+#     run_threshold_sweep(years=YEARS, k=5, thresholds=(0.10, 0.15, 0.30))
+#
+#     # B) Window sensitivity at fixed thr=0.15
+#     run_window_sweep(years=YEARS, thr=0.15, windows=(3, 5, 7))
+#
+#     print("Done.")
+
 if __name__ == "__main__":
     YEARS = range(1979, 2025)
 
-    # A) Threshold sensitivity at fixed k=5
-    run_threshold_sweep(years=YEARS, k=5, thresholds=(0.10, 0.15, 0.30))
-
-    # B) Window sensitivity at fixed thr=0.15
-    run_window_sweep(years=YEARS, thr=0.15, windows=(3, 5, 7))
+    # PRODUCTION RUN: single (thr, k) with ME included
+    run_phase_detection(thr=0.15, k=5, years=YEARS)
 
     print("Done.")
+
