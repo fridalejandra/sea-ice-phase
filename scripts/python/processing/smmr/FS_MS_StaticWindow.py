@@ -282,8 +282,8 @@ def run_phase_detection(thr: float,
     Path(dir_FS).mkdir(parents=True, exist_ok=True)
     Path(dir_MS).mkdir(parents=True, exist_ok=True)
     Path(dir_ME).mkdir(parents=True, exist_ok=True)
-    ...
-    for year in tqdm(...):
+
+    for year in tqdm(years, desc=f"{sensor_tag} thr={thr:.2f}, k={k}, H={PERSIST_DAYS}, slope>={SLOPE_MIN}"):
         FS, MS, ME = compute_FS_MS_ME_for_year(ice365, year, thr, k, landmask)
         save_year_field(dir_FS, year, FS, "FS", ds)
         save_year_field(dir_MS, year, MS, "MS", ds)
