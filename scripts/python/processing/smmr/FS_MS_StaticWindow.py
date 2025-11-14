@@ -317,6 +317,7 @@ def run_phase_detection(thr: float,
 #     print("Done.")
 
 if __name__ == "__main__":
-    YEARS = range(1979, 2025)
+    YEARS = range(1979, 1982)   # TEST: only 1979–1981
     run_phase_detection(thr=0.15, k=5, years=YEARS)
     print("Done.")
+
