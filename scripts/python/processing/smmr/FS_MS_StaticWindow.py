@@ -317,7 +317,9 @@ def run_phase_detection(thr: float,
 #     print("Done.")
 
 if __name__ == "__main__":
-    YEARS = range(1979, 2025)
+    # ONLY run missing years 1989–2024
+    YEARS = range(1989, 2025)
     run_phase_detection(thr=0.15, k=5, years=YEARS)
     print("Done.")
+
 
