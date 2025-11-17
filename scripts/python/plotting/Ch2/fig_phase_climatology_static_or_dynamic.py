@@ -140,13 +140,15 @@ def upload_with_rclone(local_path, remote_base):
         print(f"rclone upload failed for {fname}: {e}")
 
 
-def unwrap_melt_doy(da, pivot=180):
+def unwrap_doy(da, pivot):
     """
-    Unwrap DOY across the year boundary for melt phases.
-    Values < pivot are treated as "next-year" and shifted by +365.
-    For Antarctic melt, pivot~180 (July) is fine: Jan–Jun get shifted.
+    Unwrap DOY across the year boundary.
+
+    Any DOY < pivot is treated as "next-year" and shifted by +365.
+    pivot is a DOY (e.g. 220 ~ Aug, 335 ~ Dec).
     """
     return da.where(da >= pivot, da + 365)
+
 
 
 # =======================
@@ -272,14 +274,39 @@ def make_figure_separate_raw(clim):
 
 def make_figure_unwrapped_melt(clim):
     """
-    FS raw DOY; MS & ME unwrapped across year boundary.
-    Separate colorbars for each phase.
+    FS: raw DOY with colorbar Feb–Nov.
+    MS: DOY unwrapped around Aug, colorbar Aug–Feb.
+    ME: DOY unwrapped around Dec, colorbar Dec–Feb.
+    Separate colormaps and colorbars for each phase.
     """
     sample = clim[PHASES[0]]
     x = sample["x"]
     y = sample["y"]
 
-    cmap = plt.cm.twilight_shifted
+    # Phase-specific colormaps
+    cmap_fs = plt.cm.viridis
+    cmap_ms = plt.cm.plasma
+    cmap_me = plt.cm.magma
+
+    # FS: Feb–Nov
+    FS_VMIN = 32   # ~1 Feb
+    FS_VMAX = 334  # ~30 Nov
+    FS_TICKS = [46, 137, 228, 320]            # Feb, May, Aug, Nov-ish
+    FS_LABELS = ["Feb", "May", "Aug", "Nov"]
+
+    # MS: unwrapped Aug–Feb (pivot ~Aug 1 -> DOY 213–220)
+    MS_PIVOT = 220
+    MS_VMIN  = 220         # Aug
+    MS_VMAX  = 430         # Feb (~65 + 365)
+    MS_TICKS = [220, 280, 340, 400]
+    MS_LABELS = ["Aug", "Oct", "Dec", "Feb"]
+
+    # ME: unwrapped Dec–Feb (pivot ~Dec 1 -> DOY 335)
+    ME_PIVOT = 335
+    ME_VMIN  = 335
+    ME_VMAX  = 430
+    ME_TICKS = [335, 365, 395, 425]
+    ME_LABELS = ["Dec", "Jan", "Feb", "Mar"]
 
     fig = plt.figure(figsize=FIGSIZE_TRIPLE, dpi=DPI)
 
@@ -290,19 +317,34 @@ def make_figure_unwrapped_melt(clim):
 
         da = clim[ph]
 
-        if ph in ("MS", "ME"):
-            da_plot = unwrap_melt_doy(da)   # values 200–430-ish
-            norm = Normalize(vmin=200, vmax=430)
-            # rough seasonal ticks: Aug, Oct, Dec, Feb
-            ticks = [220, 280, 340, 400]
-            labels = ["Aug", "Oct", "Dec", "Feb"]
+        if ph == "FS":
+            da_plot = da.clip(FS_VMIN, FS_VMAX)
+            norm = Normalize(vmin=FS_VMIN, vmax=FS_VMAX)
+            cmap = cmap_fs
+            ticks = FS_TICKS
+            labels = FS_LABELS
+            cblabel = "Day of year (Feb–Nov)"
+            ttl = "Freeze start (FS)"
+
+        elif ph == "MS":
+            da_unwrapped = unwrap_doy(da, pivot=MS_PIVOT)
+            da_plot = da_unwrapped.clip(MS_VMIN, MS_VMAX)
+            norm = Normalize(vmin=MS_VMIN, vmax=MS_VMAX)
+            cmap = cmap_ms
+            ticks = MS_TICKS
+            labels = MS_LABELS
             cblabel = "Unwrapped DOY (Aug–Feb)"
-        else:
-            da_plot = da
-            norm = Normalize(vmin=0, vmax=365)
-            ticks = [15, 105, 196, 288, 365]
-            labels = ["Jan", "Apr", "Jul", "Oct", "Dec"]
-            cblabel = "Day of year"
+            ttl = "Melt start (MS)"
+
+        else:  # ME
+            da_unwrapped = unwrap_doy(da, pivot=ME_PIVOT)
+            da_plot = da_unwrapped.clip(ME_VMIN, ME_VMAX)
+            norm = Normalize(vmin=ME_VMIN, vmax=ME_VMAX)
+            cmap = cmap_me
+            ticks = ME_TICKS
+            labels = ME_LABELS
+            cblabel = "Unwrapped DOY (Dec–Feb)"
+            ttl = "Melt end (ME)"
 
         mesh = ax.pcolormesh(
             x, y, da_plot,
@@ -310,13 +352,6 @@ def make_figure_unwrapped_melt(clim):
             cmap=cmap,
             norm=norm
         )
-
-        if ph == "FS":
-            ttl = "Freeze start (FS)"
-        elif ph == "MS":
-            ttl = "Melt start (MS)"
-        else:
-            ttl = "Melt end (ME)"
 
         ax.set_title(ttl, fontsize=9)
 
@@ -330,11 +365,15 @@ def make_figure_unwrapped_melt(clim):
         cb.set_label(cblabel, fontsize=8)
 
     fig.suptitle(
-        f"{MODE} phase climatology ({YEAR_START}–{YEAR_END}) – unwrapped melt DOY",
+        f"{MODE} phase climatology ({YEAR_START}–{YEAR_END}) – "
+        f"phase-specific seasonal colorbars",
         fontsize=11
     )
 
-    out_name = f"fig_phase_climatology_{MODE}_{YEAR_START}_{YEAR_END}_unwrapped_separatecbars.png"
+    out_name = (
+        f"fig_phase_climatology_{MODE}_{YEAR_START}_{YEAR_END}"
+        "_unwrapped_seasonal_cbars.png"
+    )
     save_path = os.path.join(OUT_DIR, out_name)
     plt.tight_layout(rect=[0, 0.12, 1, 0.94])
     plt.savefig(save_path, dpi=DPI, bbox_inches="tight")
