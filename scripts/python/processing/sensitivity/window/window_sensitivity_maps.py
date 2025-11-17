@@ -266,34 +266,74 @@ def _round_polar_axes(ax):
     circle = mpath.Path(verts * radius + center)
     ax.set_boundary(circle, transform=ax.transAxes)
 
-def plot_map_cartopy(da, cano, title, out_png, vmin, vmax, cmap="viridis", white_under=True, cfg=CFG):
+def plot_map_cartopy(da, cano, title, out_png,
+                     vmin, vmax, cmap="viridis",
+                     white_under=True, cfg=CFG):
+    """
+    South-polar map with circular boundary and Word-friendly size.
+    Style matches phase climatology figures.
+    """
     proj = ccrs.SouthPolarStereo()
-    fig, ax = plt.subplots(figsize=(6.8, 6.8), subplot_kw={"projection": proj})
 
-    ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="0.2", linewidth=0.4, zorder=2)
-    ax.coastlines(resolution="110m", color="0.2", linewidth=0.5, zorder=3)
+    # ~5x5 inches works well as a single panel in Word
+    fig = plt.figure(figsize=(5.0, 5.0))
+    ax = plt.axes(projection=proj)
 
-    lon = cano["lon"]; lat = cano["lat"]
+    # Domain + circular clip
+    ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
+    theta = np.linspace(0, 2 * np.pi, 200)
+    center = [0.5, 0.5]
+    radius = 0.5
+    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    circle = mpath.Path(verts * radius + center)
+    ax.set_boundary(circle, transform=ax.transAxes)
+
+    # Background: black ocean, grey land, fine coastlines
+    ax.add_feature(cfeature.OCEAN, facecolor="black", zorder=0)
+    ax.add_feature(cfeature.LAND, facecolor="0.7", edgecolor="0.7",
+                   linewidth=0.4, zorder=1)
+    ax.coastlines(resolution="110m", color="0.3", linewidth=0.5, zorder=2)
+
+    # Subtle gridlines
+    ax.gridlines(draw_labels=False, linewidth=0.3, color="0.5",
+                 alpha=0.4, linestyle="--")
+
+    # Data
+    lon = cano["lon"]
+    lat = cano["lat"]
+
     cmap_obj = plt.get_cmap(cmap).copy()
     if white_under:
         cmap_obj.set_under("white")
+
+    # Avoid including exact zero in "under" bin
     eps = 1e-6 if vmin == 0 else 0.0
 
-    pc = ax.pcolormesh(lon, lat, da, transform=ccrs.PlateCarree(),
-                       vmin=vmin + eps, vmax=vmax, cmap=cmap_obj, zorder=4)
+    pc = ax.pcolormesh(
+        lon, lat, da,
+        transform=ccrs.PlateCarree(),
+        vmin=vmin + eps, vmax=vmax,
+        cmap=cmap_obj,
+        zorder=3
+    )
 
-    cb = plt.colorbar(pc, ax=ax, orientation="horizontal", pad=0.02, shrink=0.85)
-    cb.set_label(title.split("•")[0].strip(), fontsize=9)
-
+    # Sector boundaries (same as before)
     draw_sector_meridians(ax)
-    ax.set_extent([-180, 180, -90, -45], ccrs.PlateCarree())
-    _round_polar_axes(ax)
+
+    # Colorbar below the map
+    cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
+    cb = fig.colorbar(pc, cax=cax, orientation="horizontal")
+    cb.ax.tick_params(labelsize=8)
+    cb.outline.set_visible(False)
+    cb.set_label("Absolute timing difference (days)", fontsize=9)
 
     ax.set_title(title, fontsize=11, fontweight="bold", pad=6)
-    plt.tight_layout()
+
+    plt.tight_layout(rect=[0, 0.11, 1, 0.95])
     Path(out_png).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_png, dpi=cfg["DPI"])
     plt.close()
+
     print(f"[OK] wrote {out_png}")
     rclone_copy(out_png, cfg)
 
@@ -336,48 +376,74 @@ def summarize_to_rows(da, cano, metric, difftype, statname):
 def plot_cdf_pairs(metric, abs35, abs75, out_png, cfg=CFG, max_x=30):
     import seaborn as sns
     sns.set_style("whitegrid")
-    fig, ax = plt.subplots(figsize=(5.8, 3.9))
-    v35 = abs35[abs35 <= max_x]; v75 = abs75[abs75 <= max_x]
-    sns.ecdfplot(v35, ax=ax, label="3 vs 5", lw=2)
-    sns.ecdfplot(v75, ax=ax, label="7 vs 5", lw=2)
-    ax.set_xlim(0, max_x); ax.set_ylim(0, 1)
-    ax.set_xlabel("Absolute timing difference |Δ| (days)")
-    ax.set_ylabel("Cumulative Fraction of Pixels")
-    ax.set_title(f"CDF of |Δ| • {metric}")
-    ax.legend(title="Window comparison")
-    plt.tight_layout()
-    plt.savefig(out_png, dpi=cfg["DPI"]); plt.close()
+    sns.set_context("talk")
+
+    fig, ax = plt.subplots(figsize=(5.5, 3.6))
+
+    v35 = abs35[(abs35 <= max_x) & np.isfinite(abs35)]
+    v75 = abs75[(abs75 <= max_x) & np.isfinite(abs75)]
+
+    sns.ecdfplot(v35, ax=ax, label="3 vs 5-day window", lw=2)
+    sns.ecdfplot(v75, ax=ax, label="7 vs 5-day window", lw=2)
+
+    ax.set_xlim(0, max_x)
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("Absolute timing difference (days)", fontsize=11, fontweight="bold", color="0.3")
+    ax.set_ylabel("Cumulative fraction of pixels",    fontsize=11, fontweight="bold", color="0.3")
+
+    ax.set_title(f"{metric} window sensitivity (all sectors)", fontsize=11, color="0.25")
+    ax.grid(True, alpha=0.3, linestyle=":")
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, title="Window comparison",
+              frameon=True, loc="lower right", fontsize=9)
+
+    fig.tight_layout()
+    plt.savefig(out_png, dpi=cfg["DPI"])
+    plt.close()
     rclone_copy(out_png, cfg)
     print(f"[OK] wrote {out_png}")
 
 def plot_distribution_pairs(metric, d35, d75, out_png, cfg=CFG):
     bins = np.arange(-30, 31, 1)
-    fig, axs = plt.subplots(2, 2, figsize=(10.5, 8.2), sharex=True, sharey=True)
-    panels = [(d35, "Δ(3–5)"), (d75, "Δ(7–5)"), (None, ""), (None, "")]
-    for (data, label), ax in zip(panels, axs.ravel()):
-        if data is None:
-            ax.axis("off"); continue
+
+    fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.8), sharex=True, sharey=True)
+
+    pairs = [(d35, "Δ(3–5)"), (d75, "Δ(7–5)")]
+    for ax, (data, label) in zip(axes, pairs):
         data = np.asarray(data)
         data = data[np.isfinite(data)]
         if data.size == 0:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center", color="0.5", transform=ax.transAxes)
-            ax.grid(False); continue
+            ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                    color="0.5", transform=ax.transAxes)
+            ax.grid(False)
+            continue
+
         ax.hist(data, bins=bins, density=True, alpha=0.9)
         med = float(np.nanmedian(data))
         q25, q75 = np.nanpercentile(data, [25, 75])
         pct5 = 100.0 * np.mean(np.abs(data) > 5)
+
         ax.axvline(med, color="k", lw=1)
         ax.axvline(q25, color="k", lw=1, ls=":")
         ax.axvline(q75, color="k", lw=1, ls=":")
-        ax.set_title(f"{metric} {label}\nmedian {med:+.1f} d | IQR {q25:+.1f}–{q75:+.1f} d | %|Δ|>5: {pct5:.1f}%")
+
+        ax.set_title(
+            f"{label}\nmedian {med:+.1f} d | IQR {q25:+.1f}–{q75:+.1f} d | %|Δ|>5: {pct5:.1f}%",
+            fontsize=9
+        )
         ax.grid(True, alpha=0.3)
-    for ax in axs[-1,:]:
-        if ax.has_data():
-            ax.set_xlabel("Δ timing (days)")
-    fig.supylabel("Density")
-    fig.suptitle(f"Window sensitivity distributions ({CFG['SENSOR']}, {metric})")
-    plt.tight_layout(rect=[0,0,1,0.94])
-    plt.savefig(out_png, dpi=cfg["DPI"]); plt.close()
+
+    for ax in axes:
+        ax.set_xlabel("Δ timing (days)")
+    axes[0].set_ylabel("Density")
+
+    fig.suptitle(f"Window sensitivity distributions ({CFG['SENSOR']}, {metric})",
+                 fontsize=11)
+    fig.tight_layout(rect=[0, 0, 1, 0.93])
+
+    plt.savefig(out_png, dpi=cfg["DPI"])
+    plt.close()
     rclone_copy(out_png, cfg)
     print(f"[OK] wrote {out_png}")
 
