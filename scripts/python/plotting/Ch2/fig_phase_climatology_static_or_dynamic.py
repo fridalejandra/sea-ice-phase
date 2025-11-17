@@ -288,25 +288,25 @@ def make_figure_unwrapped_melt(clim):
     cmap_ms = plt.cm.plasma
     cmap_me = plt.cm.magma
 
-    # FS: Feb–Nov
-    FS_VMIN = 32   # ~1 Feb
-    FS_VMAX = 334  # ~30 Nov
-    FS_TICKS = [46, 137, 228, 320]            # Feb, May, Aug, Nov-ish
-    FS_LABELS = ["Feb", "May", "Aug", "Nov"]
+    # --- FS range ---
+    FS_VMIN = 46
+    FS_VMAX = 273
+    FS_TICKS = [46, 137, 228, 273]
+    FS_LABELS = ["Feb", "May", "Aug", "Sep"]
 
-    # MS: unwrapped Aug–Feb (pivot ~Aug 1 -> DOY 213–220)
-    MS_PIVOT = 220
-    MS_VMIN  = 220         # Aug
-    MS_VMAX  = 430         # Feb (~65 + 365)
-    MS_TICKS = [220, 280, 340, 400]
+    # --- MS range (unwrapped Aug–Feb) ---
+    MS_PIVOT = 227
+    MS_VMIN = 227
+    MS_VMAX = 424
+    MS_TICKS = [227, 288, 349, 410]
     MS_LABELS = ["Aug", "Oct", "Dec", "Feb"]
 
-    # ME: unwrapped Dec–Feb (pivot ~Dec 1 -> DOY 335)
-    ME_PIVOT = 335
-    ME_VMIN  = 335
-    ME_VMAX  = 430
-    ME_TICKS = [335, 365, 395, 425]
-    ME_LABELS = ["Dec", "Jan", "Feb", "Mar"]
+    # --- ME range (unwrapped late-season Dec–Feb) ---
+    ME_PIVOT = 320
+    ME_VMIN = 335
+    ME_VMAX = 424
+    ME_TICKS = [335, 365, 395, 424]
+    ME_LABELS = ["Dec", "Jan", "Feb", "late Feb"]
 
     fig = plt.figure(figsize=FIGSIZE_TRIPLE, dpi=DPI)
 
