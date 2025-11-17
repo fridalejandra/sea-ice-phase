@@ -20,7 +20,7 @@ FIGSIZE_SINGLE = (5, 5)        # single map/plot
 FIGSIZE_DOUBLE = (8, 4)        # 2 panels side-by-side
 FIGSIZE_TRIPLE = (10.5, 4)     # 3 panels side-by-side
 FIGSIZE_WIDE   = (11, 4)       # extra-wide triple if needed
-FIGSIZE_TALL   = (5, 7)        # for vertical stack if ever used
+FIGSIZE_TALL   = (5, 7)        # vertical stack (rare)
 # ---------------------------------------------------------------------
 DPI = 300
 
@@ -28,7 +28,7 @@ DPI = 300
 # CONFIG
 # =======================
 
-# --- choose method + paths --- #
+# choose method + paths
 MODE = "dynamic_quantile"      # "static" or "dynamic_quantile"
 
 YEAR_START = 1979
@@ -47,10 +47,8 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 PHASES = ["FS", "MS", "ME"]   # all phases
 
-# rclone remote (EDIT THIS to match your config)
-# Example: "gdrive:sea-ice-phase/Ch2_Figures/climatology"
+# rclone remote (EDIT if needed)
 RCLONE_REMOTE = "gdrive:sea-ice-phase/Ch2_Figures/climatology"
-
 
 # =======================
 # HELPERS
@@ -58,10 +56,9 @@ RCLONE_REMOTE = "gdrive:sea-ice-phase/Ch2_Figures/climatology"
 
 def make_polar_axes(ax):
     """
-    Configure an existing axes as south polar stereographic with circular boundary.
-    This avoids creating new axes on top of the subplots.
+    Configure an existing axes as south polar stereographic with circular
+    boundary. This avoids creating new axes on top of the subplots.
     """
-    proj = ccrs.SouthPolarStereo()
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
 
     # circular boundary
@@ -143,30 +140,31 @@ def upload_with_rclone(local_path, remote_base):
         print(f"rclone upload failed for {fname}: {e}")
 
 
+def unwrap_melt_doy(da, pivot=180):
+    """
+    Unwrap DOY across the year boundary for melt phases.
+    Values < pivot are treated as "next-year" and shifted by +365.
+    For Antarctic melt, pivot~180 (July) is fine: Jan–Jun get shifted.
+    """
+    return da.where(da >= pivot, da + 365)
+
+
 # =======================
-# MAIN PLOT
+# FIGURE MAKERS
 # =======================
 
-def make_figure(shared_colorbar: bool):
-    # Load climatologies per phase
-    clim = {}
-    for ph in PHASES:
-        print(f"Loading climatology for {ph} [{MODE}]...")
-        clim[ph] = load_phase_climatology(ph, MODE, YEAR_START, YEAR_END)
-
+def make_figure_shared(clim):
+    """FS, MS, ME with shared DOY colorbar (0–365)."""
     sample = clim[PHASES[0]]
     x = sample["x"]
     y = sample["y"]
 
-    # DOY colormap + ticks
     cmap = plt.cm.twilight_shifted
-    # full-year range so FS/MS/ME are comparable
     norm = Normalize(vmin=0, vmax=365)
     ticks = [15, 105, 196, 288, 365]
     labels = ["Jan", "Apr", "Jul", "Oct", "Dec"]
 
     fig = plt.figure(figsize=FIGSIZE_TRIPLE, dpi=DPI)
-    axes = []
     meshes = []
 
     for i, ph in enumerate(PHASES):
@@ -190,58 +188,180 @@ def make_figure(shared_colorbar: bool):
             ttl = "Melt end (ME)"
 
         ax.set_title(ttl, fontsize=9)
-        axes.append(ax)
         meshes.append(mesh)
 
-        if not shared_colorbar:
-            # individual colorbar per panel
-            cb = fig.colorbar(mesh, ax=ax,
-                              orientation="horizontal",
-                              fraction=0.046, pad=0.04)
-            cb.set_ticks(ticks)
-            cb.set_ticklabels(labels)
-            cb.ax.tick_params(labelsize=7)
-            cb.outline.set_visible(False)
-
-    if shared_colorbar:
-        # Shared colorbar along bottom
-        cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
-        cb = fig.colorbar(meshes[0], cax=cax, orientation="horizontal")
-        cb.set_ticks(ticks)
-        cb.set_ticklabels(labels)
-        cb.ax.tick_params(labelsize=8)
-        cb.outline.set_visible(False)
-        cb.set_label("Day of year", fontsize=9, labelpad=3)
+    # Shared colorbar along bottom
+    cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
+    cb = fig.colorbar(meshes[0], cax=cax, orientation="horizontal")
+    cb.set_ticks(ticks)
+    cb.set_ticklabels(labels)
+    cb.ax.tick_params(labelsize=8)
+    cb.outline.set_visible(False)
+    cb.set_label("Day of year", fontsize=9, labelpad=3)
 
     fig.suptitle(
         f"{MODE} phase climatology ({YEAR_START}–{YEAR_END})",
         fontsize=11
     )
 
-    # Output naming depends on colorbar mode
-    cbar_tag = "sharedcbar" if shared_colorbar else "separatecbars"
-    out_name = f"fig_phase_climatology_{MODE}_{YEAR_START}_{YEAR_END}_{cbar_tag}.png"
+    out_name = f"fig_phase_climatology_{MODE}_{YEAR_START}_{YEAR_END}_sharedcbar.png"
     save_path = os.path.join(OUT_DIR, out_name)
-
-    # layout
-    if shared_colorbar:
-        plt.tight_layout(rect=[0, 0.14, 1, 0.94])
-    else:
-        plt.tight_layout(rect=[0, 0.06, 1, 0.94])
-
+    plt.tight_layout(rect=[0, 0.14, 1, 0.94])
     plt.savefig(save_path, dpi=DPI, bbox_inches="tight")
     plt.close()
     print(f"Saved locally: {save_path}")
-
-    # rclone upload
     upload_with_rclone(save_path, RCLONE_REMOTE)
 
 
+def make_figure_separate_raw(clim):
+    """FS, MS, ME with separate DOY colorbars (0–365), raw DOY."""
+    sample = clim[PHASES[0]]
+    x = sample["x"]
+    y = sample["y"]
+
+    cmap = plt.cm.twilight_shifted
+    norm = Normalize(vmin=0, vmax=365)
+    ticks = [15, 105, 196, 288, 365]
+    labels = ["Jan", "Apr", "Jul", "Oct", "Dec"]
+
+    fig = plt.figure(figsize=FIGSIZE_TRIPLE, dpi=DPI)
+
+    for i, ph in enumerate(PHASES):
+        ax = fig.add_subplot(1, len(PHASES), i + 1,
+                             projection=ccrs.SouthPolarStereo())
+        ax = make_polar_axes(ax)
+
+        da = clim[ph]
+        mesh = ax.pcolormesh(
+            x, y, da,
+            transform=ccrs.SouthPolarStereo(),
+            cmap=cmap,
+            norm=norm
+        )
+
+        if ph == "FS":
+            ttl = "Freeze start (FS)"
+        elif ph == "MS":
+            ttl = "Melt start (MS)"
+        else:
+            ttl = "Melt end (ME)"
+
+        ax.set_title(ttl, fontsize=9)
+
+        cb = fig.colorbar(mesh, ax=ax,
+                          orientation="horizontal",
+                          fraction=0.046, pad=0.04)
+        cb.set_ticks(ticks)
+        cb.set_ticklabels(labels)
+        cb.ax.tick_params(labelsize=7)
+        cb.outline.set_visible(False)
+
+    fig.suptitle(
+        f"{MODE} phase climatology ({YEAR_START}–{YEAR_END})",
+        fontsize=11
+    )
+
+    out_name = f"fig_phase_climatology_{MODE}_{YEAR_START}_{YEAR_END}_separatecbars.png"
+    save_path = os.path.join(OUT_DIR, out_name)
+    plt.tight_layout(rect=[0, 0.10, 1, 0.94])
+    plt.savefig(save_path, dpi=DPI, bbox_inches="tight")
+    plt.close()
+    print(f"Saved locally: {save_path}")
+    upload_with_rclone(save_path, RCLONE_REMOTE)
+
+
+def make_figure_unwrapped_melt(clim):
+    """
+    FS raw DOY; MS & ME unwrapped across year boundary.
+    Separate colorbars for each phase.
+    """
+    sample = clim[PHASES[0]]
+    x = sample["x"]
+    y = sample["y"]
+
+    cmap = plt.cm.twilight_shifted
+
+    fig = plt.figure(figsize=FIGSIZE_TRIPLE, dpi=DPI)
+
+    for i, ph in enumerate(PHASES):
+        ax = fig.add_subplot(1, len(PHASES), i + 1,
+                             projection=ccrs.SouthPolarStereo())
+        ax = make_polar_axes(ax)
+
+        da = clim[ph]
+
+        if ph in ("MS", "ME"):
+            da_plot = unwrap_melt_doy(da)   # values 200–430-ish
+            norm = Normalize(vmin=200, vmax=430)
+            # rough seasonal ticks: Aug, Oct, Dec, Feb
+            ticks = [220, 280, 340, 400]
+            labels = ["Aug", "Oct", "Dec", "Feb"]
+            cblabel = "Unwrapped DOY (Aug–Feb)"
+        else:
+            da_plot = da
+            norm = Normalize(vmin=0, vmax=365)
+            ticks = [15, 105, 196, 288, 365]
+            labels = ["Jan", "Apr", "Jul", "Oct", "Dec"]
+            cblabel = "Day of year"
+
+        mesh = ax.pcolormesh(
+            x, y, da_plot,
+            transform=ccrs.SouthPolarStereo(),
+            cmap=cmap,
+            norm=norm
+        )
+
+        if ph == "FS":
+            ttl = "Freeze start (FS)"
+        elif ph == "MS":
+            ttl = "Melt start (MS)"
+        else:
+            ttl = "Melt end (ME)"
+
+        ax.set_title(ttl, fontsize=9)
+
+        cb = fig.colorbar(mesh, ax=ax,
+                          orientation="horizontal",
+                          fraction=0.046, pad=0.04)
+        cb.set_ticks(ticks)
+        cb.set_ticklabels(labels)
+        cb.ax.tick_params(labelsize=7)
+        cb.outline.set_visible(False)
+        cb.set_label(cblabel, fontsize=8)
+
+    fig.suptitle(
+        f"{MODE} phase climatology ({YEAR_START}–{YEAR_END}) – unwrapped melt DOY",
+        fontsize=11
+    )
+
+    out_name = f"fig_phase_climatology_{MODE}_{YEAR_START}_{YEAR_END}_unwrapped_separatecbars.png"
+    save_path = os.path.join(OUT_DIR, out_name)
+    plt.tight_layout(rect=[0, 0.12, 1, 0.94])
+    plt.savefig(save_path, dpi=DPI, bbox_inches="tight")
+    plt.close()
+    print(f"Saved locally: {save_path}")
+    upload_with_rclone(save_path, RCLONE_REMOTE)
+
+
+# =======================
+# MAIN
+# =======================
+
 def main():
-    # 1) Shared colorbar across all phases
-    make_figure(shared_colorbar=True)
-    # 2) Individual colorbars per phase
-    make_figure(shared_colorbar=False)
+    # compute climatologies once
+    clim = {}
+    for ph in PHASES:
+        print(f"Loading climatology for {ph} [{MODE}]...")
+        clim[ph] = load_phase_climatology(ph, MODE, YEAR_START, YEAR_END)
+
+    # 1) shared DOY colorbar (0–365)
+    make_figure_shared(clim)
+
+    # 2) separate DOY colorbars (0–365)
+    make_figure_separate_raw(clim)
+
+    # 3) unwrapped MS/ME with separate colorbars
+    make_figure_unwrapped_melt(clim)
 
 
 if __name__ == "__main__":
