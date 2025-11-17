@@ -299,13 +299,13 @@ def plot_window_diff_maps(dpi=300, vmax=15):
 # ===========================================================
 def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
                                 panel_size=(3.2, 2.6)):
-    """Faceted plot per sector (no annotations). Shared axes; figure-level legend."""
     names = list(masks_dict.keys())
     n = len(names); nrows = ceil(n / ncols)
 
     fig_w = ncols * panel_size[0]
     fig_h = nrows * panel_size[1]
-    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h), sharex=True, sharey=True)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h),
+                             sharex=True, sharey=True)
     axes = np.atleast_2d(axes)
 
     print(f"\n[{metric}] sector pixel counts (valid & in mask):")
@@ -336,6 +336,7 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
         ax.set_title(name, fontsize=10, pad=3, color="0.25")
         ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.82")
 
+    # hide unused panels
     total = nrows * ncols
     for j in range(n, total):
         r, c = divmod(j, ncols)
@@ -347,25 +348,34 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
             ax.set_ylim(0, 1.0)
             ax.tick_params(labelsize=9)
 
-    fig.supxlabel("Absolute timing difference (days)", fontsize=11, fontweight="bold", color="0.3")
-    fig.supylabel("Cumulative Fraction of Pixels",    fontsize=11, fontweight="bold", color="0.3")
+    # global labels
+    fig.supxlabel("Absolute timing difference (days)", fontsize=11,
+                  fontweight="bold", color="0.3")
+    fig.supylabel("Cumulative fraction of pixels", fontsize=11,
+                  fontweight="bold", color="0.3")
 
+    # NEW: figure title
+    fig.suptitle(f"{metric} window sensitivity (k = 3, 5, 7; {SENSOR}, {THRESH_PCT}%)",
+                 fontsize=12, y=0.98)
+
+    # NEW: legend at bottom, no huge title
     if legend_handles is not None:
-        fig.legend(legend_handles, legend_labels, title="Window comparison",
-                   loc="upper center", bbox_to_anchor=(0.5, 1.02),
-                   ncol=2, frameon=True)
-        fig.tight_layout(rect=[0, 0, 1, 0.96])
+        fig.legend(legend_handles, legend_labels,
+                   loc="lower center", bbox_to_anchor=(0.5, -0.02),
+                   ncol=2, frameon=True, fontsize=9)
+        fig.tight_layout(rect=[0, 0.03, 1, 0.94])
     else:
-        fig.tight_layout()
+        fig.tight_layout(rect=[0, 0.03, 1, 0.94])
 
     fname = f"{VERSION_TAG}_CDF_sectors_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
     local_path = os.path.join(OUTDIR_FIGS, fname)
-    fig.savefig(local_path, dpi=dpi)
+    fig.savefig(local_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
     remote_dest = f"{RCLONE_REMOTE}:{RCLONE_PATH}/figures/"
     os.system(f"rclone copy '{local_path}' '{remote_dest}' --progress")
     print(f"✓ Saved and uploaded: {fname}")
+
 
 def plot_cdf_single_sector(metric, name, mask_2d,
                            figsize=(5.0, 3.5), dpi=300, save=True):
