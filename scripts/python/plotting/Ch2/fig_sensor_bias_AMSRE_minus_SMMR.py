@@ -43,7 +43,7 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
 # ---------------------------------------------------------------------
 
 # phase variable in the old static files: "advance" or "retreat"
-PHASE = "retreat"
+PHASE = "advance"
 
 # AMSRE period you care about (years that exist for BOTH AMSRE and SMMR)
 YEARS = range(2012, 2024)  # 2012–2023 inclusive
