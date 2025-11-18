@@ -70,7 +70,7 @@ def wrapped_difference(a, b, period=365.0):
     return diff
 
 
-def plot_bias_map(ax, bias_da, phase_label, title, vlim=20):
+def plot_bias_map(ax, bias_da, vlim=20):
     """Plot a South Polar Stereo map of bias in days on the given axes.
 
     Parameters
@@ -78,10 +78,6 @@ def plot_bias_map(ax, bias_da, phase_label, title, vlim=20):
     ax : matplotlib Axes with a SouthPolarStereo projection
     bias_da : xr.DataArray
         Bias field [y, x] on the SMMR grid.
-    phase_label : str
-        "advance" or "retreat" (used for colorbar label).
-    title : str
-        Axes title.
     vlim : float
         Symmetric colorbar limit in days.
     """
@@ -102,24 +98,14 @@ def plot_bias_map(ax, bias_da, phase_label, title, vlim=20):
         shading="auto",
     )
 
-    # just use a standard Antarctic extent for context
     ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.OCEAN, facecolor="black", zorder=0)
     ax.add_feature(cfeature.LAND, facecolor="0.7", edgecolor="0.7", zorder=1)
     ax.coastlines(linewidth=0.4, zorder=2)
 
-    cbar = plt.colorbar(
-        im,
-        ax=ax,
-        orientation="horizontal",
-        pad=0.05,
-        shrink=0.8,
-    )
-    cbar.set_label(f"{phase_label.capitalize()} bias (AMSRE − SMMR, days)")
-
-    ax.set_title(title)
-
+    # no title here – we’re keeping the figure clean
     return im
+
 
 
 def compute_bias_for_phase(phase):
@@ -216,21 +202,18 @@ def main():
     # maps
     title_years = f"{YEARS.start}–{YEARS.stop - 1}"
 
-    plot_bias_map(
-        ax_ret,
-        bias_clim_ret,
-        phase_label="retreat",
-        title=f"Retreat wrapped bias (AMSRE − SMMR), {title_years}",
-        vlim=20,
-    )
+    im_ret = plot_bias_map(ax_ret, bias_clim_ret, vlim=20)
+    im_adv = plot_bias_map(ax_adv, bias_clim_adv, vlim=20)
 
-    plot_bias_map(
-        ax_adv,
-        bias_clim_adv,
-        phase_label="advance",
-        title=f"Advance wrapped bias (AMSRE − SMMR), {title_years}",
-        vlim=20,
+    # one shared horizontal colorbar for both maps
+    cbar = fig.colorbar(
+        im_ret,
+        ax=[ax_ret, ax_adv],
+        orientation="horizontal",
+        pad=0.08,
+        shrink=0.9,
     )
+    cbar.set_label("Bias (AMSRE − SMMR, days)")
 
     # stacked histogram (advance + retreat on same axis)
     bias_all = np.concatenate([all_bias_adv, all_bias_ret])
@@ -244,11 +227,20 @@ def main():
         hue="phase",
         multiple="stack",
         bins=np.arange(-40, 42, 2),
-        stat="density",  # probability density, comparable to old plot
+        stat="density",
+        common_norm=False,  # <- per-phase densities
         edgecolor=".3",
         linewidth=0.5,
         ax=ax_hist,
     )
+
+    ax_hist.set_ylim(0, 0.08)  # enough room for retreat’s ~0.06 peak
+
+    # remove legend title ("phase" is obvious)
+    leg = ax_hist.get_legend()
+    if leg is not None:
+        leg.set_title("")
+
 
     ax_hist.axvline(0, color="k", linewidth=0.8)
     ax_hist.set_xlabel("Bias (AMSRE − SMMR, days)")
