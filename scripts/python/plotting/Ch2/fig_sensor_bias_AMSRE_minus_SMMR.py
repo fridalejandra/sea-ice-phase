@@ -5,10 +5,10 @@
 fig_sensor_bias_AMSRE_minus_SMMR.py
 
 Compare AMSRE vs SMMR phase dates (old static advance/retreat)
-and produce:
+and produce a combined figure with:
 
-  - climatological wrapped-bias map (AMSRE − SMMR, days)
-  - histogram of that wrapped bias
+  - climatological wrapped-bias maps (AMSRE − SMMR, days) for advance and retreat
+  - a stacked histogram of the wrapped bias, showing both phases on the same axis
 
 Uses ch2_fig_utils for style, naming, paths, and rclone upload.
 """
@@ -21,6 +21,8 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import pandas as pd
+import seaborn as sns
 
 # ---------------------------------------------------------------------
 # Make sure project root is on sys.path so "scripts.*" imports work
@@ -42,9 +44,6 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
 # CONFIG
 # ---------------------------------------------------------------------
 
-# phase variable in the old static files: "advance" or "retreat"
-PHASE = "advance"
-
 # AMSRE period you care about (years that exist for BOTH AMSRE and SMMR)
 YEARS = range(2012, 2024)  # 2012–2023 inclusive
 
@@ -53,7 +52,7 @@ SMMR_DIR = PROJECT_ROOT / "results" / "SMMR_phase"
 AMSRE_DIR = PROJECT_ROOT / "results" / "AMSRE_phase"
 
 # where to put figures (relative to PROJECT_ROOT and your rclone remote)
-SUBFOLDER = f"sensor/{PHASE}"
+SUBFOLDER = "sensor/advance_retreat"
 REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
 
 
@@ -61,9 +60,9 @@ REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
 # HELPERS
 # ---------------------------------------------------------------------
 
+
 def wrapped_difference(a, b, period=365.0):
-    """
-    Circular difference: (a - b) mapped into [-period/2, period/2].
+    """Circular difference: (a - b) mapped into [-period/2, period/2].
 
     Example: 360 vs 5 becomes -10, not +355.
     """
@@ -71,26 +70,32 @@ def wrapped_difference(a, b, period=365.0):
     return diff
 
 
-def plot_bias_map(bias_da, title, vlim=20):
-    """
-    South Polar Stereo map of bias in days, using native x/y grid
-    (no lon/lat in these older phase files).
+def plot_bias_map(ax, bias_da, phase_label, title, vlim=20):
+    """Plot a South Polar Stereo map of bias in days on the given axes.
+
+    Parameters
+    ----------
+    ax : matplotlib Axes with a SouthPolarStereo projection
+    bias_da : xr.DataArray
+        Bias field [y, x] on the SMMR grid.
+    phase_label : str
+        "advance" or "retreat" (used for colorbar label).
+    title : str
+        Axes title.
+    vlim : float
+        Symmetric colorbar limit in days.
     """
     data = bias_da.values
     x = bias_da["x"].values
     y = bias_da["y"].values
 
     proj = ccrs.SouthPolarStereo()
-    fig, ax = plt.subplots(
-        figsize=(6, 6),
-        subplot_kw={"projection": proj},
-    )
 
     im = ax.pcolormesh(
         x,
         y,
         data,
-        transform=proj,          # data already in this projection
+        transform=proj,  # data already in this projection
         cmap="RdBu_r",
         vmin=-vlim,
         vmax=+vlim,
@@ -103,37 +108,42 @@ def plot_bias_map(bias_da, title, vlim=20):
     ax.add_feature(cfeature.LAND, facecolor="0.7", edgecolor="0.7", zorder=1)
     ax.coastlines(linewidth=0.4, zorder=2)
 
-    cbar = fig.colorbar(
+    cbar = plt.colorbar(
         im,
         ax=ax,
         orientation="horizontal",
         pad=0.05,
         shrink=0.8,
     )
-    cbar.set_label(f"{PHASE.capitalize()} bias (AMSRE − SMMR, days)")
+    cbar.set_label(f"{phase_label.capitalize()} bias (AMSRE − SMMR, days)")
 
     ax.set_title(title)
-    fig.tight_layout()
 
-    return fig, ax
+    return im
 
 
-# ---------------------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------------------
+def compute_bias_for_phase(phase):
+    """Compute annual and climatological wrapped bias for a given phase.
 
-def main():
-    set_mpl_defaults()
+    Parameters
+    ----------
+    phase : {"advance", "retreat"}
 
+    Returns
+    -------
+    bias_clim : xr.DataArray
+        Climatological bias field [y, x].
+    all_bias : np.ndarray
+        Flattened 1D array of all bias values across years (NaNs removed).
+    """
+    yearly_bias_list = []
     all_bias_flat = []
 
-    yearly_bias_list = []
-
     for year in YEARS:
-        print(f"Processing {PHASE} for {year}")
+        print(f"Processing {phase} for {year}")
 
         # old static variable names are like "advance_2012", "retreat_2012"
-        varname = f"{PHASE}_{year}"
+        varname = f"{phase}_{year}"
 
         smmr_path = SMMR_DIR / f"seaice_phases_SMMR_{year}.nc"
         amsre_path = AMSRE_DIR / f"seaice_phases_AMSRE_{year}.nc"
@@ -142,22 +152,22 @@ def main():
         ds_amsre = xr.open_dataset(amsre_path)
 
         smmr = ds_smmr[varname].load()   # [y_smmr, x_smmr]
-        amsr = ds_amsre[varname].load()  # [y_amsr, x_amsr] on finer grid
+        amsre = ds_amsre[varname].load()  # [y_amsre, x_amsre] on finer grid
 
         # coarsen AMSRE to SMMR resolution (assumes dims are "y", "x")
-        ny, nx = amsr.shape
+        ny, nx = amsre.shape
         if ny % 2 != 0:
-            amsr = amsr.isel(y=slice(0, ny - 1))
+            amsre = amsre.isel(y=slice(0, ny - 1))
         if nx % 2 != 0:
-            amsr = amsr.isel(x=slice(0, nx - 1))
+            amsre = amsre.isel(x=slice(0, nx - 1))
 
-        amsr_coarse = amsr.coarsen(y=2, x=2, boundary="trim").mean()
+        amsre_coarse = amsre.coarsen(y=2, x=2, boundary="trim").mean()
 
         # align coordinates with SMMR grid
-        amsr_coarse = amsr_coarse.assign_coords(x=smmr.x, y=smmr.y)
+        amsre_coarse = amsre_coarse.assign_coords(x=smmr.x, y=smmr.y)
 
         # wrapped bias in days
-        bias_vals = wrapped_difference(amsr_coarse.values, smmr.values, period=365.0)
+        bias_vals = wrapped_difference(amsre_coarse.values, smmr.values, period=365.0)
 
         bias = xr.DataArray(
             data=bias_vals,
@@ -169,72 +179,103 @@ def main():
         yearly_bias_list.append(bias)
         all_bias_flat.append(bias.values.ravel())
 
-    # -----------------------------------------------------------------
-    # Climatological bias (mean over years)
-    # -----------------------------------------------------------------
+    # climatological bias (mean over years)
     bias_stack = xr.concat(yearly_bias_list, dim="year")
     bias_clim = bias_stack.mean("year", skipna=True)
 
-    title_clim = (
-        f"{PHASE.capitalize()} wrapped bias (AMSRE − SMMR), "
-        f"{YEARS.start}–{YEARS.stop - 1}"
-    )
-    fig_clim, ax_clim = plot_bias_map(bias_clim, title=title_clim, vlim=20)
-
-    clim_name = format_fig_name(
-        num=7,  # adjust to your figure numbering
-        short=f"sensor_{PHASE}_bias_AMSREminusSMMR_{YEARS.start}-{YEARS.stop - 1}",
-    )
-
-    clim_path = get_fig_path(
-        project_root=PROJECT_ROOT,
-        subfolder=SUBFOLDER,
-        fig_name=clim_name,
-    )
-
-    save_and_upload(
-        fig_clim,
-        clim_path,
-        remote_root=REMOTE_ROOT,
-        remote_subdir=SUBFOLDER,
-    )
-
-    # -----------------------------------------------------------------
-    # Histogram of wrapped bias
-    # -----------------------------------------------------------------
     all_bias = np.concatenate(all_bias_flat)
     all_bias = all_bias[~np.isnan(all_bias)]
 
-    fig_h, ax_h = plt.subplots(figsize=(4, 3))
-    ax_h.hist(
-        all_bias,
+    return bias_clim, all_bias
+
+
+# ---------------------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------------------
+
+
+def main():
+    set_mpl_defaults()
+    sns.set_theme(style="ticks")
+
+    # compute bias fields and flattened 1D arrays for both phases
+    bias_clim_adv, all_bias_adv = compute_bias_for_phase("advance")
+    bias_clim_ret, all_bias_ret = compute_bias_for_phase("retreat")
+
+    # -----------------------------------------------------------------
+    # Combined figure: two maps + stacked histogram
+    # -----------------------------------------------------------------
+    fig = plt.figure(figsize=(14, 5))
+    proj = ccrs.SouthPolarStereo()
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.05, 1.05, 1.2], wspace=0.3)
+
+    ax_ret = fig.add_subplot(gs[0, 0], projection=proj)
+    ax_adv = fig.add_subplot(gs[0, 1], projection=proj)
+    ax_hist = fig.add_subplot(gs[0, 2])
+
+    # maps
+    title_years = f"{YEARS.start}–{YEARS.stop - 1}"
+
+    plot_bias_map(
+        ax_ret,
+        bias_clim_ret,
+        phase_label="retreat",
+        title=f"Retreat wrapped bias (AMSRE − SMMR), {title_years}",
+        vlim=20,
+    )
+
+    plot_bias_map(
+        ax_adv,
+        bias_clim_adv,
+        phase_label="advance",
+        title=f"Advance wrapped bias (AMSRE − SMMR), {title_years}",
+        vlim=20,
+    )
+
+    # stacked histogram (advance + retreat on same axis)
+    bias_all = np.concatenate([all_bias_adv, all_bias_ret])
+    phase_all = (["Advance"] * len(all_bias_adv)) + (["Retreat"] * len(all_bias_ret))
+
+    df = pd.DataFrame({"bias": bias_all, "phase": phase_all})
+
+    sns.histplot(
+        data=df,
+        x="bias",
+        hue="phase",
+        multiple="stack",
         bins=np.arange(-40, 42, 2),
-        density=True,
-        alpha=0.8,
-        edgecolor="none",
-    )
-    ax_h.axvline(0, color="k", linewidth=0.8)
-    ax_h.set_xlabel(f"{PHASE.capitalize()} bias (AMSRE − SMMR, days)")
-    ax_h.set_ylabel("Probability density")
-    ax_h.set_title(
-        f"{PHASE.capitalize()} wrapped bias distribution\n"
-        f"{YEARS.start}–{YEARS.stop - 1}"
+        stat="density",  # probability density, comparable to old plot
+        edgecolor=".3",
+        linewidth=0.5,
+        ax=ax_hist,
     )
 
-    hist_name = format_fig_name(
-        num=8,  # next figure number
-        short=f"sensor_{PHASE}_bias_hist_AMSREminusSMMR_{YEARS.start}-{YEARS.stop - 1}",
+    ax_hist.axvline(0, color="k", linewidth=0.8)
+    ax_hist.set_xlabel("Bias (AMSRE − SMMR, days)")
+    ax_hist.set_ylabel("Probability density")
+    ax_hist.set_title("")  # no title
+    ax_hist.set_xlim(-40, 40)
+    ax_hist.set_xticks([-40, -20, 0, 20, 40])
+
+    sns.despine(fig=fig, ax=ax_hist)
+
+    fig.tight_layout()
+
+    # save/upload
+    fig_name = format_fig_name(
+        num=8,  # adjust to your figure numbering if needed
+        short=f"sensor_advance_retreat_bias_hist_AMSREminusSMMR_{YEARS.start}-{YEARS.stop - 1}",
     )
 
-    hist_path = get_fig_path(
+    fig_path = get_fig_path(
         project_root=PROJECT_ROOT,
         subfolder=SUBFOLDER,
-        fig_name=hist_name,
+        fig_name=fig_name,
     )
 
     save_and_upload(
-        fig_h,
-        hist_path,
+        fig,
+        fig_path,
         remote_root=REMOTE_ROOT,
         remote_subdir=SUBFOLDER,
     )
