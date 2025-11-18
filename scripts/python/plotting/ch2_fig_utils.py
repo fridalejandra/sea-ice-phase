@@ -305,86 +305,72 @@ def make_polar_axes(fig: plt.Figure, position: int, projection=None) -> plt.Axes
 
 
 def plot_phase_comparison_map(
-    static_field: Any,
-    dynamic_field: Any,
-    lons: Any,
-    lats: Any,
-    label: str,
-    title_prefix: str = "",
-    cmap: str = "viridis",
-    diff_cmap: str = "RdBu_r",
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    diff_lim: Optional[float] = None,
-) -> tuple[plt.Figure, np.ndarray]:
+    static_field,
+    dynamic_field,
+    lons,
+    lats,
+    label="Phase (day-of-year)",
+    title_prefix="",
+    vlim=20,
+):
     """
-    Make a 3-panel map: static, dynamic, dynamic-static.
-
-    Returns fig, axes.
+    Three-panel comparison: static, dynamic, dynamic-static.
+    Now with:
+      - NO dark ocean backdrop
+      - subfigure letters (a), (b), (c)
     """
-    svals = as_array(static_field)
-    dvals = as_array(dynamic_field)
-    diff = dvals - svals
 
-    if vmin is None:
-        vmin = np.nanmin([svals, dvals])
-    if vmax is None:
-        vmax = np.nanmax([svals, dvals])
+    proj = ccrs.SouthPolarStereo()
+    fig, axes = plt.subplots(
+        1, 3,
+        figsize=(12, 4.5),
+        subplot_kw=dict(projection=proj),
+        constrained_layout=True
+    )
 
-    if diff_lim is None:
-        max_abs = np.nanmax(np.abs(diff))
-        diff_lim = np.ceil(max_abs / 5) * 5 if max_abs > 0 else 1.0
-
-    fig = plt.figure(figsize=FIGSIZE_TRIPLE, dpi=DPI)
-    axes = np.empty(3, dtype=object)
-
-    data_crs = ccrs.PlateCarree()
-
-    titles = [
-        f"{title_prefix}Static",
-        f"{title_prefix}Dynamic",
-        f"{title_prefix}Dynamic − Static",
+    fields = [
+        ("Static", static_field),
+        ("Dynamic", dynamic_field),
+        ("Difference", dynamic_field - static_field),
     ]
-    fields = [svals, dvals, diff]
-    cmaps = [cmap, cmap, diff_cmap]
-    vmins = [vmin, vmin, -diff_lim]
-    vmaxs = [vmax, vmax, diff_lim]
 
-    mappables = []
-    for i in range(3):
-        ax = make_polar_axes(fig, i + 1)
-        axes[i] = ax
+    for ax, (title, field) in zip(axes, fields):
         im = ax.pcolormesh(
             lons,
             lats,
-            fields[i],
-            transform=data_crs,
-            cmap=cmaps[i],
-            vmin=vmins[i],
-            vmax=vmaxs[i],
+            field,
+            transform=ccrs.PlateCarree(),
+            cmap="RdBu_r" if title == "Difference" else "viridis",
+            shading="auto",
+            vmin=-vlim if title == "Difference" else None,
+            vmax=vlim if title == "Difference" else None,
         )
-        ax.set_title(titles[i])
-        mappables.append(im)
 
-    # static/dynamic colorbar
-    cb1 = fig.colorbar(
-        mappables[0],
-        ax=axes[:2],
-        orientation="horizontal",
-        fraction=0.046,
-        pad=0.07,
-    )
-    cb1.set_label(label, fontsize=9)
+        # Clean Antarctic map — no black ocean
+        ax.add_feature(cfeature.LAND, facecolor="0.8", edgecolor="0.6", zorder=1)
+        ax.coastlines(linewidth=0.4, zorder=2)
 
-    # difference colorbar
-    cb2 = fig.colorbar(
-        mappables[2],
-        ax=axes[2],
-        orientation="horizontal",
-        fraction=0.046,
-        pad=0.07,
-    )
-    cb2.set_label(f"Δ {label}", fontsize=9)
+        ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
+        ax.set_title(f"{title_prefix}{title}", fontsize=11, fontweight="bold")
+
+        # Colorbar
+        cbar = fig.colorbar(im, ax=ax, orientation="horizontal", pad=0.05, shrink=0.8)
+        cbar.set_label(label, fontsize=9)
+        cbar.ax.tick_params(labelsize=8)
+
+    # ---- Subfigure labels ----
+    letters = ["(a)", "(b)", "(c)"]
+    for letter, ax in zip(letters, axes):
+        ax.text(
+            0.02,
+            0.98,
+            letter,
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=12,
+            fontweight="bold",
+        )
 
     return fig, axes
 

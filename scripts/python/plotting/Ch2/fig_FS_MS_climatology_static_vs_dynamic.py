@@ -13,9 +13,9 @@ Static files:
     /user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/FS_thr15_k5/FS_YYYY.nc
     /user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/MS_thr15_k5/MS_YYYY.nc
 
-Dynamic files (quantile p=0.7, k=5):
-    /user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic/quantile_k5/FS/p0.7/FS_YYYY.nc
-    /user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic/quantile_k5/MS/p0.7/MS_YYYY.nc
+Dynamic files (percentile p=0.7, k=5) – NEW LOCATION:
+    /user/geog/falejandraperez/sea-ice-phase/results/dynamic_thresholds/FS/FS_YYYY.nc
+    /user/geog/falejandraperez/sea-ice-phase/results/dynamic_thresholds/MS/MS_YYYY.nc
 """
 
 import sys
@@ -38,17 +38,16 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
     plot_phase_comparison_map,
 )
 
-
 # ---------------------------------------------------------------------
-# PATH CONFIG (EDIT ONLY IF YOU MOVE DATA)
+# PATH CONFIG
 # ---------------------------------------------------------------------
 
-STATIC_ROOT = "/user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase"
+# Static FS/MS (old slope+15% method)
+STATIC_ROOT = PROJECT_ROOT / "results" / "SMMR_phase"
 
-# Dynamic FS/MS (quantile p=0.7, k=5, from your dynamic script)
-DYN_ROOT   = "/user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic"
-DYN_SCHEME = "quantile_k5"
-DYN_TAG    = "p0.7"
+# Dynamic FS/MS (new percentile+slope method) – this is where your rerun should write
+DYN_FS_DIR = PROJECT_ROOT / "results" / "dynamic_thresholds" / "FS"
+DYN_MS_DIR = PROJECT_ROOT / "results" / "dynamic_thresholds" / "MS"
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
 SUBFOLDER   = "climatology"
@@ -57,37 +56,48 @@ PHASES = ["FS", "MS"]
 YEAR_START = 1979
 YEAR_END   = 2023
 
-
 # ---------------------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------------------
 
-def load_phase_climatology(phase: str, mode: str, year_start: int, year_end: int) -> xr.DataArray:
+def load_phase_climatology(
+    phase: str,
+    mode: str,
+    year_start: int,
+    year_end: int,
+) -> xr.DataArray:
     """
     Load FS/MS files for given mode and return climatological mean over years.
 
     mode:
       - "static": results/SMMR_phase/<phase>_thr15_k5/<phase>_YYYY.nc
-      - "dynamic": results/static_v2_slopeH/dynamic/quantile_k5/<phase>/p0.7/<phase>_YYYY.nc
+      - "dynamic": results/dynamic_thresholds/<phase>/<phase>_YYYY.nc
 
     Assumes variable is named <phase> in each file.
     """
     if mode == "static":
-        phase_dir = Path(STATIC_ROOT) / f"{phase}_thr15_k5"
-        pattern = str(phase_dir / f"{phase}_*.nc")
+        phase_dir = STATIC_ROOT / f"{phase}_thr15_k5"
     elif mode == "dynamic":
-        phase_dir = Path(DYN_ROOT) / DYN_SCHEME / phase / DYN_TAG
-        pattern = str(phase_dir / f"{phase}_*.nc")
+        if phase == "FS":
+            phase_dir = DYN_FS_DIR
+        elif phase == "MS":
+            phase_dir = DYN_MS_DIR
+        else:
+            raise ValueError(f"Unknown phase for dynamic: {phase}")
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
+    pattern = str(phase_dir / f"{phase}_*.nc")
     files = sorted(glob(pattern))
     if not files:
-        raise FileNotFoundError(f"No files found for phase={phase}, mode={mode}, pattern={pattern}")
+        raise FileNotFoundError(
+            f"No files found for phase={phase}, mode={mode}, pattern={pattern}"
+        )
 
+    # infer years from filenames like "FS_1979.nc"
     years = []
     for f in files:
-        base = Path(f).name  # e.g. "FS_1979.nc"
+        base = Path(f).name
         try:
             y = int(base.split("_")[1].split(".")[0])
             years.append(y)
@@ -97,7 +107,9 @@ def load_phase_climatology(phase: str, mode: str, year_start: int, year_end: int
     years = np.array(years)
     mask = (years >= year_start) & (years <= year_end)
     if not mask.any():
-        raise ValueError(f"No years in [{year_start}, {year_end}] for phase={phase}, mode={mode}")
+        raise ValueError(
+            f"No years in [{year_start}, {year_end}] for phase={phase}, mode={mode}"
+        )
 
     files_sel = [f for f, m in zip(files, mask) if m]
     years_sel = years[mask]
@@ -108,7 +120,6 @@ def load_phase_climatology(phase: str, mode: str, year_start: int, year_end: int
     da = ds[phase]
     clim = da.mean("year", skipna=True)
 
-    # Keep lon/lat if present, otherwise just pass x/y
     return clim
 
 
@@ -125,7 +136,6 @@ def freeze_label(phase: str) -> str:
     else:
         return phase
 
-
 # ---------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------
@@ -133,19 +143,16 @@ def freeze_label(phase: str) -> str:
 def main():
     set_mpl_defaults()
 
-    # We assume lon/lat/x/y are identical between static and dynamic grids.
-    # Grab coords from one example file.
-    example_file = Path(STATIC_ROOT) / "FS_thr15_k5" / "FS_1979.nc"
+    # Use any static FS file to get grid and coords
+    example_file = STATIC_ROOT / "FS_thr15_k5" / "FS_1979.nc"
     example = xr.open_dataset(example_file)
-    # This will work whether you have lon/lat or just x/y; plot_phase_comparison_map
-    # only needs lons/lats, so if you *don't* have them, we might need to adapt.
-    # If lon/lat aren't there, fallback to x/y.
+
+    # Prefer lon/lat if they exist; otherwise fall back to x/y
     if {"lon", "lat"} <= set(example.coords):
         lons = example["lon"]
         lats = example["lat"]
     else:
-        # If no lon/lat, we still call plot_phase_comparison_map with x/y
-        # by pretending x,y are "lon,lat". If that breaks, we can revert to native x/y plotting.
+        # fall back: treat x,y as "lon,lat" for plotting purposes
         lons = example["x"]
         lats = example["y"]
 
@@ -166,7 +173,7 @@ def main():
             title_prefix=f"{phase} ",
         )
 
-        # You will set the actual caption/title in the paper; this just sets the filename.
+        # You’ll title/caption in the paper; this is just the filename index.
         fig_num = 3 if phase == "FS" else 4  # adjust if you change ordering
 
         fig_name = format_fig_name(
