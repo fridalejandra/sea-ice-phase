@@ -29,7 +29,7 @@ DPI = 300
 # =======================
 
 # choose method + paths
-MODE = "dynamic_quantile"      # "static" or "dynamic_quantile"
+MODE = "static"      # "static" or "dynamic_quantile"
 
 YEAR_START = 1979
 YEAR_END   = 2024
