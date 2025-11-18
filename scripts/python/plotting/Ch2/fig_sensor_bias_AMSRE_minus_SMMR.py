@@ -18,6 +18,16 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
+import sys
+from pathlib import Path
+
+# Add project root to sys.path so "scripts.*" imports work
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+# parents[4] should be .../sea-ice-phase
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
 from scripts.python.plotting.ch2_fig_utils import (
     set_mpl_defaults,
     format_fig_name,
