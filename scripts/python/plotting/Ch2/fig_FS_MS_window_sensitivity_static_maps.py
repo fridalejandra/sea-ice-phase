@@ -178,13 +178,14 @@ def compute_window_diff_means(metric: str) -> tuple[xr.DataArray, xr.DataArray]:
 def make_polar_ax(fig, pos):
     proj = ccrs.SouthPolarStereo()
     ax = fig.add_subplot(pos, projection=proj)
-    ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
 
-    # Clean, no black ocean
+    # Just show Antarctica; no black ocean fill
+    ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
     ax.add_feature(cfeature.LAND, facecolor="0.8", edgecolor="0.6", zorder=1)
     ax.coastlines(linewidth=0.4, zorder=2)
     ax.gridlines(draw_labels=False, linewidth=0.3, color="0.5",
                  alpha=0.5, linestyle="--")
+
     return ax
 
 
@@ -196,14 +197,10 @@ def plot_window_diff_maps():
     fs_d35, fs_d75 = compute_window_diff_means("FS")
     ms_d35, ms_d75 = compute_window_diff_means("MS")
 
-    # Get lon/lat if present; otherwise fall back to x/y
+    # These phase files are on a native Stereographic grid with x,y only
     example = next(iter(load_window_dict("FS", 5).values()))
-    if {"lon", "lat"} <= set(example.coords):
-        lons = example["lon"]
-        lats = example["lat"]
-    else:
-        lons = example["x"]
-        lats = example["y"]
+    x = example["x"]
+    y = example["y"]
 
     panels = [
         ("FS", fs_d35, "k = 3 − 5"),
@@ -212,6 +209,7 @@ def plot_window_diff_maps():
         ("MS", ms_d75, "k = 7 − 5"),
     ]
 
+    proj = ccrs.SouthPolarStereo()
     fig = plt.figure(figsize=(8.2, 6.0))
     axes = []
 
@@ -219,11 +217,12 @@ def plot_window_diff_maps():
         ax = make_polar_ax(fig, 220 + idx)  # 2x2 grid: 221, 222, 223, 224
         axes.append(ax)
 
+        # NOTE: transform=proj because x,y are already in SouthPolarStereo
         im = ax.pcolormesh(
-            lons,
-            lats,
+            x,
+            y,
             da,
-            transform=ccrs.PlateCarree(),
+            transform=proj,
             cmap="RdBu_r",
             vmin=-VMAX,
             vmax=+VMAX,
@@ -237,7 +236,7 @@ def plot_window_diff_maps():
 
         ax.set_title(f"{phase_name}, {label}", fontsize=9)
 
-    # Colorbar (shared)
+    # Shared colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
     cb = fig.colorbar(im, cax=cax, orientation="horizontal")
     cb.set_label("Timing difference relative to 5-day window (days)", fontsize=9)
@@ -262,12 +261,10 @@ def plot_window_diff_maps():
         f"Window sensitivity of FS/MS timing (static, thr={THRESH_PCT}%, {SENSOR})",
         fontsize=11,
     )
-
     fig.tight_layout(rect=[0, 0.14, 1, 0.94])
 
-    # save + upload
     fig_name = format_fig_name(
-        num=1,  # adjust once you finalize full figure ordering
+        num=1,  # adjust when you lock full figure order
         short=f"window_FS_MS_static_{SENSOR}_thr{THRESH_PCT}",
     )
 
@@ -283,7 +280,6 @@ def plot_window_diff_maps():
         remote_root=REMOTE_ROOT,
         remote_subdir=SUBFOLDER,
     )
-
 
 # ---------------------------------------------------------------------
 # MAIN
