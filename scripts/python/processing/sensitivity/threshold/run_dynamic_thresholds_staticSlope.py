@@ -24,7 +24,7 @@ INPUT_FILE   = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_boot
 CONC_VAR     = "N07_ICECON"
 
 # Output root (local). You can rclone later in one go.
-OUT_ROOT     = f"/user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic"
+OUT_ROOT     = f"/user/geog/falejandraperez/sea-ice-phase/results/dynamic_thresholds/"
 
 # Years
 FULL_YEARS   = range(1979, 2025)
