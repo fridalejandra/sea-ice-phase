@@ -298,7 +298,11 @@ def plot_window_diff_maps(dpi=300, vmax=15):
 # PLOTTING – CDFs (unchanged)
 # ===========================================================
 def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
-                                panel_size=(3.2, 2.6)):
+                                panel_size=(2.4, 2.0)):
+    import seaborn as sns
+    sns.set_style("whitegrid")
+    sns.set_context("paper", font_scale=0.9)
+
     names = list(masks_dict.keys())
     n = len(names); nrows = ceil(n / ncols)
 
@@ -308,9 +312,6 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
                              sharex=True, sharey=True)
     axes = np.atleast_2d(axes)
 
-    print(f"\n[{metric}] sector pixel counts (valid & in mask):")
-    print("sector".ljust(28), "n_pixels")
-
     legend_handles = None
     legend_labels  = ["3 vs 5-day window", "7 vs 5-day window"]
 
@@ -319,26 +320,25 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
         ax = axes[r, c]
 
         v35, v75 = diffs_for_metric_sector_mask(metric, masks_dict[name])
-        print(name.ljust(28), f"{(v35.size + v75.size)//2:,}")
-
         v35_clip, _ = ecdf_data(v35, MAX_X)
         v75_clip, _ = ecdf_data(v75, MAX_X)
 
         if v35_clip.size == 0 and v75_clip.size == 0:
             ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
-                    ha="center", va="center", color="0.4", fontsize=9)
+                    ha="center", va="center", color="0.4", fontsize=7)
         else:
-            sns.ecdfplot(v35_clip, label=legend_labels[0], lw=2, ax=ax)
-            sns.ecdfplot(v75_clip, label=legend_labels[1], lw=2, ax=ax)
+            sns.ecdfplot(v35_clip, lw=1.4, ax=ax)
+            sns.ecdfplot(v75_clip, lw=1.4, ax=ax)
             if legend_handles is None:
                 legend_handles = [ax.lines[-2], ax.lines[-1]]
 
-        ax.set_title(name, fontsize=10, pad=3, color="0.25")
-        ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.82")
+        ax.text(0.02, 0.96, name, transform=ax.transAxes,
+                ha="left", va="top", fontsize=8, color="0.25")
+        ax.grid(True, linestyle=":", linewidth=0.6, color="0.82")
+        ax.tick_params(labelsize=7)
 
-    # hide unused panels
-    total = nrows * ncols
-    for j in range(n, total):
+    # hide empties
+    for j in range(n, nrows * ncols):
         r, c = divmod(j, ncols)
         axes[r, c].set_visible(False)
 
@@ -346,35 +346,28 @@ def plot_cdf_sectors_with_masks(metric, masks_dict, ncols=3, dpi=300,
         if ax.get_visible():
             ax.set_xlim(0, MAX_X)
             ax.set_ylim(0, 1.0)
-            ax.tick_params(labelsize=9)
 
-    # global labels
-    fig.supxlabel("Absolute timing difference (days)", fontsize=11,
-                  fontweight="bold", color="0.3")
-    fig.supylabel("Cumulative fraction of pixels", fontsize=11,
-                  fontweight="bold", color="0.3")
+    fig.supxlabel("Absolute timing difference (days)", fontsize=9, color="0.3")
+    fig.supylabel("Cumulative fraction of pixels", fontsize=9, color="0.3")
 
-    # NEW: figure title
-    fig.suptitle(f"{metric} window sensitivity (k = 3, 5, 7; {SENSOR}, {THRESH_PCT}%)",
-                 fontsize=12, y=0.98)
-
-    # NEW: legend at bottom, no huge title
     if legend_handles is not None:
         fig.legend(legend_handles, legend_labels,
-                   loc="lower center", bbox_to_anchor=(0.5, -0.02),
-                   ncol=2, frameon=True, fontsize=9)
-        fig.tight_layout(rect=[0, 0.03, 1, 0.94])
-    else:
-        fig.tight_layout(rect=[0, 0.03, 1, 0.94])
+                   loc="upper center", bbox_to_anchor=(0.5, 1.02),
+                   ncol=2, frameon=True, fontsize=8,
+                   title="Window comparison", title_fontsize=8)
+
+    # no suptitle
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     fname = f"{VERSION_TAG}_CDF_sectors_{metric}_{SENSOR}_thr{THRESH_PCT}.png"
     local_path = os.path.join(OUTDIR_FIGS, fname)
-    fig.savefig(local_path, dpi=dpi, bbox_inches="tight")
+    fig.savefig(local_path, dpi=dpi)
     plt.close(fig)
 
     remote_dest = f"{RCLONE_REMOTE}:{RCLONE_PATH}/figures/"
     os.system(f"rclone copy '{local_path}' '{remote_dest}' --progress")
     print(f"✓ Saved and uploaded: {fname}")
+
 
 
 def plot_cdf_single_sector(metric, name, mask_2d,
