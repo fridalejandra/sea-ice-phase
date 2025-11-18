@@ -99,9 +99,8 @@ def plot_bias_map(ax, bias_da, vlim=20):
     )
 
     ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
-    ax.add_feature(cfeature.OCEAN, facecolor="black", zorder=0)
-    ax.add_feature(cfeature.LAND, facecolor="0.7", edgecolor="0.7", zorder=1)
-    ax.coastlines(linewidth=0.4, zorder=2)
+    ax.set_facecolor("white")  # fully white background
+    ax.coastlines(color="0.4", linewidth=0.5)
 
     # no title here – we’re keeping the figure clean
     return im
@@ -198,6 +197,16 @@ def main():
     ax_ret = fig.add_subplot(gs[0, 0], projection=proj)
     ax_adv = fig.add_subplot(gs[0, 1], projection=proj)
     ax_hist = fig.add_subplot(gs[0, 2])
+
+    # Subplot labels
+    ax_ret.text(0.02, 0.98, "(a)", transform=ax_ret.transAxes,
+                ha="left", va="top", fontsize=12, fontweight="bold")
+
+    ax_adv.text(0.02, 0.98, "(b)", transform=ax_adv.transAxes,
+                ha="left", va="top", fontsize=12, fontweight="bold")
+
+    ax_hist.text(0.02, 0.98, "(c)", transform=ax_hist.transAxes,
+                 ha="left", va="top", fontsize=12, fontweight="bold")
 
     # maps
     title_years = f"{YEARS.start}–{YEARS.stop - 1}"
