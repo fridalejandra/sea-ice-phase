@@ -39,33 +39,39 @@ WINDOW_DIFF_DIR = (
 )
 
 
-def load_abs_diffs(pattern: str, varname: str) -> np.ndarray:
+def load_abs_diffs(pattern: str) -> np.ndarray:
     """
-    Load |ΔDOY| values across all years for a given pattern.
+    Load |ΔDOY| values across all years for a given diff field.
 
     pattern: e.g. 'diff_advance_3minus5_*.nc'
-    varname: name of variable in the netCDF file, e.g. 'advance' or 'retreat' (or 'FS'/'MS').
+
+    Assumes the data variable inside the file has the same base name
+    as the pattern prefix, e.g. 'diff_advance_3minus5'.
     """
     fpaths = sorted(WINDOW_DIFF_DIR.glob(pattern))
     if not fpaths:
         raise FileNotFoundError(f"No files matching {pattern} in {WINDOW_DIFF_DIR}")
 
     ds = xr.open_mfdataset(fpaths, concat_dim="year", combine="nested")
-    da = ds[varname]  # adjust if your variable name is different
 
+    # Derive varname from pattern, e.g. "diff_advance_3minus5_*.nc" -> "diff_advance_3minus5"
+    base = pattern.split("_*.nc")[0]
+    if base not in ds.data_vars:
+        raise KeyError(f"Variable '{base}' not found in dataset. Available: {list(ds.data_vars)}")
+
+    da = ds[base]
     vals = np.abs(da.values).ravel()
     vals = vals[np.isfinite(vals)]
     return vals
 
 
-# TODO: adjust these if your variable names inside the diff_*.nc files are 'FS'/'MS'.
-ADV_VARNAME = "advance"
-RET_VARNAME = "retreat"
+adv_3v5_vals = load_abs_diffs("diff_advance_3minus5_*.nc")
+adv_7v5_vals = load_abs_diffs("diff_advance_7minus5_*.nc")
+ret_3v5_vals = load_abs_diffs("diff_retreat_3minus5_*.nc")
+ret_7v5_vals = load_abs_diffs("diff_retreat_7minus5_*.nc")
 
-adv_3v5_vals = load_abs_diffs("diff_advance_3minus5_*.nc", ADV_VARNAME)
-adv_7v5_vals = load_abs_diffs("diff_advance_7minus5_*.nc", ADV_VARNAME)
-ret_3v5_vals = load_abs_diffs("diff_retreat_3minus5_*.nc", RET_VARNAME)
-ret_7v5_vals = load_abs_diffs("diff_retreat_7minus5_*.nc", RET_VARNAME)
+print(WINDOW_DIFF_DIR)
+print(list(WINDOW_DIFF_DIR.glob("diff_advance_3minus5_*.nc"))[:3])
 
 # Set x-limit from 99th percentile to avoid crazy tails dominating the axis
 all_vals = np.concatenate([adv_3v5_vals, adv_7v5_vals, ret_3v5_vals, ret_7v5_vals])
