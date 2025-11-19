@@ -45,9 +45,27 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
 # Static FS/MS (old slope+15% method)
 STATIC_ROOT = PROJECT_ROOT / "results" / "SMMR_phase"
 
-# Dynamic FS/MS (new percentile+slope method) – this is where your rerun should write
-DYN_FS_DIR = PROJECT_ROOT / "results" / "dynamic_thresholds" / "FS"
-DYN_MS_DIR = PROJECT_ROOT / "results" / "dynamic_thresholds" / "MS"
+# Dynamic FS/MS (percentile p=0.7, k=5) – actual existing outputs
+DYN_FS_DIR = (
+    PROJECT_ROOT
+    / "results"
+    / "static_v2_slopeH"
+    / "dynamic"
+    / "quantile_k5"
+    / "FS"
+    / "p0.7"
+)
+
+DYN_MS_DIR = (
+    PROJECT_ROOT
+    / "results"
+    / "static_v2_slopeH"
+    / "dynamic"
+    / "quantile_k5"
+    / "MS"
+    / "p0.7"
+)
+
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
 SUBFOLDER   = "climatology"
