@@ -5,11 +5,13 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# Ensure this script's directory is on sys.path
+# This script lives in .../plotting/Ch2
+# ch2_fig_utils.py lives one level up: .../plotting
 HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
+PLOTTING_ROOT = HERE.parent  # directory that actually contains ch2_fig_utils.py
 
+if str(PLOTTING_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLOTTING_ROOT))
 
 from ch2_fig_utils import (
     set_mpl_defaults,
