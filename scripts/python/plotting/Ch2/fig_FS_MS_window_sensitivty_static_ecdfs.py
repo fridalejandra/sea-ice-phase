@@ -28,7 +28,7 @@ from ch2_fig_utils import (
 set_mpl_defaults()
 
 # Example: build climatology for SMMR period for 3,5,7-day windows
-years = np.arange(1979, 2025)  # whatever range you’re using
+years = np.arange(1979, 2024)  # whatever range you’re using
 
 def climatology_for_window(phase: str, window_days: int) -> xr.DataArray:
     das = []
