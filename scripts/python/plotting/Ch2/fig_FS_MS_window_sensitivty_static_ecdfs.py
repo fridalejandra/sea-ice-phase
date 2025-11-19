@@ -58,9 +58,10 @@ fig, axes = plot_window_sensitivity_ecdf(
     ret_5=ret_5,
     ret_7=ret_7,
     mask=mask,
-    phase_label_advance="Advance",
-    phase_label_retreat="Retreat",
+    phase_label_advance="FS",
+    phase_label_retreat="MS",
 )
+
 
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
