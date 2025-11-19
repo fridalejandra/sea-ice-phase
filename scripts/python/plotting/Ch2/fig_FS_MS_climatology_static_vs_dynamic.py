@@ -161,19 +161,6 @@ def freeze_label(phase: str) -> str:
 def main():
     set_mpl_defaults()
 
-    # Use any static FS file to get grid and coords
-    example_file = STATIC_ROOT / "FS_thr15_k5" / "FS_1979.nc"
-    example = xr.open_dataset(example_file)
-
-    # Prefer lon/lat if they exist; otherwise fall back to x/y
-    if {"lon", "lat"} <= set(example.coords):
-        lons = example["lon"]
-        lats = example["lat"]
-    else:
-        # fall back: treat x,y as "lon,lat" for plotting purposes
-        lons = example["x"]
-        lats = example["y"]
-
     for phase in PHASES:
         print(f"Processing climatology for {phase}")
 
@@ -185,11 +172,10 @@ def main():
         fig, axes = plot_phase_comparison_map(
             static_field=clim_static,
             dynamic_field=clim_dynamic,
-            lons=lons,
-            lats=lats,
             label=label,
             title_prefix=f"{phase} ",
         )
+
 
         # You’ll title/caption in the paper; this is just the filename index.
         fig_num = 3 if phase == "FS" else 4  # adjust if you change ordering

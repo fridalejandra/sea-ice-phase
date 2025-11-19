@@ -307,58 +307,108 @@ def make_polar_axes(fig: plt.Figure, position: int, projection=None) -> plt.Axes
 def plot_phase_comparison_map(
     static_field,
     dynamic_field,
-    lons,
-    lats,
+    lons=None,
+    lats=None,
     label="Phase (day-of-year)",
     title_prefix="",
-    vlim=20,
+    diff_vlim=20,
 ):
     """
     Three-panel comparison: static, dynamic, dynamic-static.
-    Now with:
-      - NO dark ocean backdrop
-      - subfigure letters (a), (b), (c)
+
+    Handles two cases automatically:
+      1) Geographical coords:  lon/lat + PlateCarree
+      2) Native stereographic grid: x/y + SouthPolarStereo
+
+    If lons/lats are not provided, it will try to infer them from the fields.
     """
 
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import matplotlib.pyplot as plt
+
     proj = ccrs.SouthPolarStereo()
+
+    # ---- Decide coordinate mode ----
+    # Priority: explicit lons/lats, else from coords, else x/y native.
+    if lons is not None and lats is not None:
+        coord_mode = "geo"
+    else:
+        coords = set(static_field.coords)
+        if {"lon", "lat"} <= coords:
+            lons = static_field["lon"]
+            lats = static_field["lat"]
+            coord_mode = "geo"
+        elif {"x", "y"} <= coords:
+            # native stereographic grid
+            x = static_field["x"]
+            y = static_field["y"]
+            coord_mode = "native"
+        else:
+            raise ValueError(
+                "plot_phase_comparison_map needs lon/lat or x/y coords on the fields."
+            )
+
     fig, axes = plt.subplots(
-        1, 3,
+        1,
+        3,
         figsize=(12, 4.5),
         subplot_kw=dict(projection=proj),
-        constrained_layout=True
+        constrained_layout=True,
     )
 
-    fields = [
+    panels = [
         ("Static", static_field),
         ("Dynamic", dynamic_field),
         ("Difference", dynamic_field - static_field),
     ]
 
-    for ax, (title, field) in zip(axes, fields):
-        im = ax.pcolormesh(
-            lons,
-            lats,
-            field,
-            transform=ccrs.PlateCarree(),
-            cmap="RdBu_r" if title == "Difference" else "viridis",
-            shading="auto",
-            vmin=-vlim if title == "Difference" else None,
-            vmax=vlim if title == "Difference" else None,
-        )
+    for ax, (name, field) in zip(axes, panels):
+        if coord_mode == "geo":
+            im = ax.pcolormesh(
+                lons,
+                lats,
+                field,
+                transform=ccrs.PlateCarree(),
+                cmap="RdBu_r" if name == "Difference" else "viridis",
+                shading="auto",
+                vmin=-diff_vlim if name == "Difference" else None,
+                vmax=diff_vlim if name == "Difference" else None,
+            )
+        else:  # native stereographic x/y
+            im = ax.pcolormesh(
+                x,
+                y,
+                field,
+                transform=proj,
+                cmap="RdBu_r" if name == "Difference" else "viridis",
+                shading="auto",
+                vmin=-diff_vlim if name == "Difference" else None,
+                vmax=diff_vlim if name == "Difference" else None,
+            )
 
-        # Clean Antarctic map — no black ocean
+        # clean Antarctic map (no black ocean)
+        ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
         ax.add_feature(cfeature.LAND, facecolor="0.8", edgecolor="0.6", zorder=1)
         ax.coastlines(linewidth=0.4, zorder=2)
 
-        ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
-        ax.set_title(f"{title_prefix}{title}", fontsize=11, fontweight="bold")
+        ax.set_title(f"{title_prefix}{name}", fontsize=11, fontweight="bold")
 
-        # Colorbar
-        cbar = fig.colorbar(im, ax=ax, orientation="horizontal", pad=0.05, shrink=0.8)
-        cbar.set_label(label, fontsize=9)
+        cbar = fig.colorbar(
+            im,
+            ax=ax,
+            orientation="horizontal",
+            pad=0.05,
+            shrink=0.8,
+        )
+        if name == "Difference":
+            cbar.set_label(f"{label} (dynamic − static)", fontsize=9)
+        else:
+            cbar.set_label(label, fontsize=9)
         cbar.ax.tick_params(labelsize=8)
+        cbar.outline.set_visible(False)
 
-    # ---- Subfigure labels ----
+    # Subfigure letters
     letters = ["(a)", "(b)", "(c)"]
     for letter, ax in zip(letters, axes):
         ax.text(
