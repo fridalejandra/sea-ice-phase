@@ -144,14 +144,18 @@ def sector_combined_fsms(sec_id: int) -> tuple[np.ndarray, np.ndarray]:
 # -----------------------------------------------------------
 # Plot sector ECDFs
 # -----------------------------------------------------------
+# -----------------------------------------------------------
+# FS and MS separate ECDFs by sector
+# -----------------------------------------------------------
+
 nsec = len(sector_ids)
 ncols = 3
-nrows = int(np.ceil(nsec / ncols))
+nrows = 2 * int(np.ceil(nsec / ncols))  # FS rows first, MS rows second
 
 fig, axes = plt.subplots(
     nrows,
     ncols,
-    figsize=(3.2 * ncols, 3.0 * nrows),
+    figsize=(3.2 * ncols, 2.8 * nrows),
     dpi=300,
     sharex=True,
     sharey=True,
@@ -160,36 +164,53 @@ fig, axes = plt.subplots(
 axes = axes.ravel()
 xmax = 30
 
-for ax, sec_id in zip(axes, sector_ids):
-    vals_3v5, vals_7v5 = sector_combined_fsms(sec_id)
+# Row 1 → FS, Row 2 → MS
+# Loop sectors twice: first FS then MS
+plot_order = []
+for phase in ["FS", "MS"]:
+    for sec_id in sector_ids:
+        plot_order.append((phase, sec_id))
+
+for ax, (phase, sec_id) in zip(axes, plot_order):
+    if phase == "FS":
+        vals_3v5 = sector_values(adv_3v5_da, sec_id)
+        vals_7v5 = sector_values(adv_7v5_da, sec_id)
+    else:
+        vals_3v5 = sector_values(ret_3v5_da, sec_id)
+        vals_7v5 = sector_values(ret_7v5_da, sec_id)
+
+    # Remove outliers > 30 days
+    vals_3v5 = vals_3v5[(vals_3v5 >= 0) & (vals_3v5 <= 30)]
+    vals_7v5 = vals_7v5[(vals_7v5 >= 0) & (vals_7v5 <= 30)]
+
     sns.ecdfplot(x=vals_3v5, ax=ax, label="3 vs 5 days")
     sns.ecdfplot(x=vals_7v5, ax=ax, label="7 vs 5 days")
 
     ax.set_xlim(0, xmax)
-    ax.set_title(sector_labels.get(sec_id, f"Sector {sec_id}"))
+    title = f"{sector_labels[sec_id]} — {phase}"
+    ax.set_title(title)
     ax.grid(True, alpha=0.3)
 
-# Hide extra empty panels (if any)
-for ax in axes[nsec:]:
+# Hide any extra blank panels
+for ax in axes[len(plot_order):]:
     ax.set_visible(False)
 
-# Only put x labels on bottom row
+# Shared x labels only on bottom row
 for ax in axes[-ncols:]:
     ax.set_xlabel("Absolute timing difference (days)")
 
-# Remove all y-axis labels (we'll add one shared)
+# Remove all y labels, add one shared label
 for ax in axes:
     ax.set_ylabel("")
+fig.text(0.04, 0.5, "Cumulative fraction of pixels",
+         va="center", rotation="vertical", fontsize=10)
 
-# Add ONE shared y-axis label
-fig.text(0.04, 0.5, "Cumulative fraction of pixels", va="center", rotation="vertical")
-
-# Single legend
+# Legend
 handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False)
 
-# No super title
-fig.tight_layout(rect=[0.06, 0.06, 1, 0.96])
+fig.tight_layout(rect=[0.06, 0.06, 1, 0.97])
+
 
 
 
