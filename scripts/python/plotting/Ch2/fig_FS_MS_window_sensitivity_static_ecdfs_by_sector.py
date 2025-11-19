@@ -162,10 +162,6 @@ xmax = 30
 
 for ax, sec_id in zip(axes, sector_ids):
     vals_3v5, vals_7v5 = sector_combined_fsms(sec_id)
-    if vals_3v5.size == 0 or vals_7v5.size == 0:
-        ax.set_visible(False)
-        continue
-
     sns.ecdfplot(x=vals_3v5, ax=ax, label="3 vs 5 days")
     sns.ecdfplot(x=vals_7v5, ax=ax, label="7 vs 5 days")
 
@@ -173,24 +169,30 @@ for ax, sec_id in zip(axes, sector_ids):
     ax.set_title(sector_labels.get(sec_id, f"Sector {sec_id}"))
     ax.grid(True, alpha=0.3)
 
-# shared labels
-for ax in axes[:nsec]:
-    ax.set_xlabel("Absolute timing difference (days)")
-    ax.set_ylabel("Cumulative fraction of pixels")
-
+# Hide extra empty panels (if any)
 for ax in axes[nsec:]:
     ax.set_visible(False)
 
-# single legend
+# Only put x labels on bottom row
+for ax in axes[-ncols:]:
+    ax.set_xlabel("Absolute timing difference (days)")
+
+# Remove all y-axis labels (we'll add one shared)
+for ax in axes:
+    ax.set_ylabel("")
+
+# Add ONE shared y-axis label
+fig.text(0.04, 0.5, "Cumulative fraction of pixels", va="center", rotation="vertical")
+
+# Single legend
 handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False)
 
-fig.suptitle("FS+MS window sensitivity by sector (static slope)", y=0.98)
-fig.tight_layout(rect=[0, 0.06, 1, 0.96])
+# No super title
+fig.tight_layout(rect=[0.06, 0.06, 1, 0.96])
 
-# -----------------------------------------------------------
-# Save + upload
-# -----------------------------------------------------------
+
+
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
     subfolder="sensitivity/window",
