@@ -4,69 +4,75 @@ import numpy as np
 
 import sys
 from pathlib import Path
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-# This script lives in .../plotting/Ch2
-# ch2_fig_utils.py lives one level up: .../plotting
-HERE = Path(__file__).resolve().parent
-PLOTTING_ROOT = HERE.parent  # directory that actually contains ch2_fig_utils.py
-
-if str(PLOTTING_ROOT) not in sys.path:
-    sys.path.insert(0, str(PLOTTING_ROOT))
-
-from ch2_fig_utils import (
-    set_mpl_defaults,
-    load_static_phase_year,
-    flatten_field,
-    plot_window_sensitivity_ecdf,
-    get_fig_path,
-    save_and_upload,
-    PROJECT_ROOT_CLUSTER,
+WINDOW_DIFF_DIR = (
+    PROJECT_ROOT_CLUSTER
+    / "results"
+    / "sensitivity"
+    / "SMMR_phase"
+    / "SMMR_window_comparison"
 )
 
+def load_abs_diffs(pattern: str, varname: str) -> np.ndarray:
+    """
+    pattern: e.g. 'diff_advance_3minus5_*.nc'
+    varname: name of the variable in the netCDF file, e.g. 'advance' or 'retreat'
+    """
+    fpaths = sorted(WINDOW_DIFF_DIR.glob(pattern))
+    if not fpaths:
+        raise FileNotFoundError(f"No files matching {pattern} in {WINDOW_DIFF_DIR}")
+
+    ds = xr.open_mfdataset(fpaths, concat_dim="year", combine="nested")
+    da = ds[varname]  # adjust if your variable name is different
+
+    vals = np.abs(da.values).ravel()
+    vals = vals[np.isfinite(vals)]
+    return vals
+
+# adjust these if your variable names inside the files are FS/MS instead
+ADV_VARNAME = "advance"
+RET_VARNAME = "retreat"
+
+adv_3v5_vals = load_abs_diffs("diff_advance_3minus5_*.nc", ADV_VARNAME)
+adv_7v5_vals = load_abs_diffs("diff_advance_7minus5_*.nc", ADV_VARNAME)
+ret_3v5_vals = load_abs_diffs("diff_retreat_3minus5_*.nc", RET_VARNAME)
+ret_7v5_vals = load_abs_diffs("diff_retreat_7minus5_*.nc", RET_VARNAME)
+
+all_vals = np.concatenate([adv_3v5_vals, adv_7v5_vals, ret_3v5_vals, ret_7v5_vals])
+all_vals = all_vals[np.isfinite(all_vals)]
+xmax = np.nanpercentile(all_vals, 99.0)
 
 
-set_mpl_defaults()
+fig, axes = plt.subplots(1, 2, figsize=(8, 4), dpi=300, sharey=True)
 
-# Example: build climatology for SMMR period for 3,5,7-day windows
-years = np.arange(1979, 2024)  # whatever range you’re using
+# FS
+ax = axes[0]
+sns.ecdfplot(x=adv_3v5_vals, ax=ax, label="3 vs 5 days")
+sns.ecdfplot(x=adv_7v5_vals, ax=ax, label="7 vs 5 days")
+ax.set_xlim(0, xmax)
+ax.set_xlabel("|Δ FS date| (days)")
+ax.set_ylabel("Cumulative probability")
+ax.set_title("FS")
 
-def climatology_for_window(phase: str, window_days: int) -> xr.DataArray:
-    das = []
-    for y in years:
-        da = load_static_phase_year(phase=phase, year=y, window_days=window_days)
-        das.append(da.expand_dims(year=[y]))
-    da_all = xr.concat(das, dim="year")
-    return da_all.mean("year", skipna=True)
+# MS
+ax = axes[1]
+sns.ecdfplot(x=ret_3v5_vals, ax=ax, label="3 vs 5 days")
+sns.ecdfplot(x=ret_7v5_vals, ax=ax, label="7 vs 5 days")
+ax.set_xlim(0, xmax)
+ax.set_xlabel("|Δ MS date| (days)")
+ax.set_title("MS")
 
-adv_3 = climatology_for_window("advance", 3)
-adv_5 = climatology_for_window("advance", 5)
-adv_7 = climatology_for_window("advance", 7)
-
-ret_3 = climatology_for_window("retreat", 3)
-ret_5 = climatology_for_window("retreat", 5)
-ret_7 = climatology_for_window("retreat", 7)
-
-# Build a simple valid mask: finite advance & retreat across all windows
-mask = np.isfinite(adv_3.values) & np.isfinite(adv_5.values) & np.isfinite(adv_7.values)
-mask &= np.isfinite(ret_3.values) & np.isfinite(ret_5.values) & np.isfinite(ret_7.values)
-
-fig, axes = plot_window_sensitivity_ecdf(
-    adv_3=adv_3,
-    adv_5=adv_5,
-    adv_7=adv_7,
-    ret_3=ret_3,
-    ret_5=ret_5,
-    ret_7=ret_7,
-    mask=mask,
-    phase_label_advance="FS",
-    phase_label_retreat="MS",
-)
+handles, labels = axes[0].get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False)
+fig.tight_layout(rect=[0, 0.08, 1, 1])
 
 
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
     subfolder="sensitivity/window",
-    fig_name="FigXX_window_sensitivity_ecdf.png",
+    fig_name="Fig_FS_MS_window_sensitivity_static_ecdfs.png",
 )
 save_and_upload(
     fig,
