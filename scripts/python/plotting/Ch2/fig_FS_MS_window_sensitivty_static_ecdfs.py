@@ -2,7 +2,7 @@ from pathlib import Path
 import xarray as xr
 import numpy as np
 
-from scripts.python.plotting.Ch2.ch2_fig_utils import (
+from ch2_fig_utils import (
     set_mpl_defaults,
     load_static_phase_year,
     flatten_field,
@@ -11,6 +11,7 @@ from scripts.python.plotting.Ch2.ch2_fig_utils import (
     save_and_upload,
     PROJECT_ROOT_CLUSTER,
 )
+
 
 
 set_mpl_defaults()
