@@ -44,36 +44,34 @@ SECTOR_MASK_PATH = (
     / "canonical_sectors.nc"
 )
 
-# Inspect the file to know the variable name
-# But I strongly suspect it's "sector" or "sector_mask"
 sector_ds = xr.open_dataset(SECTOR_MASK_PATH)
-
 print("Variables in sector file:", list(sector_ds.data_vars))
 
-# Try the common ones (adjust depending on the printout)
-if "sector" in sector_ds:
-    sector_mask = sector_ds["sector"].values
-elif "sector_mask" in sector_ds:
-    sector_mask = sector_ds["sector_mask"].values
+# Use sector_id as the mask
+sector_mask = sector_ds["sector_id"].values          # 2D [y,x]
+
+# Valid ocean mask (optional but sensible)
+if "valid_ocean" in sector_ds:
+    valid_ocean = sector_ds["valid_ocean"].values.astype(bool)
+    sector_mask = np.where(valid_ocean, sector_mask, np.nan)
 else:
-    raise KeyError(
-        "No 'sector' or 'sector_mask' variable found in canonical_sectors.nc "
-        f"Vars available: {list(sector_ds.data_vars)}"
-    )
+    valid_ocean = ~np.isnan(sector_mask)
 
+# Derive sector IDs from the mask (excluding NaNs/zeros if present)
+sector_ids = sorted(
+    int(s) for s in np.unique(sector_mask[valid_ocean])
+    if np.isfinite(s) and s != 0
+)
 
-sector_da = xr.open_dataarray(SECTOR_MASK_PATH)
-sector_mask = sector_da[SECTOR_VAR_NAME].values  # 2D [y,x]
-
-# Define which sector IDs and labels to use
-sector_ids = [1, 2, 3, 4, 5]  # adjust to your mask
-sector_labels = {
-    1: "Weddell",
-    2: "Indian",
-    3: "Pacific",
-    4: "Ross",
-    5: "Bell–Amund.",
-}
+# Build labels from the name variables if you like
+sector_labels = {}
+for sid in sector_ids:
+    name_var = f"sector_{sid}_name"
+    if name_var in sector_ds:
+        # these are probably 0-D string DataArrays
+        sector_labels[sid] = str(sector_ds[name_var].values)
+    else:
+        sector_labels[sid] = f"Sector {sid}"
 
 # -----------------------------------------------------------
 # Load diff fields as |Δ|, keeping spatial structure
