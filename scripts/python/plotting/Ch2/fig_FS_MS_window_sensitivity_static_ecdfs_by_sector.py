@@ -38,14 +38,29 @@ WINDOW_DIFF_DIR = (
     / "SMMR_window_comparison"
 )
 
-# TODO: point this to your canonical sector mask
 SECTOR_MASK_PATH = (
     PROJECT_ROOT_CLUSTER
-    / "results"
-    / "masks"
-    / "sector_mask_canonical.nc"
+    / "data"
+    / "canonical_sectors.nc"
 )
-SECTOR_VAR_NAME = "sector"  # adjust if different
+
+# Inspect the file to know the variable name
+# But I strongly suspect it's "sector" or "sector_mask"
+sector_ds = xr.open_dataset(SECTOR_MASK_PATH)
+
+print("Variables in sector file:", list(sector_ds.data_vars))
+
+# Try the common ones (adjust depending on the printout)
+if "sector" in sector_ds:
+    sector_mask = sector_ds["sector"].values
+elif "sector_mask" in sector_ds:
+    sector_mask = sector_ds["sector_mask"].values
+else:
+    raise KeyError(
+        "No 'sector' or 'sector_mask' variable found in canonical_sectors.nc "
+        f"Vars available: {list(sector_ds.data_vars)}"
+    )
+
 
 sector_da = xr.open_dataarray(SECTOR_MASK_PATH)
 sector_mask = sector_da[SECTOR_VAR_NAME].values  # 2D [y,x]
