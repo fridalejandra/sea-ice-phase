@@ -164,18 +164,28 @@ def main():
     for phase in PHASES:
         print(f"Processing climatology for {phase}")
 
-        clim_static  = load_phase_climatology(phase, "static",  YEAR_START, YEAR_END)
+        clim_static = load_phase_climatology(phase, "static", YEAR_START, YEAR_END)
         clim_dynamic = load_phase_climatology(phase, "dynamic", YEAR_START, YEAR_END)
 
         label = f"{freeze_label(phase)} (day of year)"
+
+        # --- FS/MS-specific DOY ranges ---
+        if phase == "FS":
+            field_vmin, field_vmax = 80, 240  # matches Feb–Sep window, real climatology
+        elif phase == "MS":
+            field_vmin, field_vmax = 200, 360  # matches Aug–Feb window, real climatology
+        else:
+            field_vmin, field_vmax = None, None  # fallback
 
         fig, axes = plot_phase_comparison_map(
             static_field=clim_static,
             dynamic_field=clim_dynamic,
             label=label,
             title_prefix=f"{phase} ",
+            diff_vlim=20,
+            field_vmin=field_vmin,
+            field_vmax=field_vmax,
         )
-
 
         # You’ll title/caption in the paper; this is just the filename index.
         fig_num = 3 if phase == "FS" else 4  # adjust if you change ordering

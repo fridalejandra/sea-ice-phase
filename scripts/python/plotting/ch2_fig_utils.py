@@ -312,6 +312,8 @@ def plot_phase_comparison_map(
     label="Phase (day-of-year)",
     title_prefix="",
     diff_vlim=20,
+    field_vmin=None,
+    field_vmax=None,
 ):
     """
     Three-panel comparison: static, dynamic, dynamic-static.
@@ -372,8 +374,8 @@ def plot_phase_comparison_map(
                 transform=ccrs.PlateCarree(),
                 cmap="RdBu_r" if name == "Difference" else "viridis",
                 shading="auto",
-                vmin=-diff_vlim if name == "Difference" else None,
-                vmax=diff_vlim if name == "Difference" else None,
+                vmin=-diff_vlim if name == "Difference" else field_vmin,
+                vmax=diff_vlim if name == "Difference" else field_vmax,
             )
         else:  # native stereographic x/y
             im = ax.pcolormesh(
@@ -383,8 +385,8 @@ def plot_phase_comparison_map(
                 transform=proj,
                 cmap="RdBu_r" if name == "Difference" else "viridis",
                 shading="auto",
-                vmin=-diff_vlim if name == "Difference" else None,
-                vmax=diff_vlim if name == "Difference" else None,
+                vmin=-diff_vlim if name == "Difference" else field_vmin,
+                vmax=diff_vlim if name == "Difference" else field_vmax,
             )
 
         # clean Antarctic map (no black ocean)
