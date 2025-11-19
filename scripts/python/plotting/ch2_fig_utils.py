@@ -512,6 +512,235 @@ def plot_phase_cdf_by_sector(
     fig.tight_layout(rect=[0, 0.05, 1, 0.96])
 
     return fig, axes
+def plot_window_sensitivity_ecdf(
+    adv_3,
+    adv_5,
+    adv_7,
+    ret_3,
+    ret_5,
+    ret_7,
+    mask: Optional[np.ndarray] = None,
+    phase_label_advance: str = "Advance",
+    phase_label_retreat: str = "Retreat",
+    max_x: Optional[float] = None,
+) -> tuple[plt.Figure, np.ndarray]:
+    """
+    Plot ECDFs of |ΔDOY| sensitivity to running-window length (3 vs 5, 5 vs 7 days)
+    for advance and retreat.
+
+    Parameters
+    ----------
+    adv_3, adv_5, adv_7 : array-like or DataArray
+        Climatological advance dates (DOY) for 3-, 5-, and 7-day windows.
+    ret_3, ret_5, ret_7 : array-like or DataArray
+        Climatological retreat dates (DOY) for 3-, 5-, and 7-day windows.
+    mask : 2D bool array, optional
+        True where ocean/valid. If None, all finite grid cells are used.
+    phase_label_advance : str
+        Label for the advance panel title.
+    phase_label_retreat : str
+        Label for the retreat panel title.
+    max_x : float, optional
+        Max x-limit for |ΔDOY| (days). If None, set to the 99th percentile
+        across all four |Δ| fields.
+
+    Returns
+    -------
+    fig : Figure
+    axes : ndarray of Axes, shape (2,)
+        axes[0] = advance ECDFs, axes[1] = retreat ECDFs.
+    """
+    # Convert to plain arrays
+    adv_3 = as_array(adv_3)
+    adv_5 = as_array(adv_5)
+    adv_7 = as_array(adv_7)
+    ret_3 = as_array(ret_3)
+    ret_5 = as_array(ret_5)
+    ret_7 = as_array(ret_7)
+
+    # Absolute differences in days
+    dadv_3v5 = np.abs(adv_3 - adv_5)
+    dadv_5v7 = np.abs(adv_5 - adv_7)
+    dret_3v5 = np.abs(ret_3 - ret_5)
+    dret_5v7 = np.abs(ret_5 - ret_7)
+
+    # Flatten with mask + NaN handling using existing helper
+    adv_3v5_vals = flatten_field(dadv_3v5, mask=mask)
+    adv_5v7_vals = flatten_field(dadv_5v7, mask=mask)
+    ret_3v5_vals = flatten_field(dret_3v5, mask=mask)
+    ret_5v7_vals = flatten_field(dret_5v7, mask=mask)
+
+    # Optionally derive a sensible x-limit from the 99th percentile
+    if max_x is None:
+        all_vals = np.concatenate([
+            adv_3v5_vals,
+            adv_5v7_vals,
+            ret_3v5_vals,
+            ret_5v7_vals,
+        ])
+        # ignore NaNs
+        all_vals = all_vals[np.isfinite(all_vals)]
+        if all_vals.size > 0:
+            max_x = np.nanpercentile(all_vals, 99.0)
+        else:
+            max_x = 10.0  # fallback
+
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=FIGSIZE_DOUBLE,
+        dpi=DPI,
+        sharey=True,
+    )
+
+    # --- Advance panel ---
+    ax = axes[0]
+    sns.ecdfplot(x=adv_3v5_vals, ax=ax, label="3 vs 5 days")
+    sns.ecdfplot(x=adv_5v7_vals, ax=ax, label="5 vs 7 days")
+
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_advance.lower()))
+    ax.set_ylabel("Cumulative probability")
+    ax.set_xlim(0, max_x)
+    #ax.set_title(phase_label_advance)
+
+    # --- Retreat panel ---
+    ax = axes[1]
+    sns.ecdfplot(x=ret_3v5_vals, ax=ax, label="3 vs 5 days")
+    sns.ecdfplot(x=ret_5v7_vals, ax=ax, label="5 vs 7 days")
+
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_retreat.lower()))
+    ax.set_xlim(0, max_x)
+    #ax.set_title(phase_label_retreat)
+
+    # Shared legend (only once)
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            ncol=2,
+            frameon=False,
+        )
+
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
+
+    return fig, axes
+
+def plot_window_sensitivity_ecdf(
+    adv_3,
+    adv_5,
+    adv_7,
+    ret_3,
+    ret_5,
+    ret_7,
+    mask: Optional[np.ndarray] = None,
+    phase_label_advance: str = "Advance",
+    phase_label_retreat: str = "Retreat",
+    max_x: Optional[float] = None,
+) -> tuple[plt.Figure, np.ndarray]:
+    """
+    Plot ECDFs of |ΔDOY| sensitivity to running-window length (3 vs 5, 5 vs 7 days)
+    for advance and retreat.
+
+    Parameters
+    ----------
+    adv_3, adv_5, adv_7 : array-like or DataArray
+        Climatological advance dates (DOY) for 3-, 5-, and 7-day windows.
+    ret_3, ret_5, ret_7 : array-like or DataArray
+        Climatological retreat dates (DOY) for 3-, 5-, and 7-day windows.
+    mask : 2D bool array, optional
+        True where ocean/valid. If None, all finite grid cells are used.
+    phase_label_advance : str
+        Label for the advance panel title.
+    phase_label_retreat : str
+        Label for the retreat panel title.
+    max_x : float, optional
+        Max x-limit for |ΔDOY| (days). If None, set to the 99th percentile
+        across all four |Δ| fields.
+
+    Returns
+    -------
+    fig : Figure
+    axes : ndarray of Axes, shape (2,)
+        axes[0] = advance ECDFs, axes[1] = retreat ECDFs.
+    """
+    # Convert to plain arrays
+    adv_3 = as_array(adv_3)
+    adv_5 = as_array(adv_5)
+    adv_7 = as_array(adv_7)
+    ret_3 = as_array(ret_3)
+    ret_5 = as_array(ret_5)
+    ret_7 = as_array(ret_7)
+
+    # Absolute differences in days
+    dadv_3v5 = np.abs(adv_3 - adv_5)
+    dadv_5v7 = np.abs(adv_5 - adv_7)
+    dret_3v5 = np.abs(ret_3 - ret_5)
+    dret_5v7 = np.abs(ret_5 - ret_7)
+
+    # Flatten with mask + NaN handling using existing helper
+    adv_3v5_vals = flatten_field(dadv_3v5, mask=mask)
+    adv_5v7_vals = flatten_field(dadv_5v7, mask=mask)
+    ret_3v5_vals = flatten_field(dret_3v5, mask=mask)
+    ret_5v7_vals = flatten_field(dret_5v7, mask=mask)
+
+    # Optionally derive a sensible x-limit from the 99th percentile
+    if max_x is None:
+        all_vals = np.concatenate([
+            adv_3v5_vals,
+            adv_5v7_vals,
+            ret_3v5_vals,
+            ret_5v7_vals,
+        ])
+        # ignore NaNs
+        all_vals = all_vals[np.isfinite(all_vals)]
+        if all_vals.size > 0:
+            max_x = np.nanpercentile(all_vals, 99.0)
+        else:
+            max_x = 10.0  # fallback
+
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=FIGSIZE_DOUBLE,
+        dpi=DPI,
+        sharey=True,
+    )
+
+    # --- Advance panel ---
+    ax = axes[0]
+    sns.ecdfplot(x=adv_3v5_vals, ax=ax, label="3 vs 5 days")
+    sns.ecdfplot(x=adv_5v7_vals, ax=ax, label="5 vs 7 days")
+
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_advance.lower()))
+    ax.set_ylabel("Cumulative probability")
+    ax.set_xlim(0, max_x)
+    ax.set_title(phase_label_advance)
+
+    # --- Retreat panel ---
+    ax = axes[1]
+    sns.ecdfplot(x=ret_3v5_vals, ax=ax, label="3 vs 5 days")
+    sns.ecdfplot(x=ret_5v7_vals, ax=ax, label="5 vs 7 days")
+
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_retreat.lower()))
+    ax.set_xlim(0, max_x)
+    ax.set_title(phase_label_retreat)
+
+    # Shared legend (only once)
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            ncol=2,
+            frameon=False,
+        )
+
+    fig.tight_layout(rect=[0, 0.05, 1, 1])
+
+    return fig, axes
 
 
 def plot_sector_time_series(
