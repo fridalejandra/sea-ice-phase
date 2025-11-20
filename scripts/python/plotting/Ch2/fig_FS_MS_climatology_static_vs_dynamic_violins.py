@@ -43,9 +43,8 @@ from ch2_fig_utils import (  # noqa: E402
 set_mpl_defaults()
 sns.set_style("whitegrid")
 
-# two blues from tab10 (first and last)
-_base = sns.color_palette("tab10")
-METHOD_PALETTE = [_base[0], _base[9]]  # Static, Dynamic
+_base = sns.color_palette("colorblind")
+METHOD_PALETTE = [_base[0], _base[2]]   # blue (Static) + green (Dynamic)
 
 # ---------------------------------------------------------------------
 # CONFIG
@@ -268,7 +267,7 @@ for ax, phase_name, ylim in zip(
         y="doy",
         hue="method",
         split=True,
-        inner="box",  # median + IQR instead of dashed quartiles
+        inner=None,
         cut=0,
         linewidth=0.8,
         palette=METHOD_PALETTE,
@@ -293,7 +292,7 @@ for ax, phase_name, ylim in zip(
 
 axes[-1].set_xlabel("Sector")
 
-fig.tight_layout(rect=[0, 0, 0.85, 1])
+fig.subplots_adjust(bottom=0.12, top=0.92, right=0.85, hspace=0.35)
 
 
 out_path = get_fig_path(
