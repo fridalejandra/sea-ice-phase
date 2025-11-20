@@ -84,29 +84,42 @@ ocean_mask = ds_sect["valid_ocean"].astype(bool).values
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
-def _load_static_year(phase: str, year: int) -> xr.DataArray:
+def _load_static_year(phase: str, year: int) -> xr.DataArray | None:
     """
     phase: 'FS' or 'MS'
     static file: seaice_phases_SMMR_YYYY.nc
+    variables: advance_YYYY, retreat_YYYY
     """
     fpath = STATIC_DIR / f"seaice_phases_SMMR_{year}.nc"
     if not fpath.exists():
         return None
 
     ds = xr.open_dataset(fpath)
+
     if phase == "FS":
-        var = "advance"
+        var_prefix = "advance"
     elif phase == "MS":
-        var = "retreat"
+        var_prefix = "retreat"
     else:
+        ds.close()
         raise ValueError("phase must be 'FS' or 'MS'")
 
-    if var not in ds:
-        raise KeyError(f"{var} not in {fpath}; vars={list(ds.data_vars)}")
+    varname = f"{var_prefix}_{year}"
 
-    da = ds[var].load()
+    # If variable missing → skip quietly
+    if varname not in ds:
+        ds.close()
+        return None
+
+    da = ds[varname].load()
     ds.close()
+
+    # If all NaN → skip
+    if not np.any(np.isfinite(da.values)):
+        return None
+
     return da
+
 
 
 def _load_dynamic_year(phase: str, year: int) -> xr.DataArray:
