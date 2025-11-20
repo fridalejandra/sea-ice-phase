@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
@@ -191,81 +191,64 @@ def make_polar_ax(fig, pos):
 
 def plot_window_diff_maps():
     """
-    2x2 panel: FS/MS × (k=3−5, k=7−5) mean timing differences.
+    1x2 panel: FS and MS mean |k=3−5| timing differences (static, slope).
     """
     print("\nComputing mean window differences for maps...")
     fs_d35, fs_d75 = compute_window_diff_means("FS")
     ms_d35, ms_d75 = compute_window_diff_means("MS")
 
-    # These phase files are on a native Stereographic grid with x,y only
+    # Use absolute magnitude to match the ECDFs of |Δ|
+    fs_abs = np.abs(fs_d35)
+    ms_abs = np.abs(ms_d35)
+
+    # Example to get native x,y grid (Stereographic)
     example = next(iter(load_window_dict("FS", 5).values()))
     x = example["x"]
     y = example["y"]
 
-    panels = [
-        ("FS", fs_d35, "k = 3 − 5"),
-        ("FS", fs_d75, "k = 7 − 5"),
-        ("MS", ms_d35, "k = 3 − 5"),
-        ("MS", ms_d75, "k = 7 − 5"),
-    ]
-
     proj = ccrs.SouthPolarStereo()
-    fig = plt.figure(figsize=(8.2, 6.0))
-    axes = []
+    fig = plt.figure(figsize=(8.0, 4.0))
 
-    for idx, (metric, da, label) in enumerate(panels, start=1):
-        ax = make_polar_ax(fig, 220 + idx)  # 2x2 grid: 221, 222, 223, 224
-        axes.append(ax)
+    # FS panel
+    ax1 = make_polar_ax(fig, 121)  # 1x2 grid, left
+    im1 = ax1.pcolormesh(
+        x,
+        y,
+        fs_abs,
+        transform=proj,
+        cmap="viridis",
+        vmin=0,
+        vmax=10,   # 0–10 day scale; adjust if needed
+        shading="auto",
+    )
+    ax1.set_title("FS |Δ(3−5)| (days)", fontsize=9)
 
-        # NOTE: transform=proj because x,y are already in SouthPolarStereo
-        im = ax.pcolormesh(
-            x,
-            y,
-            da,
-            transform=proj,
-            cmap="RdBu_r",
-            vmin=-VMAX,
-            vmax=+VMAX,
-            shading="auto",
-        )
-
-        if metric == "FS":
-            phase_name = "Freeze start (FS)"
-        else:
-            phase_name = "Melt start (MS)"
-
-        ax.set_title(f"{phase_name}, {label}", fontsize=9)
+    # MS panel
+    ax2 = make_polar_ax(fig, 122)  # 1x2 grid, right
+    im2 = ax2.pcolormesh(
+        x,
+        y,
+        ms_abs,
+        transform=proj,
+        cmap="viridis",
+        vmin=0,
+        vmax=10,
+        shading="auto",
+    )
+    ax2.set_title("MS |Δ(3−5)| (days)", fontsize=9)
 
     # Shared colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
-    cb = fig.colorbar(im, cax=cax, orientation="horizontal")
-    cb.set_label("Timing difference relative to 5-day window (days)", fontsize=9)
+    cb = fig.colorbar(im2, cax=cax, orientation="horizontal")
+    cb.set_label("|Δ date| relative to 5-day window (days)", fontsize=9)
     cb.ax.tick_params(labelsize=8)
     cb.outline.set_visible(False)
 
-    # Subfigure letters (a)–(d)
-    letters = ["(a)", "(b)", "(c)", "(d)"]
-    for letter, ax in zip(letters, axes):
-        ax.text(
-            0.02,
-            0.98,
-            letter,
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            fontsize=11,
-            fontweight="bold",
-        )
-
-    fig.suptitle(
-        f"Window sensitivity of FS/MS timing (static, thr={THRESH_PCT}%, {SENSOR})",
-        fontsize=11,
-    )
-    fig.tight_layout(rect=[0, 0.14, 1, 0.94])
+    fig.tight_layout(rect=[0, 0.12, 1, 1])
 
     fig_name = format_fig_name(
-        num=1,  # adjust when you lock full figure order
-        short=f"window_FS_MS_static_{SENSOR}_thr{THRESH_PCT}",
+        num=1,  # adjust when you lock numbering
+        short=f"window_FS_MS_static_{SENSOR}_thr{THRESH_PCT}_3v5_abs",
     )
 
     out_path = get_fig_path(
