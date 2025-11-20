@@ -73,44 +73,51 @@ ret_7v5_vals = load_abs_diffs("diff_retreat_7minus5_*.nc")
 print(WINDOW_DIFF_DIR)
 print(list(WINDOW_DIFF_DIR.glob("diff_advance_3minus5_*.nc"))[:3])
 
-# Set x-limit from 99th percentile to avoid crazy tails dominating the axis
-all_vals = np.concatenate([adv_3v5_vals, adv_7v5_vals, ret_3v5_vals, ret_7v5_vals])
-all_vals = all_vals[np.isfinite(all_vals)]
-xmax = np.nanpercentile(all_vals, 99.0)
-
 # -----------------------------------------------------------
-# Plot FS (advance) and MS (retreat) ECDFs
+# Build combined ECDF: FS & MS, 3v5 and 7v5
 # -----------------------------------------------------------
-fig, axes = plt.subplots(1, 2, figsize=(8, 4), dpi=300, sharey=True)
 
-# FS
-ax = axes[0]
-sns.ecdfplot(x=adv_3v5_vals, ax=ax, label="3 vs 5 days")
-sns.ecdfplot(x=adv_7v5_vals, ax=ax, label="7 vs 5 days")
-ax.set_xlim(0, xmax)
-ax.set_xlabel("|Δ FS date| (days)")
-ax.set_ylabel("Cumulative probability")
-ax.set_title("FS")
+# Optionally clip insane tails (e.g. due to missing data artefacts)
+clip = 30.0
 
-# MS
-ax = axes[1]
-sns.ecdfplot(x=ret_3v5_vals, ax=ax, label="3 vs 5 days")
-sns.ecdfplot(x=ret_7v5_vals, ax=ax, label="7 vs 5 days")
-ax.set_xlim(0, xmax)
-ax.set_xlabel("|Δ MS date| (days)")
-ax.set_title("MS")
+def clip_0_30(arr):
+    arr = arr[np.isfinite(arr)]
+    return arr[(arr >= 0) & (arr <= clip)]
 
-handles, labels = axes[0].get_legend_handles_labels()
-fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False)
-fig.tight_layout(rect=[0, 0.08, 1, 1])
+adv_3v5_vals = clip_0_30(adv_3v5_vals)
+adv_7v5_vals = clip_0_30(adv_7v5_vals)
+ret_3v5_vals = clip_0_30(ret_3v5_vals)
+ret_7v5_vals = clip_0_30(ret_7v5_vals)
 
-# -----------------------------------------------------------
-# Save + upload
-# -----------------------------------------------------------
+fig, ax = plt.subplots(figsize=(4.2, 3.2), dpi=300)
+
+# FS curves
+sns.ecdfplot(x=adv_3v5_vals, ax=ax, label="FS 3 vs 5 days")
+sns.ecdfplot(x=adv_7v5_vals, ax=ax, label="FS 7 vs 5 days")
+
+# MS curves
+sns.ecdfplot(x=ret_3v5_vals, ax=ax, label="MS 3 vs 5 days")
+sns.ecdfplot(x=ret_7v5_vals, ax=ax, label="MS 7 vs 5 days")
+
+ax.set_xlim(0, clip)
+ax.set_xlabel("|Δ date| (days)")
+ax.set_ylabel("Cumulative fraction of pixels")
+ax.grid(True, alpha=0.3)
+
+# Put legend outside if crowded
+ax.legend(
+    loc="center left",
+    bbox_to_anchor=(1.02, 0.5),
+    frameon=False,
+    title="Window comparison"
+)
+
+fig.tight_layout()
+
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
     subfolder="sensitivity/window",
-    fig_name="Fig_FS_MS_window_sensitivity_static_ecdfs.png",
+    fig_name="Fig_FS_MS_window_sensitivity_static_ecdf_allcurves.png",
 )
 
 save_and_upload(

@@ -176,27 +176,25 @@ def compute_window_diff_means(metric: str) -> tuple[xr.DataArray, xr.DataArray]:
 # ---------------------------------------------------------------------
 
 def make_polar_ax(fig, pos):
-    """
-    South polar map with continent outlines only.
-    No meridians, no parallels, clean white ocean.
-    """
     proj = ccrs.SouthPolarStereo()
     ax = fig.add_subplot(pos, projection=proj)
 
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
 
-    # Land (keep Antarctica visible but unobtrusive)
-    ax.add_feature(cfeature.LAND, facecolor="0.85", edgecolor="0.6", linewidth=0.4)
+    ax.add_feature(
+        cfeature.LAND.with_scale("110m"),
+        facecolor="0.85",
+        edgecolor="0.6",
+        linewidth=0.4,
+        zorder=1,
+    )
+    ax.coastlines(linewidth=0.4, color="0.4", zorder=2)
 
-    # Coastlines to define Antarctica well
-    ax.coastlines(linewidth=0.4, color="0.4")
-
-    # No gridlines (cleaner for MS)
+    # No gridlines for a clean look
     gl = ax.gridlines(draw_labels=False)
     gl.xlines = False
     gl.ylines = False
 
-    # Keep white background for ocean
     ax.set_facecolor("white")
 
     return ax
@@ -207,62 +205,79 @@ def make_polar_ax(fig, pos):
 
 def plot_window_diff_maps():
     """
-    1x2 panel: FS and MS mean |k=3−5| timing differences (static, slope).
+    2x2 panel: FS/MS × (k=3−5, k=7−5) mean |Δ| timing differences.
     """
     print("\nComputing mean window differences for maps...")
     fs_d35, fs_d75 = compute_window_diff_means("FS")
     ms_d35, ms_d75 = compute_window_diff_means("MS")
 
-    # Use absolute magnitude to match the ECDFs of |Δ|
-    fs_abs = np.abs(fs_d35)
-    ms_abs = np.abs(ms_d35)
+    # Use absolute magnitude to match ECDFs of |Δ|
+    fs_3v5_abs = np.abs(fs_d35)
+    fs_7v5_abs = np.abs(fs_d75)
+    ms_3v5_abs = np.abs(ms_d35)
+    ms_7v5_abs = np.abs(ms_d75)
 
-    # Example to get native x,y grid (Stereographic)
+    # Native stereographic x,y grid
     example = next(iter(load_window_dict("FS", 5).values()))
     x = example["x"]
     y = example["y"]
 
     proj = ccrs.SouthPolarStereo()
-    fig = plt.figure(figsize=(8.0, 4.0))
+    fig = plt.figure(figsize=(8.0, 6.0))
 
-    # FS panel
-    ax1 = make_polar_ax(fig, 121)  # 1x2 grid, left
-    im1 = ax1.pcolormesh(
-        x,
-        y,
-        fs_abs,
-        transform=proj,
-        cmap="viridis",
-        vmin=0,
-        vmax=10,   # 0–10 day scale; adjust if needed
-        shading="auto",
-    )
-    ax1.set_title("FS", fontsize=9)
-    # MS panel
-    ax2 = make_polar_ax(fig, 122)  # 1x2 grid, right
-    im2 = ax2.pcolormesh(
-        x,
-        y,
-        ms_abs,
-        transform=proj,
-        cmap="viridis",
-        vmin=0,
-        vmax=10,
-        shading="auto",
-    )
-    ax2.set_title("MS", fontsize=9)
+    panels = [
+        ("FS 3–5", fs_3v5_abs, 221),
+        ("FS 7–5", fs_7v5_abs, 222),
+        ("MS 3–5", ms_3v5_abs, 223),
+        ("MS 7–5", ms_7v5_abs, 224),
+    ]
+
+    vmax = 10.0  # 0–10 day scale
+
+    im_last = None
+    axes = []
+    for title, da_abs, subplot_code in panels:
+        ax = make_polar_ax(fig, subplot_code)
+        axes.append(ax)
+
+        im_last = ax.pcolormesh(
+            x,
+            y,
+            da_abs,
+            transform=proj,
+            cmap="viridis",
+            vmin=0,
+            vmax=vmax,
+            shading="auto",
+        )
+        ax.set_title(title, fontsize=9)
+
     # Shared colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
-    cb = fig.colorbar(im2, cax=cax, orientation="horizontal")
-    cb.set_label("|Δ date| between 3- and 5-day windows (days)", fontsize=9)
+    cb = fig.colorbar(im_last, cax=cax, orientation="horizontal")
+    cb.set_label("|Δ date| relative to 5-day window (days)", fontsize=9)
     cb.ax.tick_params(labelsize=8)
     cb.outline.set_visible(False)
+
+    # Optional panel letters
+    letters = ["(a)", "(b)", "(c)", "(d)"]
+    for letter, ax in zip(letters, axes):
+        ax.text(
+            0.02,
+            0.98,
+            letter,
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=11,
+            fontweight="bold",
+        )
 
     fig.tight_layout(rect=[0, 0.12, 1, 1])
 
     fig_name = format_fig_name(
-        num=1,  # adjust when you lock numbering
-        short=f"window_FS_MS_static_{SENSOR}_thr{THRESH_PCT}_3v5_abs",
+        num=2,  # adjust numbering in final manuscript
+        short=f"window_FS_MS_static_{SENSOR}_thr{THRESH_PCT}_3v5_7v5_abs",
     )
 
     out_path = get_fig_path(
