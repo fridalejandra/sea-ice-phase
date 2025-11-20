@@ -186,16 +186,14 @@ def make_polar_ax(fig, pos):
     # Antarctic region only
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
 
-    # White background (remove continent shading)
+    # White background (no ocean/land shading)
     ax.set_facecolor("white")
 
-    # No coastlines, no gridlines, no features
-    # (Cartopy's default coastlines/gridlines are not added)
-
-    # Completely disable boundary frame
-    ax.outline_patch.set_visible(False)
+    # No coastlines, no gridlines, no extra features
+    # (we simply don't add any)
 
     return ax
+
 
 
 
