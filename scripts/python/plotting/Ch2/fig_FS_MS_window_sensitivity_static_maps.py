@@ -176,17 +176,27 @@ def compute_window_diff_means(metric: str) -> tuple[xr.DataArray, xr.DataArray]:
 # ---------------------------------------------------------------------
 
 def make_polar_ax(fig, pos):
+    """
+    Clean polar axis: no meridians, no continents, no coastlines.
+    Pure white background, matching earlier figures.
+    """
     proj = ccrs.SouthPolarStereo()
     ax = fig.add_subplot(pos, projection=proj)
 
-    # Just show Antarctica; no black ocean fill
+    # Antarctic region only
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
-    ax.add_feature(cfeature.LAND, facecolor="0.8", edgecolor="0.6", zorder=1)
-    ax.coastlines(linewidth=0.4, zorder=2)
-    ax.gridlines(draw_labels=False, linewidth=0.3, color="0.5",
-                 alpha=0.5, linestyle="--")
+
+    # White background (remove continent shading)
+    ax.set_facecolor("white")
+
+    # No coastlines, no gridlines, no features
+    # (Cartopy's default coastlines/gridlines are not added)
+
+    # Completely disable boundary frame
+    ax.outline_patch.set_visible(False)
 
     return ax
+
 
 
 def plot_window_diff_maps():
@@ -221,8 +231,7 @@ def plot_window_diff_maps():
         vmax=10,   # 0–10 day scale; adjust if needed
         shading="auto",
     )
-    ax1.set_title("FS |Δ(3−5)| (days)", fontsize=9)
-
+    ax1.set_title("FS", fontsize=9)
     # MS panel
     ax2 = make_polar_ax(fig, 122)  # 1x2 grid, right
     im2 = ax2.pcolormesh(
@@ -235,8 +244,7 @@ def plot_window_diff_maps():
         vmax=10,
         shading="auto",
     )
-    ax2.set_title("MS |Δ(3−5)| (days)", fontsize=9)
-
+    ax2.set_title("MS", fontsize=9)
     # Shared colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
     cb = fig.colorbar(im2, cax=cax, orientation="horizontal")
