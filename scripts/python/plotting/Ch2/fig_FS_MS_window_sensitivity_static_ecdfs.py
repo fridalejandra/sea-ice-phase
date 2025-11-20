@@ -106,11 +106,13 @@ ax.grid(True, alpha=0.3)
 
 # Put legend outside if crowded
 ax.legend(
-    loc="center left",
-    bbox_to_anchor=(1.02, 0.5),
-    frameon=False,
-    title="Window comparison"
+    loc="center right",
+    bbox_to_anchor=(0.95, 0.5),
+    frameon=True,
+    facecolor="white",
+    framealpha=0.8,
 )
+
 
 fig.tight_layout()
 
