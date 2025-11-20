@@ -10,7 +10,7 @@ and melt start (MS). Uses FS_thrXX_k5 / MS_thrXX_k5 daily products.
 
 Thresholds are:
   THR_LOW  (e.g. 10%) vs THR_REF (15%)
-  THR_HIGH (e.g. 20%) vs THR_REF (15%)
+  THR_HIGH (e.g. 30%) vs THR_REF (15%)
 """
 
 import sys
