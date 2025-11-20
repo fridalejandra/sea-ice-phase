@@ -43,6 +43,10 @@ from ch2_fig_utils import (  # noqa: E402
 set_mpl_defaults()
 sns.set_style("whitegrid")
 
+# two blues from tab10 (first and last)
+_base = sns.color_palette("tab10")
+METHOD_PALETTE = [_base[0], _base[9]]  # Static, Dynamic
+
 # ---------------------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------------------
@@ -263,32 +267,34 @@ for ax, phase_name, ylim in zip(
         x="sector",
         y="doy",
         hue="method",
-        split=True,       # Static vs Dynamic in same violin per sector
-        inner="quartile",
+        split=True,
+        inner="box",  # median + IQR instead of dashed quartiles
         cut=0,
         linewidth=0.8,
+        palette=METHOD_PALETTE,
         ax=ax,
     )
 
     ax.set_ylabel("Day of year")
     ax.set_xlabel("")
     ax.set_ylim(*ylim)
-    ax.set_title(f"{phase_name} climatology (static vs dynamic)")
+    ax.set_title(f"{phase_name} climatology")
 
     if phase_name == "FS":
-        ax.legend(
+        leg = ax.legend(
             loc="upper left",
-            frameon=True,
-            facecolor="white",
-            framealpha=0.8,
-            title="Method",
+            bbox_to_anchor=(1.02, 1.0),  # outside, to the right
+            borderaxespad=0.0,
+            frameon=False,
         )
+        leg.set_title("")  # remove 'Method'
     else:
         ax.legend_.remove()
 
 axes[-1].set_xlabel("Sector")
 
-fig.tight_layout()
+fig.tight_layout(rect=[0, 0, 0.85, 1])
+
 
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
