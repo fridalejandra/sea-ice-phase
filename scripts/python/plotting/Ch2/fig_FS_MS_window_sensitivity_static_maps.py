@@ -177,22 +177,30 @@ def compute_window_diff_means(metric: str) -> tuple[xr.DataArray, xr.DataArray]:
 
 def make_polar_ax(fig, pos):
     """
-    Clean polar axis: no meridians, no continents, no coastlines.
-    Pure white background, matching earlier figures.
+    South polar map with continent outlines only.
+    No meridians, no parallels, clean white ocean.
     """
     proj = ccrs.SouthPolarStereo()
     ax = fig.add_subplot(pos, projection=proj)
 
-    # Antarctic region only
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
 
-    # White background (no ocean/land shading)
+    # Land (keep Antarctica visible but unobtrusive)
+    ax.add_feature(cfeature.LAND, facecolor="0.85", edgecolor="0.6", linewidth=0.4)
+
+    # Coastlines to define Antarctica well
+    ax.coastlines(linewidth=0.4, color="0.4")
+
+    # No gridlines (cleaner for MS)
+    gl = ax.gridlines(draw_labels=False)
+    gl.xlines = False
+    gl.ylines = False
+
+    # Keep white background for ocean
     ax.set_facecolor("white")
 
-    # No coastlines, no gridlines, no extra features
-    # (we simply don't add any)
-
     return ax
+
 
 
 
@@ -246,7 +254,7 @@ def plot_window_diff_maps():
     # Shared colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
     cb = fig.colorbar(im2, cax=cax, orientation="horizontal")
-    cb.set_label("|Δ date| relative to 5-day window (days)", fontsize=9)
+    cb.set_label("|Δ date| between 3- and 5-day windows (days)", fontsize=9)
     cb.ax.tick_params(labelsize=8)
     cb.outline.set_visible(False)
 
