@@ -30,14 +30,27 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
 # ---------------------------------------------------------------------
-# BASE PATHS
+# ch2_fig_utils + project root
 # ---------------------------------------------------------------------
+HERE = Path(__file__).resolve().parent
+PLOTTING_ROOT = HERE.parent  # .../plotting
 
-PROJECT_ROOT = Path("/user/geog/falejandraperez/sea-ice-phase")
+if str(PLOTTING_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLOTTING_ROOT))
+
+from ch2_fig_utils import (
+    set_mpl_defaults,
+    get_fig_path,
+    save_and_upload,
+    PROJECT_ROOT_CLUSTER,
+)
+
+set_mpl_defaults()
+
+PROJECT_ROOT = PROJECT_ROOT_CLUSTER
 ANOM_DIR = PROJECT_ROOT / "results" / "anomalies"
-
-# canonical sectors / ocean mask
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
+
 
 # highlight years
 YEARS_HI = [2016, 2022, 2023]
@@ -178,10 +191,12 @@ def plot_anomaly_timeseries():
 
     fig.tight_layout()
 
+    from ch2_fig_utils import get_fig_path, save_and_upload
+
     outpath = get_fig_path(
-        PROJECT_ROOT,
+        project_root=PROJECT_ROOT,
         subfolder="anomalies",
-        fig_name="Fig_FS_MS_dynamic_anomaly_timeseries.png"
+        fig_name="Fig_FS_MS_dynamic_anomaly_timeseries.png",
     )
 
     save_and_upload(
@@ -190,7 +205,6 @@ def plot_anomaly_timeseries():
         remote_root="gdrive:sea-ice-phase/Results/Ch2_Figures",
         remote_subdir="anomalies",
     )
-
 
 if __name__ == "__main__":
     plot_anomaly_timeseries()
