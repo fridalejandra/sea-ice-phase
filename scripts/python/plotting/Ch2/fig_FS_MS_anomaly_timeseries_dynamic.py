@@ -178,11 +178,22 @@ def plot_anomaly_timeseries():
 
     fig.tight_layout()
 
-    outpath = PROJECT_ROOT / "results" / "Ch2_Figures" / "anomalies" / \
-              "Fig_FS_MS_dynamic_anomaly_timeseries.png"
-    outpath.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(outpath, dpi=300, bbox_inches="tight")
-    print(f"Saved: {outpath}")
+    # SAVE + RCLONE
+    from ch2_fig_utils import get_fig_path, save_and_upload
+
+    outpath = get_fig_path(
+        project_root=PROJECT_ROOT,
+        subfolder="anomalies",
+        fig_name="Fig_FS_MS_dynamic_anomaly_timeseries.png",
+    )
+
+    save_and_upload(
+        fig,
+        outpath,
+        remote_root="gdrive:sea-ice-phase/Results/Ch2_Figures",
+        remote_subdir="anomalies",
+    )
+
 
 if __name__ == "__main__":
     plot_anomaly_timeseries()
