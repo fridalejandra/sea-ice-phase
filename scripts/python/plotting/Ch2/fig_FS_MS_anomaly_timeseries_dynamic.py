@@ -4,21 +4,24 @@
 """
 fig_FS_MS_anomaly_timeseries_dynamic.py
 
-Handcock-style anomaly time series:
-  (a) season duration anomaly (MS − FS)
+Handcock-style anomaly time series with BOTH dynamic and static:
+
+  (a) Season duration anomaly (MS − FS)
   (b) MS anomaly (retreat)
   (c) FS anomaly (advance)
 
-Uses dynamic anomalies only:
-  results/anomalies/FS_dynamic_anomalies.nc
-  results/anomalies/MS_dynamic_anomalies.nc
+Inputs (all already computed elsewhere):
+
+  results/anomalies/FS_dynamic_anomalies.nc  -> FS_dynamic_anom(year,y,x)
+  results/anomalies/MS_dynamic_anomalies.nc  -> MS_dynamic_anom(year,y,x)
+  results/anomalies/FS_static_anomalies.nc   -> FS_static_anom(year,y,x)
+  results/anomalies/MS_static_anomalies.nc   -> MS_static_anom(year,y,x)
 
 Features:
-  - area-weighted mean anomalies
-  - raw yearly curves (thin grey)
-  - LOESS-smoothed curve
-  - ±1σ band
-  - highlight 2016, 2022, 2023
+  - area-weighted mean anomalies over valid ocean
+  - DYNAMIC: raw yearly curves (thin grey), LOESS smooth (black), ±1σ band
+  - STATIC: LOESS smooth only (blue)
+  - highlight 2016, 2022, 2023 (red dots)
 """
 
 import sys
@@ -64,6 +67,12 @@ def load_dynamic_anoms():
     return fs, ms
 
 
+def load_static_anoms():
+    fs = xr.open_dataset(ANOM_DIR / "FS_static_anomalies.nc")["FS_static_anom"]
+    ms = xr.open_dataset(ANOM_DIR / "MS_static_anomalies.nc")["MS_static_anom"]
+    return fs, ms
+
+
 def load_ocean_mask():
     ds = xr.open_dataset(SECTOR_FILE)
     return ds["valid_ocean"].astype(bool).values
@@ -80,8 +89,8 @@ def compute_area_weighted_mean(da, ocean_mask):
     # If lat is available, use cosine-lat weights. Otherwise uniform.
     if "lat" in da.coords:
         lat = da["lat"].values
-        w = np.cos(np.deg2rad(lat))
-        W = np.repeat(w[:, None], da.shape[2], axis=1)
+        w1d = np.cos(np.deg2rad(lat))  # [y]
+        W = np.repeat(w1d[:, None], da.shape[2], axis=1)  # [y,x]
     else:
         W = np.ones_like(ocean_mask, dtype=float)
 
@@ -111,55 +120,92 @@ def loess_smooth(x, y, frac=0.25):
 def plot_anomaly_timeseries():
 
     # load anomalies
-    fs_anom, ms_anom = load_dynamic_anoms()
+    fs_dyn_da, ms_dyn_da = load_dynamic_anoms()
+    fs_stat_da, ms_stat_da = load_static_anoms()
     ocean_mask = load_ocean_mask()
 
-    # weighted means
-    years_fs, fs_mean = compute_area_weighted_mean(fs_anom, ocean_mask)
-    years_ms, ms_mean = compute_area_weighted_mean(ms_anom, ocean_mask)
+    # dynamic weighted means
+    years_fs_dyn, fs_dyn_mean = compute_area_weighted_mean(fs_dyn_da, ocean_mask)
+    years_ms_dyn, ms_dyn_mean = compute_area_weighted_mean(ms_dyn_da, ocean_mask)
 
-    assert np.all(years_fs == years_ms)
-    years = years_fs
+    # static weighted means
+    years_fs_stat, fs_stat_mean = compute_area_weighted_mean(fs_stat_da, ocean_mask)
+    years_ms_stat, ms_stat_mean = compute_area_weighted_mean(ms_stat_da, ocean_mask)
 
-    # season duration anomaly
-    dur = ms_mean - fs_mean
+    # ensure alignment
+    assert np.all(years_fs_dyn == years_ms_dyn)
+    assert np.all(years_fs_stat == years_ms_stat)
+    assert np.all(years_fs_dyn == years_fs_stat)
 
-    # smoothed versions
-    _, fs_smooth = loess_smooth(years, fs_mean)
-    _, ms_smooth = loess_smooth(years, ms_mean)
-    _, dur_smooth = loess_smooth(years, dur)
+    years = years_fs_dyn
 
-    # standard deviations
-    fs_std = np.nanstd(fs_mean)
-    ms_std = np.nanstd(ms_mean)
-    dur_std = np.nanstd(dur)
+    # season duration anomalies
+    dur_dyn = ms_dyn_mean - fs_dyn_mean
+    dur_stat = ms_stat_mean - fs_stat_mean
+
+    # LOESS smooth: dynamic
+    _, fs_dyn_smooth = loess_smooth(years, fs_dyn_mean)
+    _, ms_dyn_smooth = loess_smooth(years, ms_dyn_mean)
+    _, dur_dyn_smooth = loess_smooth(years, dur_dyn)
+
+    # LOESS smooth: static
+    _, fs_stat_smooth = loess_smooth(years, fs_stat_mean)
+    _, ms_stat_smooth = loess_smooth(years, ms_stat_mean)
+    _, dur_stat_smooth = loess_smooth(years, dur_stat)
+
+    # dynamic std dev for bands
+    fs_dyn_std = np.nanstd(fs_dyn_mean)
+    ms_dyn_std = np.nanstd(ms_dyn_mean)
+    dur_dyn_std = np.nanstd(dur_dyn)
+
+    # colors
+    dyn_color = "black"
+    stat_color = "#1f77b4"  # blue, colorblind-friendly
+    raw_color = "0.7"
 
     # figure
     fig, axes = plt.subplots(3, 1, figsize=(7.5, 6.5), sharex=True)
     fig.patch.set_facecolor("white")
 
     panels = [
-        ("(a) Season duration anomaly (days)", dur, dur_smooth, dur_std),
-        ("(b) Retreat anomaly (days)", ms_mean, ms_smooth, ms_std),
-        ("(c) Advance anomaly (days)", fs_mean, fs_smooth, fs_std),
+        ("(a) Season duration anomaly (days)",
+         dur_dyn, dur_dyn_smooth, dur_dyn_std,
+         dur_stat, dur_stat_smooth),
+        ("(b) Retreat anomaly (days)",
+         ms_dyn_mean, ms_dyn_smooth, ms_dyn_std,
+         ms_stat_mean, ms_stat_smooth),
+        ("(c) Advance anomaly (days)",
+         fs_dyn_mean, fs_dyn_smooth, fs_dyn_std,
+         fs_stat_mean, fs_stat_smooth),
     ]
 
-    for ax, (title, raw, smooth, sigma) in zip(axes, panels):
+    for i, (ax, (title,
+                 raw_dyn, smooth_dyn, sigma_dyn,
+                 raw_stat, smooth_stat)) in enumerate(zip(axes, panels)):
 
-        # raw grey curve
-        ax.plot(years, raw, color="0.7", linewidth=1.2)
+        # DYNAMIC raw (grey)
+        ax.plot(years, raw_dyn, color=raw_color, linewidth=1.2)
 
-        # ±sigma band
-        ax.fill_between(years, smooth - sigma, smooth + sigma,
-                        color="0.85", alpha=0.5, zorder=0)
+        # DYNAMIC ±σ band
+        ax.fill_between(
+            years,
+            smooth_dyn - sigma_dyn,
+            smooth_dyn + sigma_dyn,
+            color="0.85",
+            alpha=0.5,
+            zorder=0,
+        )
 
-        # smoothed curve
-        ax.plot(years, smooth, color="black", linewidth=1.8)
+        # DYNAMIC smooth
+        dyn_line, = ax.plot(years, smooth_dyn, color=dyn_color, linewidth=1.8)
 
-        # highlight years
+        # STATIC smooth
+        stat_line, = ax.plot(years, smooth_stat, color=stat_color, linewidth=1.5)
+
+        # highlight years (dynamic raw)
         for yy in YEARS_HI:
             if yy in years:
-                val = raw[np.where(years == yy)][0]
+                val = raw_dyn[np.where(years == yy)][0]
                 ax.scatter(yy, val, color="red", s=35, zorder=5)
 
         # reference line at 2016
@@ -171,18 +217,26 @@ def plot_anomaly_timeseries():
         ax.set_title(title, fontsize=10, fontweight="bold")
         ax.grid(alpha=0.25)
 
+        # legend only on top panel
+        if i == 0:
+            ax.legend(
+                [dyn_line, stat_line],
+                ["Dynamic", "Static"],
+                loc="upper left",
+                frameon=False,
+                fontsize=8,
+            )
+
     axes[-1].set_xlabel("Year", fontsize=9)
 
-    # adjust layout AFTER creating everything
-    fig.subplots_adjust(left=0.1, right=0.95, top=0.94, bottom=0.08, hspace=0.35)
+    fig.subplots_adjust(left=0.1, right=0.95, top=0.94,
+                        bottom=0.08, hspace=0.35)
 
-    # -----------------------------------------------------------------
     # SAVE + RCLONE
-    # -----------------------------------------------------------------
     outpath = get_fig_path(
         project_root=PROJECT_ROOT,
         subfolder="anomalies",
-        fig_name="Fig_FS_MS_dynamic_anomaly_timeseries.png",
+        fig_name="Fig_FS_MS_dynamic_static_anomaly_timeseries.png",
     )
 
     save_and_upload(
@@ -195,4 +249,3 @@ def plot_anomaly_timeseries():
 
 if __name__ == "__main__":
     plot_anomaly_timeseries()
-
