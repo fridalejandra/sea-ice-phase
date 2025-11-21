@@ -178,13 +178,10 @@ def plot_anomaly_timeseries():
 
     fig.tight_layout()
 
-    # SAVE + RCLONE
-    from ch2_fig_utils import get_fig_path, save_and_upload
-
     outpath = get_fig_path(
-        project_root=PROJECT_ROOT,
+        PROJECT_ROOT,
         subfolder="anomalies",
-        fig_name="Fig_FS_MS_dynamic_anomaly_timeseries.png",
+        fig_name="Fig_FS_MS_dynamic_anomaly_timeseries.png"
     )
 
     save_and_upload(
