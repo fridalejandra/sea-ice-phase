@@ -23,14 +23,13 @@ Features:
 
 import sys
 from pathlib import Path
-
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
 # ---------------------------------------------------------------------
-# ch2_fig_utils + project root
+# Ensure ch2_fig_utils is importable
 # ---------------------------------------------------------------------
 HERE = Path(__file__).resolve().parent
 PLOTTING_ROOT = HERE.parent  # .../plotting
@@ -47,100 +46,90 @@ from ch2_fig_utils import (
 
 set_mpl_defaults()
 
+# project paths
 PROJECT_ROOT = PROJECT_ROOT_CLUSTER
 ANOM_DIR = PROJECT_ROOT / "results" / "anomalies"
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
-
 # highlight years
 YEARS_HI = [2016, 2022, 2023]
+
 
 # ---------------------------------------------------------------------
 # LOAD DATA
 # ---------------------------------------------------------------------
-
 def load_dynamic_anoms():
     fs = xr.open_dataset(ANOM_DIR / "FS_dynamic_anomalies.nc")["FS_dynamic_anom"]
     ms = xr.open_dataset(ANOM_DIR / "MS_dynamic_anomalies.nc")["MS_dynamic_anom"]
     return fs, ms
 
+
 def load_ocean_mask():
     ds = xr.open_dataset(SECTOR_FILE)
-    # valid ocean mask already provided
     return ds["valid_ocean"].astype(bool).values
+
 
 # ---------------------------------------------------------------------
 # AREA-WEIGHTED MEAN
 # ---------------------------------------------------------------------
-
-def area_weights_from_lat(lat):
-    """Simple cosine-lat weight for polar grid."""
-    return np.cos(np.deg2rad(lat))
-
 def compute_area_weighted_mean(da, ocean_mask):
     """
     da: (year, y, x)
     ocean_mask: (y, x)
     """
-    # if lat exists, compute cosine weighting, else uniform
+    # If lat is available, use cosine-lat weights. Otherwise uniform.
     if "lat" in da.coords:
         lat = da["lat"].values
         w = np.cos(np.deg2rad(lat))
-        # broadcast to 2D
         W = np.repeat(w[:, None], da.shape[2], axis=1)
     else:
-        # fallback: uniform weights over valid ocean grid
         W = np.ones_like(ocean_mask, dtype=float)
 
     W = W * ocean_mask
     W = W / np.nansum(W)
 
-    # weighted mean for each year
-    out = []
     years = da["year"].values
+    out = []
     for y in years:
         arr = da.sel(year=y).values
         out.append(np.nansum(arr * W))
 
     return years, np.array(out)
 
+
 # ---------------------------------------------------------------------
 # LOESS SMOOTHING
 # ---------------------------------------------------------------------
-
 def loess_smooth(x, y, frac=0.25):
-    """
-    LOESS smoother. frac = smoothing span.
-    """
     lo = sm.nonparametric.lowess(y, x, frac=frac, return_sorted=True)
     return lo[:, 0], lo[:, 1]
+
 
 # ---------------------------------------------------------------------
 # PLOTTING
 # ---------------------------------------------------------------------
-
 def plot_anomaly_timeseries():
+
     # load anomalies
     fs_anom, ms_anom = load_dynamic_anoms()
     ocean_mask = load_ocean_mask()
 
-    # compute weighted means
+    # weighted means
     years_fs, fs_mean = compute_area_weighted_mean(fs_anom, ocean_mask)
     years_ms, ms_mean = compute_area_weighted_mean(ms_anom, ocean_mask)
 
-    # ensure alignment
     assert np.all(years_fs == years_ms)
     years = years_fs
 
     # season duration anomaly
     dur = ms_mean - fs_mean
 
-    # smooth curves
-    x_lo, fs_smooth = loess_smooth(years, fs_mean)
+    # smoothed versions
+    _, fs_smooth = loess_smooth(years, fs_mean)
     _, ms_smooth = loess_smooth(years, ms_mean)
     _, dur_smooth = loess_smooth(years, dur)
 
-    # std deviation bands
+    # standard deviations
     fs_std = np.nanstd(fs_mean)
     ms_std = np.nanstd(ms_mean)
     dur_std = np.nanstd(dur)
@@ -156,20 +145,15 @@ def plot_anomaly_timeseries():
     ]
 
     for ax, (title, raw, smooth, sigma) in zip(axes, panels):
-        # raw
+
+        # raw grey curve
         ax.plot(years, raw, color="0.7", linewidth=1.2)
 
-        # ±1σ band
-        ax.fill_between(
-            years,
-            smooth - sigma,
-            smooth + sigma,
-            color="0.85",
-            alpha=0.5,
-            zorder=0,
-        )
+        # ±sigma band
+        ax.fill_between(years, smooth - sigma, smooth + sigma,
+                        color="0.85", alpha=0.5, zorder=0)
 
-        # smooth
+        # smoothed curve
         ax.plot(years, smooth, color="black", linewidth=1.8)
 
         # highlight years
@@ -178,21 +162,23 @@ def plot_anomaly_timeseries():
                 val = raw[np.where(years == yy)][0]
                 ax.scatter(yy, val, color="red", s=35, zorder=5)
 
-        # vertical ref line at 2016
+        # reference line at 2016
         if 2016 in years:
-            ax.axvline(2016, color="red", linestyle="--", linewidth=1.2, alpha=0.7)
+            ax.axvline(2016, color="red", linestyle="--",
+                       linewidth=1.2, alpha=0.7)
 
         ax.set_ylabel("Days", fontsize=9)
         ax.set_title(title, fontsize=10, fontweight="bold")
-
         ax.grid(alpha=0.25)
 
     axes[-1].set_xlabel("Year", fontsize=9)
 
-    fig.tight_layout()
+    # adjust layout AFTER creating everything
+    fig.subplots_adjust(left=0.1, right=0.95, top=0.94, bottom=0.08, hspace=0.35)
 
-    from ch2_fig_utils import get_fig_path, save_and_upload
-
+    # -----------------------------------------------------------------
+    # SAVE + RCLONE
+    # -----------------------------------------------------------------
     outpath = get_fig_path(
         project_root=PROJECT_ROOT,
         subfolder="anomalies",
@@ -206,5 +192,7 @@ def plot_anomaly_timeseries():
         remote_subdir="anomalies",
     )
 
+
 if __name__ == "__main__":
     plot_anomaly_timeseries()
+
