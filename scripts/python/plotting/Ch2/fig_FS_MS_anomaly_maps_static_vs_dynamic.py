@@ -162,7 +162,7 @@ def make_clean_polar_ax(fig, nrows: int, ncols: int, index: int) -> plt.Axes:
       - white background
       - grey continents
       - NO coastlines
-      - no gridlines (clean look)
+      - no gridlines
     """
     proj = ccrs.SouthPolarStereo()
     ax = fig.add_subplot(nrows, ncols, index, projection=proj)
@@ -170,7 +170,7 @@ def make_clean_polar_ax(fig, nrows: int, ncols: int, index: int) -> plt.Axes:
     # show only Antarctic region
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
 
-    # continents only (grey)
+    # continents
     ax.add_feature(
         cfeature.LAND,
         facecolor="0.8",
@@ -178,8 +178,19 @@ def make_clean_polar_ax(fig, nrows: int, ncols: int, index: int) -> plt.Axes:
         zorder=2,
     )
 
-    # No ocean feature, no coastlines, no gridlines
-    ax.outline_patch.set_visible(False)
+    # remove coastlines & gridlines
+    ax.grid(False)
+    try:
+        ax.coastlines().set_visible(False)
+    except Exception:
+        pass
+
+    # NEW: hide outline THIS way
+    try:
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+    except Exception:
+        pass
 
     return ax
 
