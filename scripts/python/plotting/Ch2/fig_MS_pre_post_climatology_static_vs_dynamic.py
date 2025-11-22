@@ -67,18 +67,17 @@ DV_VLIM = 30                    # ±30 days for difference
 def load_ms_dyn():
     ds_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_climatology.nc")
     ds_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_anomalies.nc")
-    clim = ds_clim["MS_dynamic_climatology"]
+    clim = ds_clim["MS_dynamic_clim"]
     anom = ds_anom["MS_dynamic_anom"]
     return clim, anom
-
 
 def load_ms_static():
     ds_clim = xr.open_dataset(ANOM_DIR / "MS_static_climatology.nc")
     ds_anom = xr.open_dataset(ANOM_DIR / "MS_static_anomalies.nc")
-    clim = ds_clim["MS_static_climatology"]
+    clim = ds_clim["MS_static_clim"]
     anom = ds_anom["MS_static_anom"]
     return clim, anom
-
+w
 
 def pre_post_from_clim_anom(clim: xr.DataArray, anom: xr.DataArray):
     """
