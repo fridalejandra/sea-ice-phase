@@ -77,7 +77,7 @@ def load_ms_static():
     clim = ds_clim["MS_static_clim"]
     anom = ds_anom["MS_static_anom"]
     return clim, anom
-w
+
 
 def pre_post_from_clim_anom(clim: xr.DataArray, anom: xr.DataArray):
     """
