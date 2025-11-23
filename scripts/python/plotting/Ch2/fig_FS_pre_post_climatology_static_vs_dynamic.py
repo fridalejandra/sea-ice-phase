@@ -82,7 +82,7 @@ def _pre_post_means(da: xr.DataArray) -> tuple[xr.DataArray, xr.DataArray, xr.Da
     da: (year, y, x)
     Returns pre, post, diff (post - pre).
     """
-    da = da.sortby("year")
+    da = ds[var]  # already time-collapsed
     pre = da.sel(year=slice(YEAR_PRE_START, YEAR_PRE_END)).mean("year", skipna=True)
     post = da.sel(year=slice(YEAR_POST_START, YEAR_POST_END)).mean("year", skipna=True)
     diff = post - pre
