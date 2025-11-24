@@ -287,7 +287,7 @@ for ax, phase_name in zip(axes, ["FS", "MS"]):
         data=sub,
         x="sector",
         y="doy",
-        hue="alive",
+        hue="method",
         order=sector_order,
         palette=palette,
         split=True,
