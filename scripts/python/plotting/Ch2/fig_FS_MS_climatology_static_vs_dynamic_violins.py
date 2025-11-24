@@ -250,15 +250,38 @@ add_phase_records("MS", ms_stat_clim, ms_dyn_clim, 200, 360)
 df = pd.DataFrame.from_records(records)
 
 # ---------------------------------------------------------------------
-# Plot violins
+# Plot violins (updated)
 # ---------------------------------------------------------------------
-fig, axes = plt.subplots(2, 1, figsize=(8, 6), sharex=True, dpi=300)
 
-for ax, phase_name, ylim in zip(
-    axes,
-    ["FS", "MS"],
-    [(80, 240), (200, 360)],
-):
+sns.set(style="whitegrid")
+
+# Light, complementary colors
+palette = {
+    "Static":  "#8ecae6",
+    "Dynamic": "#ffb703",
+}
+
+sector_order = [
+    "Amundsen–Bellingshausen",
+    "Weddell",
+    "King Haakon VII",
+    "East Antarctica",
+    "Ross–Amundsen",
+]
+
+fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, dpi=300)
+
+# Panel letters + phase names
+titles = {
+    "FS": "(a) FS climatology",
+    "MS": "(b) MS climatology",
+}
+
+# Shared y-axis range for cleaner comparison
+ylim = (80, 360)
+
+for ax, phase_name in zip(axes, ["FS", "MS"]):
+
     sub = df[df["phase"] == phase_name]
 
     sns.violinplot(
@@ -266,44 +289,32 @@ for ax, phase_name, ylim in zip(
         x="sector",
         y="doy",
         hue="method",
+        order=sector_order,
+        palette=palette,
         split=True,
-        inner=None,
+        inner="quartile",      # <-- shows median + IQR
+        linewidth=1,
         cut=0,
-        linewidth=0.8,
-        palette=METHOD_PALETTE,
         ax=ax,
     )
 
+    ax.set_title(titles[phase_name], fontweight="bold", pad=8)
     ax.set_ylabel("Day of year")
-    ax.set_xlabel("")
     ax.set_ylim(*ylim)
-    ax.set_title(f"{phase_name} climatology")
+    ax.tick_params(axis="x", rotation=0)
 
-    if phase_name == "FS":
-        leg = ax.legend(
-            loc="upper left",
-            bbox_to_anchor=(1.02, 1.0),  # outside, to the right
-            borderaxespad=0.0,
-            frameon=False,
-        )
-        leg.set_title("")  # remove 'Method'
-    else:
-        ax.legend_.remove()
+# Only show legend once
+handles, labels = axes[0].get_legend_handles_labels()
+axes[0].legend(handles, labels, title="", loc="upper right", frameon=True)
+axes[1].get_legend().remove()
 
-axes[-1].set_xlabel("Sector")
+axes[1].set_xlabel("Sector")
 
-fig.subplots_adjust(bottom=0.12, top=0.92, right=0.85, hspace=0.35)
-
-
-out_path = get_fig_path(
-    PROJECT_ROOT_CLUSTER,
-    subfolder="climatologies",
-    fig_name="Fig_FS_MS_climatology_static_vs_dynamic_violins.png",
-)
+fig.tight_layout()
 
 save_and_upload(
     fig,
     out_path,
     remote_root="gdrive:sea-ice-phase/Results/Ch2_Figures",
-    remote_subdir="climatologies",
+    remote_subdir="climatology",
 )
