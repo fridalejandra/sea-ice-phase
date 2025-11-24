@@ -67,6 +67,7 @@ DYN_DIR_MS = DYN_ROOT / "MS" / "p0.7"
 
 SECTOR_FILE = PROJECT_ROOT_CLUSTER / "data" / "canonical_sectors.nc"
 
+# numeric IDs used internally; labels only used for tick text
 sector_labels = {
     1: "Amundsen–\nBellingshausen",
     2: "Weddell",
@@ -82,8 +83,8 @@ sector_ids = [1, 2, 3, 4, 5]
 ds_sect = xr.open_dataset(SECTOR_FILE)
 sector_mask = ds_sect["sector_id"].values
 ocean_mask = ds_sect["valid_ocean"].astype(bool).values
+ds_sect.close()
 
-# Sanity: we’ll check shapes later once we’ve loaded a phase field
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
@@ -124,8 +125,7 @@ def _load_static_year(phase: str, year: int) -> xr.DataArray | None:
     return da
 
 
-
-def _load_dynamic_year(phase: str, year: int) -> xr.DataArray:
+def _load_dynamic_year(phase: str, year: int) -> xr.DataArray | None:
     """
     Dynamic FS/MS files in:
       FS: .../quantile_k5/FS/p0.7/FS_YYYY.nc
@@ -144,6 +144,7 @@ def _load_dynamic_year(phase: str, year: int) -> xr.DataArray:
 
     ds = xr.open_dataset(fpath)
     if phase not in ds:
+        ds.close()
         raise KeyError(f"{phase} not in {fpath}; vars={list(ds.data_vars)}")
 
     da = ds[phase].load()
@@ -206,10 +207,21 @@ if fs_stat_clim.shape != sector_mask.shape:
 # ---------------------------------------------------------------------
 # Build DataFrame for violins
 # ---------------------------------------------------------------------
-records = []
+records: list[dict] = []
 
 
-def add_phase_records(phase_name, da_static, da_dynamic, ylim_min, ylim_max):
+def add_phase_records(
+    phase_name: str,
+    da_static: xr.DataArray,
+    da_dynamic: xr.DataArray,
+    ylim_min: float,
+    ylim_max: float,
+) -> None:
+    """
+    Extract static/dynamic climatology DOY values by sector into records.
+
+    We keep sector as numeric ID; pretty labels are applied only at plotting time.
+    """
     for sec in sector_ids:
         mask = (sector_mask == sec) & ocean_mask
 
@@ -219,7 +231,7 @@ def add_phase_records(phase_name, da_static, da_dynamic, ylim_min, ylim_max):
         stat_vals = stat_vals[np.isfinite(stat_vals)]
         dyn_vals = dyn_vals[np.isfinite(dyn_vals)]
 
-        # Optional: clip to tidy range
+        # Clip to tidy range
         stat_vals = stat_vals[(stat_vals >= ylim_min) & (stat_vals <= ylim_max)]
         dyn_vals = dyn_vals[(dyn_vals >= ylim_min) & (dyn_vals <= ylim_max)]
 
@@ -227,7 +239,7 @@ def add_phase_records(phase_name, da_static, da_dynamic, ylim_min, ylim_max):
             records.append(
                 {
                     "phase": phase_name,
-                    "sector": sector_labels[sec],
+                    "sector": sec,        # numeric ID
                     "method": "Static",
                     "doy": float(v),
                 }
@@ -236,51 +248,43 @@ def add_phase_records(phase_name, da_static, da_dynamic, ylim_min, ylim_max):
             records.append(
                 {
                     "phase": phase_name,
-                    "sector": sector_labels[sec],
+                    "sector": sec,        # numeric ID
                     "method": "Dynamic",
                     "doy": float(v),
                 }
             )
 
 
-# Your existing ranges
+# Ranges for FS / MS
 add_phase_records("FS", fs_stat_clim, fs_dyn_clim, 80, 240)
 add_phase_records("MS", ms_stat_clim, ms_dyn_clim, 200, 360)
 
 df = pd.DataFrame.from_records(records)
 
 # ---------------------------------------------------------------------
-# Plot violins (updated)
+# Plot violins
 # ---------------------------------------------------------------------
 
 sns.set(style="whitegrid")
 
-# Light, complementary colors
+# Light, complementary colors (line-only violins)
 palette = {
     "Static":  "#8ecae6",
     "Dynamic": "#ffb703",
 }
 
-sector_order = [
-    "Amundsen–Bellingshausen",
-    "Weddell",
-    "King Haakon VII",
-    "East Antarctica",
-    "Ross–Amundsen",
-]
+# use IDs for grouping/order; labels applied after
+sector_order = sector_ids  # [1, 2, 3, 4, 5]
 
 fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, dpi=300)
 
-# Panel letters + phase names
+# Panel letters only, no "climatology" in text
 titles = {
-    "FS": "(a) FS climatology",
-    "MS": "(b) MS climatology",
+    "FS": "(a) FS",
+    "MS": "(b) MS",
 }
 
-
-
 for ax, phase_name in zip(axes, ["FS", "MS"]):
-
     sub = df[df["phase"] == phase_name]
 
     sns.violinplot(
@@ -291,12 +295,15 @@ for ax, phase_name in zip(axes, ["FS", "MS"]):
         order=sector_order,
         palette=palette,
         split=True,
-        inner="quartile",      # <-- shows median + IQR
+        inner="quartile",   # shows median + IQR
         linewidth=1,
         cut=0,
         ax=ax,
-        fill=False
+        fill=False,
     )
+
+    # Replace numeric sector IDs with pretty labels
+    ax.set_xticklabels([sector_labels[i] for i in sector_order])
 
     ax.set_title(titles[phase_name], fontweight="bold", pad=8)
     ax.set_ylabel("Day of year")
@@ -311,12 +318,14 @@ axes[1].set_xlabel("Sector")
 
 fig.tight_layout()
 
+# ---------------------------------------------------------------------
+# Save / upload
+# ---------------------------------------------------------------------
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
-    subfolder="climatology ",
+    subfolder="climatology",
     fig_name="Fig_FS_MS_climatology_static_vs_dynamic_violins.png",
 )
-
 
 save_and_upload(
     fig,
