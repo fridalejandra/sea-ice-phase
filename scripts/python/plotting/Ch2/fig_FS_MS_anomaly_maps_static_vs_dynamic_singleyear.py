@@ -51,7 +51,7 @@ REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
 SUBFOLDER   = "anomalies/spatial"
 
 # year to plot
-TARGET_YEAR = 2022  # change as needed
+TARGET_YEAR = 2016  # change as needed
 
 VMAX = 40.0  # days, symmetric range for anomalies/diffs
 
