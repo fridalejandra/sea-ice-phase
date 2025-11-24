@@ -277,8 +277,7 @@ titles = {
     "MS": "(b) MS climatology",
 }
 
-# Shared y-axis range for cleaner comparison
-ylim = (80, 360)
+
 
 for ax, phase_name in zip(axes, ["FS", "MS"]):
 
@@ -288,7 +287,7 @@ for ax, phase_name in zip(axes, ["FS", "MS"]):
         data=sub,
         x="sector",
         y="doy",
-        hue="method",
+        hue="alive",
         order=sector_order,
         palette=palette,
         split=True,
@@ -296,11 +295,11 @@ for ax, phase_name in zip(axes, ["FS", "MS"]):
         linewidth=1,
         cut=0,
         ax=ax,
+        fill=False
     )
 
     ax.set_title(titles[phase_name], fontweight="bold", pad=8)
     ax.set_ylabel("Day of year")
-    ax.set_ylim(*ylim)
     ax.tick_params(axis="x", rotation=0)
 
 # Only show legend once
@@ -311,6 +310,13 @@ axes[1].get_legend().remove()
 axes[1].set_xlabel("Sector")
 
 fig.tight_layout()
+
+out_path = get_fig_path(
+    PROJECT_ROOT_CLUSTER,
+    subfolder="climatology ",
+    fig_name="Fig_FS_MS_climatology_static_vs_dynamic_violins.png",
+)
+
 
 save_and_upload(
     fig,
