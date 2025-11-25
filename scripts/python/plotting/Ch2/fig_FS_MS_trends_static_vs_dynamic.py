@@ -5,19 +5,19 @@
 FS/MS trend comparison: static vs dynamic (all 3 levels in one figure).
 
 - Level 1 (col 1): pre–post sign-classification map
-    Categories (per gridcell):
-      1 = both earlier (Δ < 0 for static & dynamic)
-      2 = only dynamic earlier
-      3 = only static earlier
-      4 = both later (Δ > 0 for both)
-      0 = other / no-change / masked
+    Classes (per gridcell):
+      0 = masked/other
+      1 = both earlier       (Δ < 0 for static & dynamic)
+      2 = only dynamic       (Δ < 0 for dynamic only)
+      3 = only static        (Δ < 0 for static only)
+      4 = both later         (Δ > 0 for static & dynamic)
 
 - Level 2 (col 2): sector-mean ΔFS / ΔMS barplots
-    Bars for static + dynamic in each sector.
+    Bars for static + dynamic in each canonical sector.
 
 - Level 3 (col 3): trend-agreement map from full anomalies
+    0 = not both earlier
     1 = both methods have negative linear trend (earlier over time)
-    0 = otherwise / masked
 
 Rows:
   Row 1: FS
@@ -62,25 +62,21 @@ ANOM_DIR = PROJECT_ROOT / "results" / "anomalies"
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
-SUBFOLDER   = "trends"
+SUBFOLDER = "trends"
 
-# pre/post definition (your choice C)
-PRE_START, PRE_END   = 1980, 2017
+# Pre/post definition
+PRE_START, PRE_END = 1980, 2017
 POST_START, POST_END = 2018, 2023
 
-# symmetric range used when we need it
-VMAX_DIFF = 30.0  # days
-
-# sector labels
-sector_labels = {
-    1: "Amundsen–\nBellingshausen",
-    2: "Weddell",
-    3: "King Haakon VII",
-    4: "East Antarctica",
-    5: "Ross–\nAmundsen",
-}
+# Canonical sectors: numeric IDs for logic, labels for plotting
 sector_ids = [1, 2, 3, 4, 5]
-
+sector_labels = {
+    1: "A–B",   # Amundsen–Bellingshausen
+    2: "WED",   # Weddell
+    3: "KHV",   # King Haakon VII
+    4: "EA",    # East Antarctica
+    5: "RA",    # Ross–Amundsen
+}
 
 # ---------------------------------------------------------------------
 # Load anomalies + mask
@@ -91,17 +87,33 @@ def load_fs_ms_clim_anom():
     and the sector / ocean mask.
     Adjust variable names here if your files differ.
     """
-    fs_dyn_clim = xr.open_dataset(ANOM_DIR / "FS_dynamic_climatology.nc")["FS_dynamic_clim"]
-    fs_dyn_anom = xr.open_dataset(ANOM_DIR / "FS_dynamic_anomalies.nc")["FS_dynamic_anom"]
+    fs_dyn_clim = xr.open_dataset(ANOM_DIR / "FS_dynamic_climatology.nc")[
+        "FS_dynamic_clim"
+    ]
+    fs_dyn_anom = xr.open_dataset(ANOM_DIR / "FS_dynamic_anomalies.nc")[
+        "FS_dynamic_anom"
+    ]
 
-    ms_dyn_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_climatology.nc")["MS_dynamic_clim"]
-    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_anomalies.nc")["MS_dynamic_anom"]
+    ms_dyn_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_climatology.nc")[
+        "MS_dynamic_clim"
+    ]
+    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_anomalies.nc")[
+        "MS_dynamic_anom"
+    ]
 
-    fs_sta_clim = xr.open_dataset(ANOM_DIR / "FS_static_climatology.nc")["FS_static_clim"]
-    fs_sta_anom = xr.open_dataset(ANOM_DIR / "FS_static_anomalies.nc")["FS_static_anom"]
+    fs_sta_clim = xr.open_dataset(ANOM_DIR / "FS_static_climatology.nc")[
+        "FS_static_clim"
+    ]
+    fs_sta_anom = xr.open_dataset(ANOM_DIR / "FS_static_anomalies.nc")[
+        "FS_static_anom"
+    ]
 
-    ms_sta_clim = xr.open_dataset(ANOM_DIR / "MS_static_climatology.nc")["MS_static_clim"]
-    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_anomalies.nc")["MS_static_anom"]
+    ms_sta_clim = xr.open_dataset(ANOM_DIR / "MS_static_climatology.nc")[
+        "MS_static_clim"
+    ]
+    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_anomalies.nc")[
+        "MS_static_anom"
+    ]
 
     ds_mask = xr.open_dataset(SECTOR_FILE)
     valid_ocean = ds_mask["valid_ocean"].astype(bool)
@@ -113,12 +125,12 @@ def load_fs_ms_clim_anom():
         "FS_dynamic_anom": fs_dyn_anom,
         "MS_dynamic_clim": ms_dyn_clim,
         "MS_dynamic_anom": ms_dyn_anom,
-        "FS_static_clim":  fs_sta_clim,
-        "FS_static_anom":  fs_sta_anom,
-        "MS_static_clim":  ms_sta_clim,
-        "MS_static_anom":  ms_sta_anom,
-        "valid_ocean":     valid_ocean,
-        "sector_mask":     sector_mask,
+        "FS_static_clim": fs_sta_clim,
+        "FS_static_anom": fs_sta_anom,
+        "MS_static_clim": ms_sta_clim,
+        "MS_static_anom": ms_sta_anom,
+        "valid_ocean": valid_ocean,
+        "sector_mask": sector_mask,
     }
 
 
@@ -164,17 +176,16 @@ def make_sign_class_map(diff_dyn, diff_sta, valid_ocean, thresh=0.0):
     cls = np.zeros_like(dyn, dtype=np.int8)
 
     both_earlier = (dyn < -thresh) & (sta < -thresh)
-    only_dyn     = (dyn < -thresh) & ~(sta < -thresh)
-    only_sta     = (sta < -thresh) & ~(dyn < -thresh)
-    both_later   = (dyn > +thresh) & (sta > +thresh)
+    only_dyn = (dyn < -thresh) & ~(sta < -thresh)
+    only_sta = (sta < -thresh) & ~(dyn < -thresh)
+    both_later = (dyn > +thresh) & (sta > +thresh)
 
     cls[both_earlier] = 1
-    cls[only_dyn]     = 2
-    cls[only_sta]     = 3
-    cls[both_later]   = 4
+    cls[only_dyn] = 2
+    cls[only_sta] = 3
+    cls[both_later] = 4
 
-    # mask out where valid_ocean is False
-    cls[~valid_ocean.values] = 0
+    cls[~valid_ocean.values] = 0  # mask out land / invalid
 
     return xr.DataArray(
         cls,
@@ -203,8 +214,8 @@ def sector_mean_deltas(diff_dyn, diff_sta, sector_mask, valid_ocean):
             dyn_vals = d_dyn.where(mask).values
             sta_vals = d_sta.where(mask).values
 
-            dyn_mean = np.nanmean(dyn_vals)
-            sta_mean = np.nanmean(sta_vals)
+            dyn_mean = float(np.nanmean(dyn_vals))
+            sta_mean = float(np.nanmean(sta_vals))
 
             records.append(
                 {
@@ -212,7 +223,7 @@ def sector_mean_deltas(diff_dyn, diff_sta, sector_mask, valid_ocean):
                     "sector_id": sec,
                     "sector_label": sector_labels[sec],
                     "method": "Dynamic",
-                    "delta": float(dyn_mean),
+                    "delta": dyn_mean,
                 }
             )
             records.append(
@@ -221,7 +232,7 @@ def sector_mean_deltas(diff_dyn, diff_sta, sector_mask, valid_ocean):
                     "sector_id": sec,
                     "sector_label": sector_labels[sec],
                     "method": "Static",
-                    "delta": float(sta_mean),
+                    "delta": sta_mean,
                 }
             )
 
@@ -293,7 +304,13 @@ def make_polar_ax(fig, gs, row, col):
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
     ax.add_feature(cfeature.LAND, facecolor="0.8", edgecolor="none", zorder=2)
     ax.set_facecolor("white")
-    ax.gridlines(draw_labels=False, linewidth=0.3, color="0.7", alpha=0.4, linestyle="--")
+    ax.gridlines(
+        draw_labels=False,
+        linewidth=0.3,
+        color="0.7",
+        alpha=0.4,
+        linestyle="--",
+    )
     return ax
 
 
@@ -301,17 +318,17 @@ def plot_sign_class_map(ax, da_class, title):
     """
     Plot Level 1 classification map with categorical colors.
     """
-    # categorical colormap
+    # Improved intuitive colormap for pre–post classes
     cmap = mcolors.ListedColormap(
         [
-            "white",     # 0 = masked/other
-            "#1b9e77",   # 1 = both earlier
-            "#7570b3",   # 2 = only dynamic earlier
-            "#d95f02",   # 3 = only static earlier
-            "#e7298a",   # 4 = both later
+            "#ffffff",  # 0 = mask/other
+            "#2b8cbe",  # 1 = both earlier (blue)
+            "#41ab5d",  # 2 = only dynamic earlier (green)
+            "#fdb462",  # 3 = only static earlier (orange)
+            "#d73027",  # 4 = both later (red)
         ]
     )
-    bounds = [ -0.5, 0.5, 1.5, 2.5, 3.5, 4.5 ]
+    bounds = [-0.5, 0.5, 1.5, 2.5, 3.5, 4.5]
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
     x = da_class["x"]
@@ -334,7 +351,7 @@ def plot_trend_agreement_map(ax, da_agree, title):
     """
     Plot Level 3 trend-agreement map: 1 = both earlier, 0 = else.
     """
-    cmap = mcolors.ListedColormap(["white", "#1b9e77"])
+    cmap = mcolors.ListedColormap(["#ffffff", "#2b8cbe"])  # white / blue
     bounds = [-0.5, 0.5, 1.5]
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
@@ -367,33 +384,41 @@ def make_combined_figure(fields):
     _, _, fs_dyn_diff = compute_pre_post(
         fields["FS_dynamic_clim"],
         fields["FS_dynamic_anom"],
-        PRE_START, PRE_END, POST_START, POST_END,
+        PRE_START,
+        PRE_END,
+        POST_START,
+        POST_END,
     )
     _, _, fs_sta_diff = compute_pre_post(
         fields["FS_static_clim"],
         fields["FS_static_anom"],
-        PRE_START, PRE_END, POST_START, POST_END,
+        PRE_START,
+        PRE_END,
+        POST_START,
+        POST_END,
     )
 
     # MS diffs
     _, _, ms_dyn_diff = compute_pre_post(
         fields["MS_dynamic_clim"],
         fields["MS_dynamic_anom"],
-        PRE_START, PRE_END, POST_START, POST_END,
+        PRE_START,
+        PRE_END,
+        POST_START,
+        POST_END,
     )
     _, _, ms_sta_diff = compute_pre_post(
         fields["MS_static_clim"],
         fields["MS_static_anom"],
-        PRE_START, PRE_END, POST_START, POST_END,
+        PRE_START,
+        PRE_END,
+        POST_START,
+        POST_END,
     )
 
-    # package for Level 2 sector means
-    diff_dyn = xr.Dataset(
-        {"FS": fs_dyn_diff, "MS": ms_dyn_diff}
-    )
-    diff_sta = xr.Dataset(
-        {"FS": fs_sta_diff, "MS": ms_sta_diff}
-    )
+    # Package for Level 2 sector means
+    diff_dyn = xr.Dataset({"FS": fs_dyn_diff, "MS": ms_dyn_diff})
+    diff_sta = xr.Dataset({"FS": fs_sta_diff, "MS": ms_sta_diff})
 
     # Level 1 sign-class maps
     fs_class = make_sign_class_map(fs_dyn_diff, fs_sta_diff, valid_ocean)
@@ -403,7 +428,6 @@ def make_combined_figure(fields):
     df_sector = sector_mean_deltas(diff_dyn, diff_sta, sector_mask, valid_ocean)
 
     # ---------- Level 3: trend agreement from full anomalies ----------
-
     years = fields["FS_dynamic_anom"]["year"].values
     print(f"[INFO] Trend years span: {years.min()}–{years.max()}")
 
@@ -430,13 +454,14 @@ def make_combined_figure(fields):
 
     print("[INFO] Pre–post both earlier (FS):", frac_both_earlier(fs_class))
     print("[INFO] Pre–post both earlier (MS):", frac_both_earlier(ms_class))
-
     print("[INFO] Trend both earlier (FS):", frac_trend_agree(fs_agree))
     print("[INFO] Trend both earlier (MS):", frac_trend_agree(ms_agree))
 
     # ---------- Figure layout ----------
     fig = plt.figure(figsize=(12, 8))
-    gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], width_ratios=[1.3, 1.0, 1.3])
+    gs = fig.add_gridspec(
+        2, 3, height_ratios=[1, 1], width_ratios=[1.3, 1.0, 1.3]
+    )
 
     # ----- Row 1: FS -----
     # Level 1 – FS pre/post sign class map
@@ -447,10 +472,10 @@ def make_combined_figure(fields):
 
     # Level 2 – FS sector barplot
     ax_fs_L2 = fig.add_subplot(gs[0, 1])
-    df_fs = df_sector[df_sector["phase"] == "FS"]
+    df_fs = df_sector[df_sector["phase"] == "FS"].copy()
 
-    # manual barplot to avoid seaborn dependency issues
     methods = ["Static", "Dynamic"]
+    colors = {"Static": "#4575b4", "Dynamic": "#d73027"}
     x_positions = np.arange(len(sector_ids))
     width = 0.36
 
@@ -461,6 +486,7 @@ def make_combined_figure(fields):
             data["delta"].values,
             width=width,
             label=method,
+            color=colors[method],
         )
 
     ax_fs_L2.axhline(0, color="0.4", linewidth=0.8)
@@ -487,7 +513,7 @@ def make_combined_figure(fields):
 
     # Level 2 – MS sector barplot
     ax_ms_L2 = fig.add_subplot(gs[1, 1])
-    df_ms = df_sector[df_sector["phase"] == "MS"]
+    df_ms = df_sector[df_sector["phase"] == "MS"].copy()
 
     for i, method in enumerate(methods):
         data = df_ms[df_ms["method"] == method].sort_values("sector_id")
@@ -495,7 +521,8 @@ def make_combined_figure(fields):
             x_positions + (i - 0.5) * width,
             data["delta"].values,
             width=width,
-            label=method if i == 0 else None,  # legend only once if you want
+            label=method if i == 0 else None,
+            color=colors[method],
         )
 
     ax_ms_L2.axhline(0, color="0.4", linewidth=0.8)
@@ -513,7 +540,7 @@ def make_combined_figure(fields):
     )
 
     # ---------- Colorbars ----------
-    # Level 1 colorbar (classification) – shared for FS/MS
+    # Level 1 colorbar (classification) – shared FS/MS
     cax1 = fig.add_axes([0.08, 0.06, 0.35, 0.02])
     cb1 = fig.colorbar(
         im_fs_class,
@@ -524,13 +551,12 @@ def make_combined_figure(fields):
     )
     cb1.set_label("Pre–post class", fontsize=9)
     cb1.ax.set_xticklabels(
-        ["mask/other", "both earlier", "only dynamic", "only static", "both later"],
-        rotation=0,
+        ["mask", "both earlier", "only dyn", "only stat", "both later"],
         fontsize=7,
     )
     cb1.outline.set_visible(False)
 
-    # Level 3 colorbar (trend agreement) – shared for FS/MS
+    # Level 3 colorbar (trend agreement) – shared FS/MS
     cax3 = fig.add_axes([0.57, 0.06, 0.35, 0.02])
     cb3 = fig.colorbar(
         im_fs_trend,
