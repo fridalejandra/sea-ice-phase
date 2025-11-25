@@ -321,7 +321,7 @@ def plot_sign_class_map(ax, da_class, title):
     # Improved intuitive colormap for pre–post classes
     cmap = mcolors.ListedColormap(
         [
-            "#ffffff",  # 0 = mask/other
+            "#f0f0f0",  # 0 = mask/other (light grey)
             "#2b8cbe",  # 1 = both earlier (blue)
             "#41ab5d",  # 2 = only dynamic earlier (green)
             "#fdb462",  # 3 = only static earlier (orange)
@@ -351,7 +351,12 @@ def plot_trend_agreement_map(ax, da_agree, title):
     """
     Plot Level 3 trend-agreement map: 1 = both earlier, 0 = else.
     """
-    cmap = mcolors.ListedColormap(["#ffffff", "#2b8cbe"])  # white / blue
+    cmap = mcolors.ListedColormap(
+        [
+            "#f0f0f0",  # 0 = not both earlier (light grey)
+            "#2b8cbe",  # 1 = both earlier (blue)
+        ]
+    )
     bounds = [-0.5, 0.5, 1.5]
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
@@ -494,7 +499,7 @@ def make_combined_figure(fields):
     ax_fs_L2.set_xticklabels(
         [sector_labels[s] for s in sector_ids], rotation=0
     )
-    ax_fs_L2.set_ylabel("ΔFS (post − pre, days)")
+    ax_fs_L2.set_ylabel("Sector mean ΔFS (days)")
     ax_fs_L2.set_title("(b) FS sector mean Δ", fontweight="bold", fontsize=9)
     ax_fs_L2.legend(frameon=True, fontsize=8)
 
@@ -530,7 +535,7 @@ def make_combined_figure(fields):
     ax_ms_L2.set_xticklabels(
         [sector_labels[s] for s in sector_ids], rotation=0
     )
-    ax_ms_L2.set_ylabel("ΔMS (post − pre, days)")
+    ax_ms_L2.set_ylabel("Sector mean ΔMS (days)")
     ax_ms_L2.set_title("(e) MS sector mean Δ", fontweight="bold", fontsize=9)
 
     # Level 3 – MS trend-agreement map
@@ -551,9 +556,10 @@ def make_combined_figure(fields):
     )
     cb1.set_label("Pre–post class", fontsize=9)
     cb1.ax.set_xticklabels(
-        ["mask", "both earlier", "only dyn", "only stat", "both later"],
+        ["mask/land", "both earlier", "only dyn", "only stat", "both later"],
         fontsize=7,
     )
+
     cb1.outline.set_visible(False)
 
     # Level 3 colorbar (trend agreement) – shared FS/MS
@@ -566,7 +572,10 @@ def make_combined_figure(fields):
         ticks=[0, 1],
     )
     cb3.set_label("Trend class", fontsize=9)
-    cb3.ax.set_xticklabels(["not both earlier", "both earlier"], fontsize=7)
+    cb3.ax.set_xticklabels(
+        ["other", "both earlier"],
+        fontsize=7,
+    )
     cb3.outline.set_visible(False)
 
     fig.tight_layout(rect=[0.02, 0.10, 0.98, 0.98])
