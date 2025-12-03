@@ -71,7 +71,7 @@ PROJECT_ROOT_CLUSTER = Path("/user/geog/falejandraperez/sea-ice-phase")
 STATIC_SMMR_DIR = PROJECT_ROOT_CLUSTER / "results" / "sensitivity" / "SMMR_phase"
 
 # Dynamic (new) phase, percentile + slope, and merged SMMR record
-DYNAMIC_SMMR_DIR = PROJECT_ROOT_CLUSTER / "results" / "SMMR_phase"
+DYNAMIC_THRESH_DIR = PROJECT_ROOT_CLUSTER / "results" / "dynamic_thresholds"
 
 def load_static_phase_year(
     phase: str,
@@ -99,26 +99,56 @@ def load_static_phase_year(
     ds = xr.open_dataset(fname)
     return ds[phase]
 
+
 def load_dynamic_phase_climatology(
     phase: str,
     year_start: int,
     year_end: int,
+    scheme: str = "quantile_slope",
+    k: int = 5,
+    p: float = 0.70,
+    dC_min: float = 0.03,
 ) -> xr.DataArray:
     """
-    Climatology of dynamic phase (FS/MS/ME) using the merged SMMR files:
-        results/SMMR_phase/seaice_phases_SMMR_YYYY.nc
+    Climatology of dynamic phase (FS/MS/ME) directly from dynamic-threshold files.
 
-    phase : "FS", "MS", "ME"
+    Parameters
+    ----------
+    phase : {"FS", "MS", "ME"}
+    year_start, year_end : int
+        Range of years to include.
+    scheme : str
+        Dynamic scheme name, e.g. "quantile_slope".
+    k : int
+        Persistence window (must match what you used in run_dynamic_thresholds_staticSlope.py).
+    p : float
+        SIC percentile used in the dynamic threshold.
+    dC_min : float
+        Minimum daily SIC change used in the slope condition.
+
+    Returns
+    -------
+    DataArray [y, x]
+        Mean over years of the requested phase.
     """
     years = np.arange(year_start, year_end + 1)
-    fpaths = [
-        DYNAMIC_SMMR_DIR / f"seaice_phases_SMMR_{y}.nc"
-        for y in years
-    ]
+
+    # example: .../dynamic_thresholds/quantile_slope_k5/FS/p0.7_dC_min0.03/
+    tag = f"p{p}_dC_min{dC_min}"
+    base_dir = (
+        DYNAMIC_THRESH_DIR
+        / f"{scheme}_k{k}"
+        / phase
+        / tag
+    )
+
+    fpaths = [base_dir / f"{phase}_{y}.nc" for y in years]
+
     ds = xr.open_mfdataset(fpaths, concat_dim="year", combine="nested")
     ds = ds.assign_coords(year=("year", years))
     da = ds[phase]
     return da.mean("year", skipna=True)
+
 
 
 # ---------------------------------------------------------------------
