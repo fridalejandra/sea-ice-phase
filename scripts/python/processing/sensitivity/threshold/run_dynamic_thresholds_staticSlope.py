@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Run dynamic-threshold phase dates using your existing slope+H detector.
+Run dynamic-threshold phase dates using a percentile + slope detector.
 - You choose which dynamic schemes and parameters to test.
 - k fixed to 5 by default (fast).
 - Reuses baseline stats (μ, σ, Q) per year to avoid recomputation.
-- Outputs FS/MS per year as NetCDF, like your static runs.
+- Outputs FS/MS/ME per year as NetCDF, like your static runs.
 
-To keep runtime reasonable TODAY:
+To keep runtime reasonable:
   * Start with YEARS_SAMPLE (few years) to sanity-check.
   * Then flip USE_FULL_YEARS=True.
 """
@@ -39,19 +39,16 @@ FEB29_MODE   = "drop"          # standardize calendar to 365
 MS_START_MMDD = "-08-15"; MS_END_MMDD = "-02-28"
 FS_START_MMDD = "-02-15"; FS_END_MMDD = "-09-30"
 
-# Dynamic schemes to run (choose a small set first!)
+# Dynamic schemes to run (dynamic percentile + slope condition)
 RUN_SCHEMES = [
-    ("mu_sigma", {"alpha": 1.0,
-                  "win_fs": ("02-01","03-31"),
-                  "win_ms": ("08-01","09-30")}),
-    ("quantile", {"p": 0.70,
-                  "win_fs": ("02-01","03-31"),
-                  "win_ms": ("08-01","09-30")}),
-    # Uncomment later if you want the slope-scaled:
-    # ("slope_scaled", {"gamma": 40.0,
-    #                   "win_fs": ("02-01","03-31"),
-    #                   "win_ms": ("08-01","09-30")}),
+    ("quantile_slope", {
+        "p": 0.70,                     # SIC percentile
+        "dC_min": 0.03,                # minimum daily SIC change (0-1 units)
+        "win_fs": ("02-01", "03-31"),  # late-winter window for FS threshold
+        "win_ms": ("08-01", "09-30"),  # late-summer window for MS threshold
+    }),
 ]
+
 
 # -------------- helpers -------------- #
 def standardize_calendar(da: xr.DataArray, mode="drop"):
@@ -87,19 +84,58 @@ def find_last_event_dyn(ts, thr_scalar, k, above: bool):
     return int(idxs[-1])
 
 
+def first_run_k_bool(cond: np.ndarray, k: int):
+    """Index of first k-day run of True in 1D boolean array, else nan."""
+    n = cond.size
+    if n < k or not cond.any():
+        return np.nan
+    for t in range(0, n - k + 1):
+        if cond[t] and cond[t:t+k].all():
+            return t
+    return np.nan
+
+def last_run_k_bool(cond: np.ndarray, k: int):
+    """Index of last k-day run of True in 1D boolean array, else nan."""
+    n = cond.size
+    if n < k or not cond.any():
+        return np.nan
+    for t in range(n - k, -1, -1):
+        if cond[t] and cond[t:t+k].all():
+            return t
+    return np.nan
+
+
 def save_year_field(out_dir, year, arr, varname, template_ds):
     Path(out_dir).mkdir(parents=True, exist_ok=True)
-    xr.Dataset(
-        {varname: (("y","x"), arr)},
-        coords={"x": template_ds.x, "y": template_ds.y},
-        attrs={"note": f"{varname} | year={year}"}
-    ).to_netcdf(os.path.join(out_dir, f"{varname}_{year}.nc"))
+    out_path = os.path.join(out_dir, f"{varname}_{year}.nc")
+    ny, nx = arr.shape
+    da_out = xr.DataArray(
+        arr,
+        coords={"y": template_ds["y"], "x": template_ds["x"]},
+        dims=("y", "x"),
+        name=varname
+    )
+    da_out.attrs["long_name"] = f"{varname} day-of-year"
+    da_out.attrs["sensor"] = SENSOR
+    ds_out = da_out.to_dataset()
+    ds_out.to_netcdf(out_path, mode="w")
+    print(f"  wrote {out_path}")
 
-# ---------- dynamic threshold builders ---------- #
-def _late_window(ice, y, win):
-    return ice.sel(time=slice(f"{y}-{win[0]}", f"{y}-{win[1]}"))
+
+# ---------- threshold builders ---------- #
+def _late_window(ice365, year, win):
+    """
+    Extract a simple month-day window in a given year.
+
+    win: (start_mm_dd, end_mm_dd) e.g. ("02-01", "03-31")
+    """
+    start_iso = f"{year}-{win[0]}"
+    end_iso   = f"{year}-{win[1]}"
+    da = ice365.sel(time=slice(start_iso, end_iso))
+    return da
 
 def thr_mu_sigma(ice, year, phase, params):
+    """μ ± α σ thresholds as a reference scheme."""
     if phase == "FS":
         da = _late_window(ice, year, params["win_fs"])
         mu = da.mean("time", skipna=True)
@@ -116,6 +152,7 @@ def thr_mu_sigma(ice, year, phase, params):
         return T.astype("float32")
 
 def thr_quantile(ice, year, phase, params):
+    """Percentile thresholds in late winter / late summer."""
     if phase == "FS":
         da = _late_window(ice, year, params["win_fs"])
         T = da.quantile(params["p"], dim="time", skipna=True)
@@ -143,13 +180,16 @@ def thr_slope_scaled(ice, year, phase, params):
         return T.astype("float32")
 
 THR_BUILDERS = {
-    "mu_sigma":     thr_mu_sigma,
-    "quantile":     thr_quantile,
-    "slope_scaled": thr_slope_scaled,
+    "mu_sigma":       thr_mu_sigma,
+    "quantile":       thr_quantile,
+    "slope_scaled":   thr_slope_scaled,
+    "quantile_slope": thr_quantile,  # same SIC threshold, extra slope logic in detector
 }
 
+
 # ---------- per-year compute using dynamic T(y,x) ---------- #
-def compute_FS_MS_ME_year_dyn(ice365, year, T_FS, T_MS, k, landmask, template_ds):
+def compute_FS_MS_ME_year_dyn(ice365, year, T_FS, T_MS, k, landmask, template_ds,
+                              scheme, params):
     ny, nx = ice365.y.size, ice365.x.size
     FS = np.full((ny, nx), np.nan, dtype=float)
     MS = np.full((ny, nx), np.nan, dtype=float)
@@ -174,6 +214,46 @@ def compute_FS_MS_ME_year_dyn(ice365, year, T_FS, T_MS, k, landmask, template_ds
             ts_r = col_MS[:, i]
             ts_a = col_FS[:, i]
 
+            # --------------- quantile_slope: SIC percentile + ΔSIC --------------- #
+            if scheme == "quantile_slope":
+                dC_min = float(params.get("dC_min", 0.03))
+
+                # retreat / melt start (MS): need k days BELOW threshold
+                # AND k days of sufficiently negative slope
+                if np.isfinite(thr_ms) and bool((ts_r < thr_ms).any()):
+                    arr_r = ts_r.values.astype(float)
+                    if arr_r.size > 1:
+                        dC_r = np.diff(arr_r)
+                        conc_cond_ms = arr_r[1:] < thr_ms
+                        slope_cond_ms = dC_r <= -dC_min
+                        cond_ms = conc_cond_ms & slope_cond_ms
+                        idx0 = first_run_k_bool(cond_ms, k)
+                        if not np.isnan(idx0):
+                            MS[j, i] = ts_r.time[int(idx0) + 1].dt.dayofyear.item()
+
+                # ME: keep as percentile-only (no slope condition) for now
+                if np.isfinite(thr_ms) and bool((ts_r < thr_ms).any()):
+                    idx_last = find_last_event_dyn(ts_r, thr_ms, k, above=False)
+                    if not np.isnan(idx_last):
+                        ME[j, i] = ts_r.time[int(idx_last)].dt.dayofyear.item()
+
+                # advance / freeze start (FS): k days ABOVE threshold
+                # AND k days of sufficiently positive slope
+                if np.isfinite(thr_fs) and bool((ts_a > thr_fs).any()):
+                    arr_a = ts_a.values.astype(float)
+                    if arr_a.size > 1:
+                        dC_a = np.diff(arr_a)
+                        conc_cond_fs = arr_a[1:] > thr_fs
+                        slope_cond_fs = dC_a >= dC_min
+                        cond_fs = conc_cond_fs & slope_cond_fs
+                        idx_fs = first_run_k_bool(cond_fs, k)
+                        if not np.isnan(idx_fs):
+                            FS[j, i] = ts_a.time[int(idx_fs) + 1].dt.dayofyear.item()
+
+                # move on to next grid cell
+                continue
+
+            # --------------- default: percentile/mu_sigma/slope_scaled only --------------- #
             # MS: first k-day run BELOW threshold
             if np.isfinite(thr_ms) and bool((ts_r < thr_ms).any()):
                 idx = find_first_event_dyn(ts_r, thr_ms, k, above=False)
@@ -228,9 +308,14 @@ def main():
             T_FS = builder(ice365, year, "FS", params)
             T_MS = builder(ice365, year, "MS", params)
 
-            FS, MS, ME = compute_FS_MS_ME_year_dyn(ice365, year, T_FS, T_MS, K, landmask, ds)
+            FS, MS, ME = compute_FS_MS_ME_year_dyn(
+                ice365, year, T_FS, T_MS, K, landmask, ds, scheme, params
+            )
 
-            tag = "_".join([f"{k}{v}" for k, v in params.items() if k in ("alpha", "p", "gamma")])
+            tag = "_".join(
+                [f"{k}{v}" for k, v in params.items()
+                 if k in ("alpha", "p", "gamma", "dC_min")]
+            )
             save_year_field(os.path.join(out_dir_FS, tag), year, FS, "FS", ds)
             save_year_field(os.path.join(out_dir_MS, tag), year, MS, "MS", ds)
             save_year_field(os.path.join(out_dir_ME, tag), year, ME, "ME", ds)
@@ -241,4 +326,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-import os
