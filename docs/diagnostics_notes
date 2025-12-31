@@ -1,0 +1,8 @@
+## D0 – Data scope
+
+Bootstrap SIC:
+- File: merged_bootstrap_SH_latest.nc
+- Variable: N07_ICECON
+- Grid: NSIDC polar stereographic, 25 km (y=332, x=316)
+- Time: 1978-11-01 to 2024-12-31 (datetime64)
+- Leap days present (Feb 29 removed for diagnostics)
