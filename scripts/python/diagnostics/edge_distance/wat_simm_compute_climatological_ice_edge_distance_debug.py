@@ -21,6 +21,7 @@ Notes:
 from __future__ import annotations
 
 import argparse
+from time import perf_counter
 from pathlib import Path
 import numpy as np
 import xarray as xr
@@ -32,12 +33,11 @@ except ImportError as e:
         "This script requires scipy. Install it (e.g., conda install scipy) and rerun."
     ) from e
 
-
 # Watkins & Simmonds-style process seasons (3 blocks)
 SEASONS_WS = {
     "GROWTH_MAMJ": [3, 4, 5, 6],
     "WINTER_JASO": [7, 8, 9, 10],
-    "DECAY_NDJF":  [11, 12, 1, 2],
+    "DECAY_NDJF": [11, 12, 1, 2],
 }
 
 
@@ -122,11 +122,42 @@ def ice_probability_monthly(da: xr.DataArray, time_dim: str, thr: float) -> xr.D
 
 def ice_probability_season(da: xr.DataArray, time_dim: str, thr: float, months: list[int]) -> xr.DataArray:
     """p(y, x) = mean over all selected months across all years of I(SIC>=thr)."""
+    t0 = perf_counter()
+    print(f"[debug] ice_probability_season: start months={months} thr={thr}", flush=True)
+
+    # Build indicator (lazy if dask-backed)
     ice = (da >= thr).where(da.notnull())
-    sel = ice.sel({time_dim: ice[time_dim].dt.month.isin(months)})
+    print(f"[debug] ice_probability_season: built indicator in {perf_counter() - t0:.2f}s", flush=True)
+
+    # Month mask (should be cheap: length = n_time)
+    t1 = perf_counter()
+    month = ice[time_dim].dt.month
+    msk = month.isin(months)
+    try:
+        nsel = int(msk.sum().compute()) if hasattr(msk.data, 'compute') else int(msk.sum().item())
+    except Exception:
+        nsel = None
+    print(f"[debug] ice_probability_season: month mask built in {perf_counter() - t1:.2f}s; n_time_selected={nsel}",
+          flush=True)
+
+    # Select and reduce
+    t2 = perf_counter()
+    sel = ice.where(msk, drop=True)
+    try:
+        nt = sel.sizes.get(time_dim, None)
+    except Exception:
+        nt = None
+    print(f"[debug] ice_probability_season: applied mask in {perf_counter() - t2:.2f}s; sel_time={nt}", flush=True)
+
+    t3 = perf_counter()
     p = sel.mean(time_dim)
+    print(
+        f"[debug] ice_probability_season: mean() graph built in {perf_counter() - t3:.2f}s (compute happens at write)",
+        flush=True)
+
     p.name = "ice_edge_prob"
     p.attrs.update({"threshold": float(thr), "description": "Probability that SIC >= threshold"})
+    print(f"[debug] ice_probability_season: finished in {perf_counter() - t0:.2f}s", flush=True)
     return p
 
 
@@ -163,13 +194,13 @@ def outputs_exist(outdir: Path, tag: str) -> bool:
 
 
 def write_products(
-    outdir: Path,
-    tag: str,
-    p_ice: xr.DataArray,
-    threshold: float,
-    prob_cut: float,
-    grid_km: float,
-    force: bool = False,
+        outdir: Path,
+        tag: str,
+        p_ice: xr.DataArray,
+        threshold: float,
+        prob_cut: float,
+        grid_km: float,
+        force: bool = False,
 ) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
     print(f"[debug] write_products tag={tag} outdir={outdir}", flush=True)
@@ -237,7 +268,8 @@ def main() -> None:
     args = parse_args()
     print('[debug] starting wat_simm_compute_climatological_ice_edge_distance', flush=True)
     print(f"[debug] input={args.input} var={args.var} time={args.time} outdir={args.outdir}", flush=True)
-    print(f"[debug] threshold={args.threshold} prob_cut={args.prob_cut} grid_km={args.grid_km} force={args.force}", flush=True)
+    print(f"[debug] threshold={args.threshold} prob_cut={args.prob_cut} grid_km={args.grid_km} force={args.force}",
+          flush=True)
 
     ds = open_dataset(args.input, args.chunks)
     print(f"[debug] opened dataset: dims={dict(ds.dims)}", flush=True)
@@ -257,21 +289,25 @@ def main() -> None:
     # WATKINS & SIMMONDS SEASONS (always)
     print(f"[debug] running seasons: {list(SEASONS_WS.keys())}", flush=True)
     print(f"[debug] seasonal outdir will be: {outroot / 'seasonal'}", flush=True)
-    for season, months in SEASONS_WS.items():
-        print(f"[debug] entering season loop: {season}", flush=True)
 
-        prob = ice_probability_season(...)
-        print(
-            f"[debug] computed prob for {season}: "
-            f"type={type(prob)} "
-            f"shape={getattr(prob, 'shape', None)}",
-            flush=True,
+    for name, months in SEASONS_WS.items():
+        t_season = perf_counter()
+        print(f"[debug] ===== season {name} months={months} =====", flush=True)
+        p = ice_probability_season(sic, args.time, args.threshold, months)
+        print(f"[debug] season {name}: returned prob object type={type(p)} dims={getattr(p, 'dims', None)}", flush=True)
+        print(f"[debug] season {name}: calling write_products(outdir={outroot / 'seasonal'})", flush=True)
+        write_products(
+            outroot / "seasonal",
+            name,
+            p,
+            args.threshold,
+            args.prob_cut,
+            args.grid_km,
+            force=args.force,
         )
+        print(f"[debug] season {name}: write_products done in {perf_counter() - t_season:.2f}s", flush=True)
 
-        print(f"[debug] calling write_products for {season}", flush=True)
-        write_products(...)
-        print(f"[debug] finished write_products for {season}", flush=True)
-
+    print("Done. Wrote edge/distance products to:", outroot)
 
 
 if __name__ == "__main__":
