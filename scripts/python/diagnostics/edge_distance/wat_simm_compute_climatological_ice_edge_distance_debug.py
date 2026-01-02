@@ -257,19 +257,21 @@ def main() -> None:
     # WATKINS & SIMMONDS SEASONS (always)
     print(f"[debug] running seasons: {list(SEASONS_WS.keys())}", flush=True)
     print(f"[debug] seasonal outdir will be: {outroot / 'seasonal'}", flush=True)
-    for name, months in SEASONS_WS.items():
-        p = ice_probability_season(sic, args.time, args.threshold, months)
-        write_products(
-            outroot / "seasonal",
-            name,
-            p,
-            args.threshold,
-            args.prob_cut,
-            args.grid_km,
-            force=args.force,
+    for season, months in SEASONS_WS.items():
+        print(f"[debug] entering season loop: {season}", flush=True)
+
+        prob = ice_probability_season(...)
+        print(
+            f"[debug] computed prob for {season}: "
+            f"type={type(prob)} "
+            f"shape={getattr(prob, 'shape', None)}",
+            flush=True,
         )
 
-    print("Done. Wrote edge/distance products to:", outroot)
+        print(f"[debug] calling write_products for {season}", flush=True)
+        write_products(...)
+        print(f"[debug] finished write_products for {season}", flush=True)
+
 
 
 if __name__ == "__main__":
