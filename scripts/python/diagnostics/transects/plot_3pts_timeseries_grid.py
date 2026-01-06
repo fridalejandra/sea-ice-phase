@@ -125,13 +125,17 @@ def main():
         title = args.title
     fig.suptitle(title)
 
+    # Column headers (set once)
+    axes[0, 0].set_title("SIC", fontsize=11)
+    axes[0, 1].set_title("Day-to-day change (ΔSIC)", fontsize=11)
+
     for r, idx in enumerate(order[:3]):  # assume 3 points
         label = ordered_labels[r] if r < len(ordered_labels) else f"p{idx}"
 
         sic_r = sic.isel({point_dim: idx})
         dsic_r = dsic.isel({point_dim: idx})
 
-        # Row title with metadata if available
+        # Row label with metadata (applies to BOTH columns via y-axis label text)
         meta = []
         if lat is not None and idx < len(lat):
             meta.append(f"lat={float(lat[idx]):.2f}")
@@ -146,7 +150,8 @@ def main():
         axL.plot(sic_r["time"].values, sic_r.values)
         axL.set_ylim(0, 1)
         axL.set_ylabel("SIC")
-        axL.set_title(row_title, loc="left", fontsize=10)
+        # Put the row metadata as left-aligned text INSIDE the axes so it doesn't fight the column title
+        axL.text(0.01, 0.92, row_title, transform=axL.transAxes, ha="left", va="top", fontsize=10)
         axL.axhline(args.thr, linestyle="--", linewidth=1)
         if not args.no_thr2:
             axL.axhline(args.thr2, linestyle="--", linewidth=1)
@@ -158,7 +163,10 @@ def main():
         axR.axhline(0.0, linewidth=1)
         axR.set_ylim(-ylim, ylim)
         axR.set_ylabel("ΔSIC")
+        # Put the SAME row metadata on the right panel too (so every panel has lat/lon)
+        axR.text(0.01, 0.92, row_title, transform=axR.transAxes, ha="left", va="top", fontsize=10)
         axR.grid(True, linewidth=0.5, alpha=0.5)
+
 
         if r == 0:
             axL.set_title(axL.get_title() + "   (SIC)", loc="left", fontsize=10)
@@ -177,4 +185,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-c
