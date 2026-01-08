@@ -13,9 +13,14 @@ Static files:
     /user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/FS_thr15_k5/FS_YYYY.nc
     /user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/MS_thr15_k5/MS_YYYY.nc
 
-Dynamic files (percentile p=0.7, k=5) – NEW LOCATION:
-    /user/geog/falejandraperez/sea-ice-phase/results/dynamic_thresholds/FS/FS_YYYY.nc
-    /user/geog/falejandraperez/sea-ice-phase/results/dynamic_thresholds/MS/MS_YYYY.nc
+Dynamic files:
+    /user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic/quantile_k5/FS/p0.7/FS_YYYY.nc
+    /user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic/quantile_k5/MS/p0.7/MS_YYYY.nc
+
+Notes on timing axes:
+- FS is shown in CALENDAR day-of-year over Feb 15 (DOY 46) to Sep 30 (DOY 273).
+- MS crosses the calendar year boundary, so it is remapped to a continuous axis:
+    "days since Aug 15" (Aug 15 = 0; Feb 28 ~ 197).
 """
 
 import sys
@@ -42,10 +47,8 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
 # PATH CONFIG
 # ---------------------------------------------------------------------
 
-# Static FS/MS (old slope+15% method)
 STATIC_ROOT = PROJECT_ROOT / "results" / "SMMR_phase"
 
-# Dynamic FS/MS (percentile p=0.7, k=5) – actual existing outputs
 DYN_FS_DIR = (
     PROJECT_ROOT
     / "results"
@@ -66,17 +69,17 @@ DYN_MS_DIR = (
     / "p0.7"
 )
 
-
 REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
-SUBFOLDER   = "climatology"
+SUBFOLDER = "climatology"
 
 PHASES = ["FS", "MS"]
 YEAR_START = 1979
-YEAR_END   = 2023
+YEAR_END = 2023
 
 # ---------------------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------------------
+
 
 def load_phase_climatology(
     phase: str,
@@ -89,7 +92,7 @@ def load_phase_climatology(
 
     mode:
       - "static": results/SMMR_phase/<phase>_thr15_k5/<phase>_YYYY.nc
-      - "dynamic": results/dynamic_thresholds/<phase>/<phase>_YYYY.nc
+      - "dynamic": points at DYN_FS_DIR / DYN_MS_DIR above
 
     Assumes variable is named <phase> in each file.
     """
@@ -141,22 +144,46 @@ def load_phase_climatology(
     return clim
 
 
+def wrap_ms_to_aug15(da: xr.DataArray, aug15_doy: int = 227) -> xr.DataArray:
+    """
+    Remap MS calendar day-of-year to a continuous axis starting Aug 15.
+
+    Any DOY < aug15 is assumed to occur in the *following* calendar year.
+    We add 365 so Aug..Feb becomes continuous:
+      [227..365] U [366..(365+59)].
+    """
+    return xr.where(da < aug15_doy, da + 365, da)
+
+
+def ms_days_since_aug15(da_wrapped: xr.DataArray, aug15_doy: int = 227) -> xr.DataArray:
+    """Convert wrapped MS DOY to 'days since Aug 15' (Aug 15 -> 0)."""
+    return da_wrapped - aug15_doy
+
+
 def freeze_label(phase: str) -> str:
-    """
-    Map phase to human label for colorbar.
-    FS -> Freeze start
-    MS -> Melt start
-    """
     if phase == "FS":
         return "Freeze start"
     elif phase == "MS":
         return "Melt start"
-    else:
-        return phase
+    return phase
+
+
+def quick_stats(name: str, da: xr.DataArray) -> None:
+    v = da.values
+    v = v[np.isfinite(v)]
+    if v.size == 0:
+        print(f"{name}: all-NaN")
+        return
+    print(
+        f"{name}: min={np.nanmin(v):.1f}, max={np.nanmax(v):.1f}, "
+        f"p5={np.nanpercentile(v, 5):.1f}, p95={np.nanpercentile(v, 95):.1f}"
+    )
+
 
 # ---------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------
+
 
 def main():
     set_mpl_defaults()
@@ -167,15 +194,27 @@ def main():
         clim_static = load_phase_climatology(phase, "static", YEAR_START, YEAR_END)
         clim_dynamic = load_phase_climatology(phase, "dynamic", YEAR_START, YEAR_END)
 
-        label = f"{freeze_label(phase)} (day of year)"
-
-        # --- FS/MS-specific DOY ranges ---
+        # --- phase-specific plotting coordinates ---
         if phase == "FS":
-            field_vmin, field_vmax = 80, 240  # matches Feb–Sep window, real climatology
+            # Feb 15–Sep 30 (calendar DOY)
+            label = f"{freeze_label(phase)} (day of year)"
+            field_vmin, field_vmax = 46, 273
         elif phase == "MS":
-            field_vmin, field_vmax = 200, 360  # matches Aug–Feb window, real climatology
+            # Aug 15–Feb 28 crosses calendar year:
+            # remap to continuous axis: days since Aug 15 (Aug 15 = 0)
+            clim_static = ms_days_since_aug15(wrap_ms_to_aug15(clim_static))
+            clim_dynamic = ms_days_since_aug15(wrap_ms_to_aug15(clim_dynamic))
+
+            label = f"{freeze_label(phase)} (days since Aug 15)"
+            # Aug 15 -> 0; Feb 28 ~ 197 (non-leap). Give a little headroom.
+            field_vmin, field_vmax = 0, 210
         else:
-            field_vmin, field_vmax = None, None  # fallback
+            label = f"{freeze_label(phase)}"
+            field_vmin, field_vmax = None, None
+
+        # Optional sanity printout (kept on by default — comment out if annoying)
+        quick_stats(f"{phase} static", clim_static)
+        quick_stats(f"{phase} dynamic", clim_dynamic)
 
         fig, axes = plot_phase_comparison_map(
             static_field=clim_static,
