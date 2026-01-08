@@ -174,7 +174,7 @@ def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.D
     if not clim_path.exists():
         raise FileNotFoundError(f"Missing MS climatology file: {clim_path}")
 
-    ds = xr.open_dataset(clim_path)
+    ds = xr.open_dataset(clim_path, decode_times=False)
     var = f"MS_{method}_clim_dsa"
     if var not in ds:
         raise KeyError(
