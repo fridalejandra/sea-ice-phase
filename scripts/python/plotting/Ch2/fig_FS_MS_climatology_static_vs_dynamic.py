@@ -69,7 +69,7 @@ DYN_MS_DIR = (
     / "p0.7"
 )
 
-REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
+REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
 SUBFOLDER = "climatology"
 
 PHASES = ["FS", "MS"]
@@ -144,22 +144,6 @@ def load_phase_climatology(
     return clim
 
 
-def wrap_ms_to_aug15(da: xr.DataArray, aug15_doy: int = 227) -> xr.DataArray:
-    """
-    Remap MS calendar day-of-year to a continuous axis starting Aug 15.
-
-    Any DOY < aug15 is assumed to occur in the *following* calendar year.
-    We add 365 so Aug..Feb becomes continuous:
-      [227..365] U [366..(365+59)].
-    """
-    return xr.where(da < aug15_doy, da + 365, da)
-
-
-def ms_days_since_aug15(da_wrapped: xr.DataArray, aug15_doy: int = 227) -> xr.DataArray:
-    """Convert wrapped MS DOY to 'days since Aug 15' (Aug 15 -> 0)."""
-    return da_wrapped - aug15_doy
-
-
 def freeze_label(phase: str) -> str:
     if phase == "FS":
         return "Freeze start"
@@ -178,6 +162,29 @@ def quick_stats(name: str, da: xr.DataArray) -> None:
         f"{name}: min={np.nanmin(v):.1f}, max={np.nanmax(v):.1f}, "
         f"p5={np.nanpercentile(v, 5):.1f}, p95={np.nanpercentile(v, 95):.1f}"
     )
+def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.DataArray:
+    """
+    Load MS climatology in "days since Aug 15" coordinate from results/anomalies.
+
+    Expects variables written by the updated climatology/anomaly script:
+      - MS_static_clim_dsa in results/anomalies/MS_static_climatology.nc
+      - MS_dynamic_clim_dsa in results/anomalies/MS_dynamic_climatology.nc
+    """
+    clim_path = PROJECT_ROOT / "results" / "anomalies" / f"MS_{method}_climatology.nc"
+    if not clim_path.exists():
+        raise FileNotFoundError(f"Missing MS climatology file: {clim_path}")
+
+    ds = xr.open_dataset(clim_path)
+    var = f"MS_{method}_clim_dsa"
+    if var not in ds:
+        raise KeyError(
+            f"{var} not found in {clim_path}. "
+            "Did you rerun compute_FS_MS_anomalies_static_dynamic.py after adding the _dsa outputs?"
+        )
+
+    da = ds[var].load()
+    ds.close()
+    return da
 
 
 # ---------------------------------------------------------------------
@@ -199,15 +206,18 @@ def main():
             # Feb 15–Sep 30 (calendar DOY)
             label = f"{freeze_label(phase)} (day of year)"
             field_vmin, field_vmax = 46, 273
+
         elif phase == "MS":
-            # Aug 15–Feb 28 crosses calendar year:
-            # remap to continuous axis: days since Aug 15 (Aug 15 = 0)
-            clim_static = ms_days_since_aug15(wrap_ms_to_aug15(clim_static))
-            clim_dynamic = ms_days_since_aug15(wrap_ms_to_aug15(clim_dynamic))
+            # MS climatology should NOT be computed by averaging calendar DOY and then wrapping.
+            # Instead, load the pre-wrapped climatology (days since Aug 15) produced by
+            # compute_FS_MS_anomalies_static_dynamic.py: MS_*_clim_dsa
+
+            clim_static = load_ms_climatology_dsa(method="static", year_start=YEAR_START, year_end=YEAR_END)
+            clim_dynamic = load_ms_climatology_dsa(method="dynamic", year_start=YEAR_START, year_end=YEAR_END)
 
             label = f"{freeze_label(phase)} (days since Aug 15)"
-            # Aug 15 -> 0; Feb 28 ~ 197 (non-leap). Give a little headroom.
             field_vmin, field_vmax = 0, 210
+
         else:
             label = f"{freeze_label(phase)}"
             field_vmin, field_vmax = None, None
