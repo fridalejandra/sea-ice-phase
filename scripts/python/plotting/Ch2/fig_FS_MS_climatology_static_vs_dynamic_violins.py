@@ -309,14 +309,23 @@ for ax, phase_name in zip(axes, ["FS", "MS"]):
     ax.set_ylabel("Day of year")
     ax.tick_params(axis="x", rotation=0)
 
-# Only show legend once
+# Only show legend once — place outside
 handles, labels = axes[0].get_legend_handles_labels()
-axes[0].legend(handles, labels, title="", loc="upper right", frameon=True)
-axes[1].get_legend().remove()
+axes[0].legend(
+    handles,
+    labels,
+    title="",
+    loc="center left",
+    bbox_to_anchor=(1.02, 0.5),
+    frameon=True,
+)
 
+axes[1].get_legend().remove()
 axes[1].set_xlabel("Sector")
 
-fig.tight_layout()
+# Make room on the right for the legend
+fig.subplots_adjust(right=0.82)
+
 
 # ---------------------------------------------------------------------
 # Save / upload
