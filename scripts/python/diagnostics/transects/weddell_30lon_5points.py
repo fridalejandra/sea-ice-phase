@@ -224,31 +224,38 @@ def main():
 
     idxs = np.where(keep)[0]
 
-    # Coast anchor: first valid keep cell in array order (smallest y-index)
-    coast_i = int(idxs.min())
+    latv = lat_col.values
+    dv = d_col.values
 
-    # Edge anchor: northernmost keep cell where dist_to_edge <= eps
-    edge_candidates = np.where(keep & (d_col.values <= args.edge_eps_km))[0]
-    if edge_candidates.size == 0:
-        edge_i = int(idxs[np.nanargmin(d_col.values[keep])])
-        if args.debug:
-            min_d = float(np.nanmin(d_col.values[keep]))
-            print(f"[debug] no dist<=edge_eps found; using min dist={min_d:.3f} km as edge anchor", flush=True)
+    # Coast (poleward) anchor: most negative latitude among keep
+    coast_i = int(idxs[np.nanargmin(latv[idxs])])
+
+    # Edge (northward) anchor:
+    edge_candidates = np.where(keep & (dv <= args.edge_eps_km))[0]
+
+    if edge_candidates.size > 0:
+        # pick the most northward edge candidate (max latitude)
+        edge_i = int(edge_candidates[np.nanargmax(latv[edge_candidates])])
     else:
-        edge_i = int(edge_candidates[np.nanargmax(s_km[edge_candidates])])
+        # fallback: closest-to-edge cell, but pick the most northward among those
+        d_keep = dv[idxs]
+        dmin = np.nanmin(d_keep)
+        close = idxs[np.where(np.isclose(d_keep, dmin, atol=1e-6))[0]]
+        edge_i = int(close[np.nanargmax(latv[close])])
+        if args.debug:
+            print(f"[debug] no dist<=edge_eps found; using min dist={dmin:.3f} km, most-northward tie-break",
+                  flush=True)
 
+    # Now define along-path distances using s_km (still fine)
     s_coast = float(s_km[coast_i])
     s_edge = float(s_km[edge_i])
-    if not (s_edge > s_coast):
-        raise RuntimeError(
-            f"Edge anchor is not 'northward' of coast anchor: s_edge={s_edge:.2f} s_coast={s_coast:.2f}. "
-            "If this happens, the y-ordering may be opposite what we assumed. We can flip the path."
-        )
 
-    D = s_edge - s_coast
-
-    if args.debug:
-        print(f"[debug] coast_i={coast_i} edge_i={edge_i} D={D:.1f} km", flush=True)
+    # If ordering is backwards in s_km, just swap anchors (latitude definition is correct)
+    if s_edge <= s_coast:
+        if args.debug:
+            print("[debug] s_km ordering opposite of latitude ordering; swapping s_coast/s_edge for fraction calc",
+                  flush=True)
+        s_coast, s_edge = s_edge, s_coast
 
     # ---- Select points at fractions of D (nearest along-path keep cell)
     points = []
