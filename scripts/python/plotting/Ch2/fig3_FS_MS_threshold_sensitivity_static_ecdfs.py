@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-fig_FS_MS_threshold_sensitivity_static_ecdfs.py
+fig3_FS_MS_threshold_sensitivity_static_ecdfs.py
 
 Circumpolar ECDFs of absolute timing differences between low/high SIC
 thresholds and the reference 15% threshold for static freeze start (FS)
@@ -201,7 +201,7 @@ def main():
     out_path = get_fig_path(
         PROJECT_ROOT_CLUSTER,
         subfolder="sensitivity/threshold",
-        fig_name="Fig_FS_MS_threshold_sensitivity_static_ecdf_allcurves.png",
+        fig_name="Fig3_FS_MS_threshold_sensitivity_static_ecdf_allcurves.png",
     )
 
     save_and_upload(

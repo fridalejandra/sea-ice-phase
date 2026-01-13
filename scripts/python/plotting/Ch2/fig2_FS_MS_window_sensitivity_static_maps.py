@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-fig_FS_MS_window_sensitivity_static_maps.py
+fig2_FS_MS_window_sensitivity_static_maps.py
 
 Window sensitivity (static method, slope + persistence):
 
@@ -18,7 +18,7 @@ Input (existing static products):
     and similarly for MS.
 
 Output:
-    results/Ch2_Figures/sensitivity/window/Fig01_window_FS_MS_static_SMMR_thr15.png
+    results/Ch2_Figures/sensitivity/window/Fig02_window_FS_MS_static_SMMR_thr15.png
     (also mirrored to gdrive:sea-ice-phase/Results/Ch2_Figures/sensitivity/window/)
 """
 

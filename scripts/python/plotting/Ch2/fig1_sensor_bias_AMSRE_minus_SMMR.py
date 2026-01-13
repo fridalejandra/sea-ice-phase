@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-fig_sensor_bias_AMSRE_minus_SMMR.py
+fig1_sensor_bias_AMSRE_minus_SMMR.py
 
 Compare AMSRE vs SMMR phase dates (old static advance/retreat)
 and produce a combined figure with:

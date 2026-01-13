@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-fig_FS_MS_climatology_static_vs_dynamic.py
+fig4-5_FS_MS_climatology_static_vs_dynamic.py
 
 Compare static vs dynamic FS/MS climatologies:
 
@@ -237,7 +237,7 @@ def main():
         )
 
         # You’ll title/caption in the paper; this is just the filename index.
-        fig_num = 3 if phase == "FS" else 4  # adjust if you change ordering
+        fig_num = 4 if phase == "FS" else 5  # adjust if you change ordering
 
         fig_name = format_fig_name(
             num=fig_num,
