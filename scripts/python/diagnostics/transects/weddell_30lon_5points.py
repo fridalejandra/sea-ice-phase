@@ -265,6 +265,7 @@ def main():
         raise RuntimeError("Too few cells between coast and edge anchors along the chosen transect.")
 
     for f in fracs:
+        D = s_edge - s_coast
         target_s = s_coast + f * D
         nearest_i = int(seg_idx[np.argmin(np.abs(s_km[seg_idx] - target_s))])
         points.append({
