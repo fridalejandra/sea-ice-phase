@@ -368,9 +368,24 @@ def main():
     ax0 = fig.add_subplot(1, 2, 1, projection=proj)  # overview
     ax1 = fig.add_subplot(1, 2, 2, projection=proj)  # zoom
 
-    # Extents in lon/lat (cartopy will handle the projection)
-    ax0.set_extent([-180, 180, -90, -40], crs=pc)
-    ax1.set_extent([-80, 20, -85, -45], crs=pc)
+    # ---- Robust extents in native EPSG:3412 meters (avoid lon/lat set_extent NaNs)
+    # Overview: use full grid bounds (from coords)
+    xmin, xmax = float(np.nanmin(x)), float(np.nanmax(x))
+    ymin, ymax = float(np.nanmin(y)), float(np.nanmax(y))
+    ax0.set_extent([xmin, xmax, ymin, ymax], crs=proj)
+
+    # Zoom: compute bounds of the Weddell sector in x/y (with padding)
+    weddell_2d = (sector2d.values == weddell_id)
+    yy, xx = np.where(weddell_2d)
+    if yy.size == 0 or xx.size == 0:
+        raise RuntimeError("Weddell sector mask is empty; check weddell_id / sector file.")
+
+    pad = 200_000.0  # 200 km padding; tweak if you want
+    zxmin = float(np.min(x[xx]) - pad)
+    zxmax = float(np.max(x[xx]) + pad)
+    zymin = float(np.min(y[yy]) - pad)
+    zymax = float(np.max(y[yy]) + pad)
+    ax1.set_extent([zxmin, zxmax, zymin, zymax], crs=proj)
 
     # Coastline/land for context (cosmetic)
     for ax in (ax0, ax1):
@@ -394,13 +409,11 @@ def main():
     ax0.set_title(f"Antarctic overview: mean SIC {args.year}-{args.month:02d}")
     ax1.set_title("Weddell zoom + selected points")
 
-    # Draw “zoom box” on overview (in lon/lat coords)
-    zx0, zx1 = -80, 20
-    zy0, zy1 = -85, -45
+    # Draw zoom box on overview in projected coordinates
     ax0.plot(
-        [zx0, zx1, zx1, zx0, zx0],
-        [zy0, zy0, zy1, zy1, zy0],
-        transform=pc, linewidth=1.5, zorder=6
+        [zxmin, zxmax, zxmax, zxmin, zxmin],
+        [zymin, zymin, zymax, zymax, zymin],
+        transform=proj, linewidth=1.5, zorder=6
     )
 
     # Edge contour from climatological dist field (assumed same grid y,x)
