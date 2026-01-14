@@ -6,12 +6,17 @@ weddell_30lon_5points.py
 Pick 5 fractional-distance points along a Weddell meridional transect near 30°W
 using a *monthly climatological* distance-to-edge field (e.g., month11).
 
-Key fixes:
-  1) SIC is fractional (units=1), but files include flag codes (e.g., 1100 missing, 1200 land).
-     We hard-mask SIC >= 100 to NaN, then enforce [0,1].
-  2) Explicit land/ocean mask from SIC flags (1200=land) ensures points never land on land.
-     Ocean validity mask requires (ocean) AND (any finite SIC in target month).
-  3) Proper map projection: EPSG:3412 (Antarctic polar stereographic). Plot on native x/y grid.
+Key behavior (updated):
+  1) SIC is fractional (0–1) but Bootstrap-style files include flag codes:
+       1100 = missing, 1200 = land (and generally anything >=100 is non-physical)
+     We mask SIC >= 100 to NaN, then enforce 0<=SIC<=1.
+  2) Land mask is taken explicitly from the SIC flags (==1200). Points are forced to ocean.
+  3) Ocean validity mask requires (ocean) AND (any finite SIC in target month).
+  4) Plotting uses the native polar-stereo x/y grid with Cartopy EPSG:3412.
+     IMPORTANT: we do NOT use ax.set_extent(...) (which can NaN out); we set_xlim/set_ylim directly in meters.
+  5) Overview limits come from ds_sic x/y (you confirmed these are finite).
+     Zoom limits are computed from the Weddell sector mask in x/y with padding.
+  6) Zoom box is drawn in projected meters.
 
 Outputs (in --outdir):
   - weddell_lon30_fracpoints_monthMM_YYYY.csv
@@ -26,8 +31,6 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 
-# Cartopy is used for correct polar-stereo plotting.
-# If not installed in your env, install it or switch back to the lon/lat diagnostic.
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
@@ -87,7 +90,7 @@ def _choose_xidx_for_lon_in_sector(
     lon = lon2d.values
     sec = sector2d.values
     dist = dist2d.values
-    ny, nx = lon.shape
+    _, nx = lon.shape
 
     best = None  # (diff, x, med_lon, keep)
 
@@ -129,23 +132,34 @@ def _choose_xidx_for_lon_in_sector(
     return int(x)
 
 
-def _month_slice_inclusive_safe(year: int, month: int):
-    """Return (t0, t1_exclusive) strings and also a safe inclusive end date."""
+def _month_bounds(year: int, month: int):
+    """
+    Return numpy datetime64 start (inclusive) and end (inclusive) for a month.
+    Avoids the common pitfall of including day 1 of next month.
+    """
     t0 = np.datetime64(f"{year}-{month:02d}-01")
     if month == 12:
         t1 = np.datetime64(f"{year+1}-01-01")
     else:
         t1 = np.datetime64(f"{year}-{month+1:02d}-01")
-    # xarray slice is inclusive; use end = t1 - 1 day
     t_end = t1 - np.timedelta64(1, "D")
-    return str(t0), str(t1), t0, t_end
+    return t0, t_end
+
+
+def _require_1d_finite(name: str, arr: np.ndarray):
+    arr = np.asarray(arr)
+    if arr.ndim != 1:
+        raise RuntimeError(f"{name} must be 1D, got shape {arr.shape}")
+    if not np.isfinite(arr).all():
+        raise RuntimeError(f"{name} contains NaN/Inf; cannot use for axis limits.")
+    return arr.astype(float)
 
 
 # --------------------------
 # Main
 # --------------------------
 def main():
-    ap = argparse.ArgumentParser(description="Weddell 30°W: pick 5 fractional points + month map")
+    ap = argparse.ArgumentParser(description="Weddell 30°W: pick 5 fractional points + projected map")
     ap.add_argument("--sic", required=True, type=Path, help="Merged daily SIC NetCDF")
     ap.add_argument("--var", default="N07_ICECON", help="SIC variable name (default: N07_ICECON)")
     ap.add_argument("--sectors", required=True, type=Path, help="canonical_sectors.nc")
@@ -172,7 +186,7 @@ def main():
 
     weddell_id = int(args.weddell_id)
 
-    # ---- Load canonical sectors (lat/lon + sector id + x/y)
+    # ---- Load canonical sectors (lat/lon + sector id)
     ds_sec = xr.open_dataset(args.sectors)
     if "lat" not in ds_sec or "lon" not in ds_sec:
         raise RuntimeError("canonical_sectors.nc must contain lat(y,x) and lon(y,x).")
@@ -200,7 +214,7 @@ def main():
         raise RuntimeError(f"Could not find dist variable in {args.dist_month}. Found: {list(ds_d.data_vars)}")
     dist2d = ds_d[dvar]
 
-    # ---- Choose x index within Weddell near target lon
+    # ---- Choose x index within Weddell near target lon (using sector grid lon/dist)
     x_idx = _choose_xidx_for_lon_in_sector(
         lon2d=lon2d,
         sector2d=sector2d,
@@ -220,6 +234,10 @@ def main():
     if not {"time", "y", "x"}.issubset(set(sic_raw.dims)):
         raise RuntimeError(f"SIC dims are {sic_raw.dims}; expected to include ('time','y','x').")
 
+    # Confirm x/y exist and are usable for plotting limits
+    x_sic = _require_1d_finite("ds_sic['x']", ds_sic["x"].values)
+    y_sic = _require_1d_finite("ds_sic['y']", ds_sic["y"].values)
+
     # Flags: 1100=missing, 1200=land (and anything >=100 is non-physical for SIC)
     land_2d = (sic_raw.isel(time=0) == 1200)
     ocean_2d = ~land_2d
@@ -228,9 +246,9 @@ def main():
     sic = sic_raw.where(sic_raw < 100)  # kills 1100/1200 (and any other >=100 codes)
     sic = sic.where((sic >= 0.0) & (sic <= 1.0))
 
-    # ---- Time slice for the chosen month/year (safe inclusive end)
-    _, _, t0_dt64, t_end_dt64 = _month_slice_inclusive_safe(args.year, args.month)
-    sic_month = sic.sel(time=slice(t0_dt64, t_end_dt64))
+    # ---- Time slice for the chosen month/year (inclusive bounds)
+    t0, t_end = _month_bounds(args.year, args.month)
+    sic_month = sic.sel(time=slice(t0, t_end))
 
     # Ocean validity mask: must be ocean AND have any finite SIC within month window
     ocean_valid_2d = ocean_2d & np.isfinite(sic_month).any("time")
@@ -241,8 +259,8 @@ def main():
     if args.debug:
         mx = float(sic_m.max(skipna=True))
         print(f"[debug] mean SIC month {args.year}-{args.month:02d} max(after mask)={mx:.3f}", flush=True)
-        land_n = int(land_2d.sum())
-        print(f"[debug] land cells (flag==1200) = {land_n}", flush=True)
+        print(f"[debug] ds_sic x range: {x_sic.min():.1f} .. {x_sic.max():.1f}", flush=True)
+        print(f"[debug] ds_sic y range: {y_sic.min():.1f} .. {y_sic.max():.1f}", flush=True)
 
     # ---- Slice chosen column for selection
     sec_col = sector2d.isel(x=x_idx)
@@ -253,11 +271,12 @@ def main():
     ocean_col = ocean_2d.isel(x=x_idx).values.astype(bool)
     ocean_valid_col = ocean_valid_2d.isel(x=x_idx).values.astype(bool)
 
-    # Along-column path coordinates (meters)
+    # Along-column path coordinates (meters) from sector grid (used for distance along y)
+    # If your sector grid y differs from SIC y, this still works for selection because we select in sector y-index space.
+    y_sec = ds_sec["y"].values.astype(float)
     x_m = float(ds_sec["x"].values[x_idx])
-    y_m_arr = ds_sec["y"].values.astype(float)  # len y
-    x_path_m = np.full_like(y_m_arr, x_m, dtype=float)
-    s_km = _cumulative_distance_km(x_path_m, y_m_arr)
+    x_path_m = np.full_like(y_sec, x_m, dtype=float)
+    s_km = _cumulative_distance_km(x_path_m, y_sec)
 
     # ---- Keep mask: Weddell + valid lat/lon/dist + ocean + ocean_valid
     weddell_mask = (sec_col.values == weddell_id)
@@ -298,7 +317,6 @@ def main():
     s_coast = float(s_km[coast_i])
     s_edge = float(s_km[edge_i])
 
-    # If cumulative distance ordering is reversed, swap for fraction math
     if s_edge <= s_coast:
         if args.debug:
             print("[debug] s_km ordering opposite of latitude ordering; swapping s_coast/s_edge for fraction calc", flush=True)
@@ -308,13 +326,12 @@ def main():
     if D <= 0:
         raise RuntimeError(f"Non-positive coast→edge distance: D={D:.3f} (s_coast={s_coast:.3f}, s_edge={s_edge:.3f})")
 
-    # Segment mask between anchors (in s_km space)
     in_segment = keep & (s_km >= s_coast) & (s_km <= s_edge)
     seg_idx = np.where(in_segment)[0]
     if seg_idx.size < 10:
         raise RuntimeError("Too few cells between coast and edge anchors along the chosen transect.")
 
-    # ---- Select points at fractions of D (nearest along-path keep cell)
+    # ---- Select points at fractions of D
     points = []
     for f in fracs:
         target_s = s_coast + f * D
@@ -342,112 +359,97 @@ def main():
     df.to_csv(csv_path, index=False)
     print(f"[info] wrote points CSV: {csv_path}", flush=True)
 
-    # ---- Build two-panel map: overview + zoom (proper projection EPSG:3412)
-    # Data are on native x/y meters; use EPSG:3412 as per metadata.
+    # --------------------------
+    # Plot: proper EPSG:3412, native x/y meters, robust limits via set_xlim/set_ylim
+    # --------------------------
     proj = ccrs.epsg(3412)
-    pc = ccrs.PlateCarree()
 
-    # Use x/y from SIC (should match canonical grid). Fall back to ds_sec if needed.
-    if "x" in ds_sic.coords and "y" in ds_sic.coords:
-        x = ds_sic["x"].values
-        y = ds_sic["y"].values
-    else:
-        x = ds_sec["x"].values
-        y = ds_sec["y"].values
-
-    # Land underlay as a mask on the same grid (1=land, nan=ocean)
+    # Land underlay from SIC flags (on the SIC y/x grid)
     land_under = land_2d.astype(float).values
     land_under[land_under == 0] = np.nan
 
-    # Weddell mask for plotting
-    weddell_2d = (sector2d.values == weddell_id)
-    plot_mask_zoom = weddell_2d & np.isfinite(sic_m.values)
+    # Weddell mask for plotting (from sector grid)
+    weddell_plot_mask = (sector2d.values == weddell_id)
+
+    # If sector grid differs from SIC grid, this mask won't align perfectly.
+    # We still plot SIC from SIC grid; sector mask is used mainly to focus the zoom on Weddell region.
+    # The zoom limits are computed from sector mask but applied to SIC x/y; if grids differ,
+    # the zoom can be imperfect but will still be valid.
+    yy, xx = np.where(weddell_plot_mask)
+    if yy.size == 0 or xx.size == 0:
+        raise RuntimeError("Weddell sector mask is empty; cannot compute zoom window.")
+
+    pad = 200_000.0  # 200 km padding
+    # Use SIC x/y ranges at those indices (assumes comparable indexing); safest if grids match.
+    # If grids do not match, consider rebuilding sectors on SIC grid.
+    zxmin = float(np.min(x_sic[xx]) - pad)
+    zxmax = float(np.max(x_sic[xx]) + pad)
+    zymin = float(np.min(y_sic[yy]) - pad)
+    zymax = float(np.max(y_sic[yy]) + pad)
 
     fig = plt.figure(figsize=(13, 6))
+    ax0 = fig.add_subplot(1, 2, 1, projection=proj)
+    ax1 = fig.add_subplot(1, 2, 2, projection=proj)
 
-    ax0 = fig.add_subplot(1, 2, 1, projection=proj)  # overview
-    ax1 = fig.add_subplot(1, 2, 2, projection=proj)  # zoom
+    # Robust axis limits (meters)
+    ax0.set_xlim(float(x_sic.min()), float(x_sic.max()))
+    ax0.set_ylim(float(y_sic.min()), float(y_sic.max()))
 
-    # ---- Robust extents in native EPSG:3412 meters (avoid lon/lat set_extent NaNs)
-    # Overview: use full grid bounds (from coords)
-    xmin, xmax = float(np.nanmin(x)), float(np.nanmax(x))
-    ymin, ymax = float(np.nanmin(y)), float(np.nanmax(y))
-    ax0.set_extent([xmin, xmax, ymin, ymax], crs=proj)
+    ax1.set_xlim(zxmin, zxmax)
+    ax1.set_ylim(zymin, zymax)
 
-    # Zoom: compute bounds of the Weddell sector in x/y (with padding)
-    weddell_2d = (sector2d.values == weddell_id)
-    yy, xx = np.where(weddell_2d)
-    if yy.size == 0 or xx.size == 0:
-        raise RuntimeError("Weddell sector mask is empty; check weddell_id / sector file.")
-
-    pad = 200_000.0  # 200 km padding; tweak if you want
-    zxmin = float(np.min(x[xx]) - pad)
-    zxmax = float(np.max(x[xx]) + pad)
-    zymin = float(np.min(y[yy]) - pad)
-    zymax = float(np.max(y[yy]) + pad)
-    ax1.set_extent([zxmin, zxmax, zymin, zymax], crs=proj)
-
-    # Coastline/land for context (cosmetic)
+    # Context features (cosmetic)
     for ax in (ax0, ax1):
         ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
         ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
 
-    # Land mask underlay from your grid (this makes “land” unambiguous)
-    ax0.pcolormesh(x, y, land_under, transform=proj, shading="auto", alpha=0.35, zorder=2)
-    ax1.pcolormesh(x, y, land_under, transform=proj, shading="auto", alpha=0.35, zorder=2)
+    # Land mask underlay from your grid (makes land unambiguous)
+    ax0.pcolormesh(x_sic, y_sic, land_under, transform=proj, shading="auto", alpha=0.35, zorder=2)
+    ax1.pcolormesh(x_sic, y_sic, land_under, transform=proj, shading="auto", alpha=0.35, zorder=2)
 
     # SIC background
     pm0 = ax0.pcolormesh(
-        x, y, sic_m.values,
+        x_sic, y_sic, sic_m.values,
         transform=proj, shading="auto", vmin=0.0, vmax=1.0, zorder=3
     )
     pm1 = ax1.pcolormesh(
-        x, y, np.where(plot_mask_zoom, sic_m.values, np.nan),
+        x_sic, y_sic, sic_m.values,
         transform=proj, shading="auto", vmin=0.0, vmax=1.0, zorder=3
     )
 
     ax0.set_title(f"Antarctic overview: mean SIC {args.year}-{args.month:02d}")
     ax1.set_title("Weddell zoom + selected points")
 
-    # Draw zoom box on overview in projected coordinates
+    # Zoom box on overview (in projected meters)
     ax0.plot(
         [zxmin, zxmax, zxmax, zxmin, zxmin],
         [zymin, zymin, zymax, zymax, zymin],
         transform=proj, linewidth=1.5, zorder=6
     )
 
-    # Edge contour from climatological dist field (assumed same grid y,x)
-    drew = False
+    # Edge contour (best-effort) - assumes dist2d is on same grid as plotted x/y.
+    # If dist2d is on sector grid rather than SIC grid, this contour may misalign.
     try:
         ax1.contour(
-            x, y, dist2d.values,
+            x_sic, y_sic, dist2d.values,
             levels=[0.0], linewidths=1.2,
             transform=proj, zorder=5
         )
-        drew = True
     except Exception:
-        pass
-    if not drew:
-        try:
-            ax1.contour(
-                x, y, dist2d.values,
-                levels=[25.0], linewidths=1.2,
-                transform=proj, zorder=5
-            )
-        except Exception:
-            if args.debug:
-                print("[debug] could not draw edge contour at 0 or 25 km", flush=True)
+        if args.debug:
+            print("[debug] edge contour failed at 0.0 km (likely grid mismatch).", flush=True)
 
-    # Plot selected points using x/y indices (most robust)
-    px = ds_sec["x"].isel(x=df["x_idx"].astype(int)).values
-    py = ds_sec["y"].isel(y=df["y_idx"].astype(int)).values
+    # Plot selected points using SIC x/y indices (robust)
+    # If your selection indices are on sector grid, you may want to ensure sectors and SIC grids match.
+    px = x_sic[df["x_idx"].astype(int).values]
+    py = y_sic[df["y_idx"].astype(int).values]
     ax1.scatter(px, py, s=60, transform=proj, zorder=7)
 
-    # Labels: keep lon/lat in text for sanity checks
+    # Labels: include lon/lat for sanity
     for _, r in df.iterrows():
         ax1.text(
-            ds_sec["x"].isel(x=int(r["x_idx"])).item() + 25_000,  # small offset in meters
-            ds_sec["y"].isel(y=int(r["y_idx"])).item() + 25_000,
+            float(x_sic[int(r["x_idx"])]) + 25_000,
+            float(y_sic[int(r["y_idx"])]) + 25_000,
             f"{r['point']}\n{r['lat']:.2f}, {r['lon']:.2f}",
             fontsize=8,
             transform=proj,
@@ -460,7 +462,6 @@ def main():
         y=1.02
     )
 
-    # Shared colorbar
     cb = fig.colorbar(pm1, ax=[ax0, ax1], fraction=0.046, pad=0.04)
     cb.set_label(f"Mean SIC (fraction) ({args.year}-{args.month:02d})")
 
