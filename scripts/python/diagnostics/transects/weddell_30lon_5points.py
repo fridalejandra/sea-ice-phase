@@ -360,99 +360,69 @@ def main():
     print(f"[info] wrote points CSV: {csv_path}", flush=True)
 
     # --------------------------
-    # Plot: proper EPSG:3412, native x/y meters, robust limits via set_xlim/set_ylim
-    # --------------------------
-    proj = ccrs.epsg(3412)
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
 
-    # Land underlay from SIC flags (on the SIC y/x grid)
-    land_under = land_2d.astype(float).values
-    land_under[land_under == 0] = np.nan
-
-    # Weddell mask for plotting (from sector grid)
-    weddell_plot_mask = (sector2d.values == weddell_id)
-
-    # If sector grid differs from SIC grid, this mask won't align perfectly.
-    # We still plot SIC from SIC grid; sector mask is used mainly to focus the zoom on Weddell region.
-    # The zoom limits are computed from sector mask but applied to SIC x/y; if grids differ,
-    # the zoom can be imperfect but will still be valid.
-    yy, xx = np.where(weddell_plot_mask)
-    if yy.size == 0 or xx.size == 0:
-        raise RuntimeError("Weddell sector mask is empty; cannot compute zoom window.")
-
-    pad = 200_000.0  # 200 km padding
-    # Use SIC x/y ranges at those indices (assumes comparable indexing); safest if grids match.
-    # If grids do not match, consider rebuilding sectors on SIC grid.
-    zxmin = float(np.min(x_sic[xx]) - pad)
-    zxmax = float(np.max(x_sic[xx]) + pad)
-    zymin = float(np.min(y_sic[yy]) - pad)
-    zymax = float(np.max(y_sic[yy]) + pad)
+    # --- Projections
+    ax_proj = ccrs.SouthPolarStereo()  # display projection (what you’re used to)
+    data_crs = ccrs.epsg(3412)  # CRS of x_sic/y_sic meters
+    pc = ccrs.PlateCarree()
 
     fig = plt.figure(figsize=(13, 6))
-    ax0 = fig.add_subplot(1, 2, 1, projection=proj)
-    ax1 = fig.add_subplot(1, 2, 2, projection=proj)
+    ax0 = fig.add_subplot(1, 2, 1, projection=ax_proj)
+    ax1 = fig.add_subplot(1, 2, 2, projection=ax_proj)
 
-    # Robust axis limits (meters)
-    ax0.set_xlim(float(x_sic.min()), float(x_sic.max()))
-    ax0.set_ylim(float(y_sic.min()), float(y_sic.max()))
+    # --- Set extents in lon/lat (stable + familiar)
+    ax0.set_extent([-180, 180, -90, -50], crs=pc)
+    ax1.set_extent([-80, 20, -85, -45], crs=pc)
 
-    ax1.set_xlim(zxmin, zxmax)
-    ax1.set_ylim(zymin, zymax)
-
-    # Context features (cosmetic)
+    # --- Context features (cosmetic)
     for ax in (ax0, ax1):
         ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
         ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
 
-    # Land mask underlay from your grid (makes land unambiguous)
-    ax0.pcolormesh(x_sic, y_sic, land_under, transform=proj, shading="auto", alpha=0.35, zorder=2)
-    ax1.pcolormesh(x_sic, y_sic, land_under, transform=proj, shading="auto", alpha=0.35, zorder=2)
+    # --- Land mask underlay from your grid (unambiguous land on the grid)
+    ax0.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
+                   shading="auto", alpha=0.35, zorder=2)
+    ax1.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
+                   shading="auto", alpha=0.35, zorder=2)
 
-    # SIC background
-    pm0 = ax0.pcolormesh(
-        x_sic, y_sic, sic_m.values,
-        transform=proj, shading="auto", vmin=0.0, vmax=1.0, zorder=3
-    )
-    pm1 = ax1.pcolormesh(
-        x_sic, y_sic, sic_m.values,
-        transform=proj, shading="auto", vmin=0.0, vmax=1.0, zorder=3
-    )
+    # --- SIC background (your native grid)
+    pm0 = ax0.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
+                         shading="auto", vmin=0.0, vmax=1.0, zorder=3)
+    pm1 = ax1.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
+                         shading="auto", vmin=0.0, vmax=1.0, zorder=3)
 
     ax0.set_title(f"Antarctic overview: mean SIC {args.year}-{args.month:02d}")
     ax1.set_title("Weddell zoom + selected points")
 
-    # Zoom box on overview (in projected meters)
-    ax0.plot(
-        [zxmin, zxmax, zxmax, zxmin, zxmin],
-        [zymin, zymin, zymax, zymax, zymin],
-        transform=proj, linewidth=1.5, zorder=6
-    )
+    # --- Zoom box on overview (define in lon/lat because extents are lon/lat)
+    zx0, zx1 = -80, 20
+    zy0, zy1 = -85, -45
+    ax0.plot([zx0, zx1, zx1, zx0, zx0],
+             [zy0, zy0, zy1, zy1, zy0],
+             transform=pc, linewidth=1.5, zorder=6)
 
-    # Edge contour (best-effort) - assumes dist2d is on same grid as plotted x/y.
-    # If dist2d is on sector grid rather than SIC grid, this contour may misalign.
+    # --- Edge contour (on native grid)
     try:
-        ax1.contour(
-            x_sic, y_sic, dist2d.values,
-            levels=[0.0], linewidths=1.2,
-            transform=proj, zorder=5
-        )
-    except Exception:
+        ax1.contour(x_sic, y_sic, dist2d.values, levels=[0.0],
+                    linewidths=1.2, transform=data_crs, zorder=5)
+    except Exception as e:
         if args.debug:
-            print("[debug] edge contour failed at 0.0 km (likely grid mismatch).", flush=True)
+            print(f"[debug] edge contour failed: {e}", flush=True)
 
-    # Plot selected points using SIC x/y indices (robust)
-    # If your selection indices are on sector grid, you may want to ensure sectors and SIC grids match.
+    # --- Points (x/y meters) + labels
     px = x_sic[df["x_idx"].astype(int).values]
     py = y_sic[df["y_idx"].astype(int).values]
-    ax1.scatter(px, py, s=60, transform=proj, zorder=7)
+    ax1.scatter(px, py, s=60, transform=data_crs, zorder=7)
 
-    # Labels: include lon/lat for sanity
     for _, r in df.iterrows():
         ax1.text(
             float(x_sic[int(r["x_idx"])]) + 25_000,
             float(y_sic[int(r["y_idx"])]) + 25_000,
             f"{r['point']}\n{r['lat']:.2f}, {r['lon']:.2f}",
             fontsize=8,
-            transform=proj,
+            transform=data_crs,
             zorder=8
         )
 
