@@ -94,12 +94,8 @@ def load_fs_ms_clim_anom():
         "FS_dynamic_anom"
     ]
 
-    ms_dyn_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_climatology.nc")[
-        "MS_dynamic_clim"
-    ]
-    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_anomalies.nc")[
-        "MS_dynamic_anom"
-    ]
+    ms_dyn_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_climatology.nc", decode_times=False)["MS_dynamic_clim_dsa"]
+    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_anomalies.nc", decode_times=False)["MS_dynamic_anom_dsa"]
 
     fs_sta_clim = xr.open_dataset(ANOM_DIR / "FS_static_climatology.nc")[
         "FS_static_clim"
@@ -108,12 +104,8 @@ def load_fs_ms_clim_anom():
         "FS_static_anom"
     ]
 
-    ms_sta_clim = xr.open_dataset(ANOM_DIR / "MS_static_climatology.nc")[
-        "MS_static_clim"
-    ]
-    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_anomalies.nc")[
-        "MS_static_anom"
-    ]
+    ms_sta_clim = xr.open_dataset(ANOM_DIR / "MS_static_climatology.nc", decode_times=False)["MS_static_clim_dsa"]
+    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_anomalies.nc", decode_times=False)["MS_static_anom_dsa"]
 
     ds_mask = xr.open_dataset(SECTOR_FILE)
     valid_ocean = ds_mask["valid_ocean"].astype(bool)
