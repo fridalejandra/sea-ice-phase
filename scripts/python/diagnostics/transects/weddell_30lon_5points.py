@@ -12,11 +12,10 @@ Key behavior (updated):
      We mask SIC >= 100 to NaN, then enforce 0<=SIC<=1.
   2) Land mask is taken explicitly from the SIC flags (==1200). Points are forced to ocean.
   3) Ocean validity mask requires (ocean) AND (any finite SIC in target month).
-  4) Plotting uses the native polar-stereo x/y grid with Cartopy EPSG:3412.
-     IMPORTANT: we do NOT use ax.set_extent(...) (which can NaN out); we set_xlim/set_ylim directly in meters.
-  5) Overview limits come from ds_sic x/y (you confirmed these are finite).
-     Zoom limits are computed from the Weddell sector mask in x/y with padding.
-  6) Zoom box is drawn in projected meters.
+  4) Plotting uses Cartopy with a SouthPolarStereo display projection, and treats the
+     gridded x/y meters as being in EPSG:3412 (data CRS). This matches your previous
+     successful workflow using set_extent in lon/lat.
+  5) Two-panel figure: overview + Weddell zoom, with a lon/lat zoom box on overview.
 
 Outputs (in --outdir):
   - weddell_lon30_fracpoints_monthMM_YYYY.csv
@@ -86,6 +85,8 @@ def _choose_xidx_for_lon_in_sector(
     """
     Choose x column *within sector_id* whose sector-only median lon is closest to target_lon,
     requiring at least min_keep valid cells (sector & finite lon & finite dist).
+
+    This is intentionally independent of SIC/ocean masking; ocean mask is applied later.
     """
     lon = lon2d.values
     sec = sector2d.values
@@ -151,7 +152,7 @@ def _require_1d_finite(name: str, arr: np.ndarray):
     if arr.ndim != 1:
         raise RuntimeError(f"{name} must be 1D, got shape {arr.shape}")
     if not np.isfinite(arr).all():
-        raise RuntimeError(f"{name} contains NaN/Inf; cannot use for axis limits.")
+        raise RuntimeError(f"{name} contains NaN/Inf; cannot use for plotting.")
     return arr.astype(float)
 
 
@@ -200,21 +201,21 @@ def main():
             f"Data vars: {list(ds_sec.data_vars)} coords: {list(ds_sec.coords)}"
         )
 
-    lat2d = ds_sec["lat"]
-    lon2d = ds_sec["lon"]
-    sector2d = ds_sec[sector_var]
-
-    if args.debug:
-        print(f"[debug] sector_var={sector_var} weddell_id={weddell_id}", flush=True)
+    lat2d = ds_sec["lat"].transpose("y", "x")
+    lon2d = ds_sec["lon"].transpose("y", "x")
+    sector2d = ds_sec[sector_var].transpose("y", "x")
 
     # ---- Load monthly climatological dist-to-edge
     ds_d = xr.open_dataset(args.dist_month)
     dvar = _find_var(ds_d, ["dist_to_edge_km", "dist_to_edge", "distance_to_edge_km"])
     if dvar is None:
         raise RuntimeError(f"Could not find dist variable in {args.dist_month}. Found: {list(ds_d.data_vars)}")
-    dist2d = ds_d[dvar]
+    dist2d = ds_d[dvar].transpose("y", "x")
 
-    # ---- Choose x index within Weddell near target lon (using sector grid lon/dist)
+    if args.debug:
+        print(f"[debug] sector_var={sector_var} weddell_id={weddell_id}", flush=True)
+
+    # ---- Choose x index within Weddell near target lon
     x_idx = _choose_xidx_for_lon_in_sector(
         lon2d=lon2d,
         sector2d=sector2d,
@@ -234,17 +235,20 @@ def main():
     if not {"time", "y", "x"}.issubset(set(sic_raw.dims)):
         raise RuntimeError(f"SIC dims are {sic_raw.dims}; expected to include ('time','y','x').")
 
-    # Confirm x/y exist and are usable for plotting limits
     x_sic = _require_1d_finite("ds_sic['x']", ds_sic["x"].values)
     y_sic = _require_1d_finite("ds_sic['y']", ds_sic["y"].values)
 
-    # Flags: 1100=missing, 1200=land (and anything >=100 is non-physical for SIC)
+    # Flags: 1100=missing, 1200=land
     land_2d = (sic_raw.isel(time=0) == 1200)
     ocean_2d = ~land_2d
 
     # Clean SIC: flags -> NaN, then enforce physical bounds
-    sic = sic_raw.where(sic_raw < 100)  # kills 1100/1200 (and any other >=100 codes)
+    sic = sic_raw.where(sic_raw < 100)          # kills 1100/1200 codes
     sic = sic.where((sic >= 0.0) & (sic <= 1.0))
+
+    # Land underlay for plotting (1=land, NaN=ocean)
+    land_under = land_2d.astype(float).values
+    land_under[land_under == 0] = np.nan
 
     # ---- Time slice for the chosen month/year (inclusive bounds)
     t0, t_end = _month_bounds(args.year, args.month)
@@ -257,10 +261,9 @@ def main():
     sic_m = sic_month.mean("time", skipna=True)
 
     if args.debug:
-        mx = float(sic_m.max(skipna=True))
-        print(f"[debug] mean SIC month {args.year}-{args.month:02d} max(after mask)={mx:.3f}", flush=True)
-        print(f"[debug] ds_sic x range: {x_sic.min():.1f} .. {x_sic.max():.1f}", flush=True)
-        print(f"[debug] ds_sic y range: {y_sic.min():.1f} .. {y_sic.max():.1f}", flush=True)
+        finite = int(np.isfinite(sic_m.values).sum())
+        print(f"[debug] mean SIC finite cells: {finite} / {sic_m.size}", flush=True)
+        print(f"[debug] mean SIC min/max: {float(np.nanmin(sic_m.values)):.3f} / {float(np.nanmax(sic_m.values)):.3f}", flush=True)
 
     # ---- Slice chosen column for selection
     sec_col = sector2d.isel(x=x_idx)
@@ -271,8 +274,7 @@ def main():
     ocean_col = ocean_2d.isel(x=x_idx).values.astype(bool)
     ocean_valid_col = ocean_valid_2d.isel(x=x_idx).values.astype(bool)
 
-    # Along-column path coordinates (meters) from sector grid (used for distance along y)
-    # If your sector grid y differs from SIC y, this still works for selection because we select in sector y-index space.
+    # Along-column path distance (meters from sector grid)
     y_sec = ds_sec["y"].values.astype(float)
     x_m = float(ds_sec["x"].values[x_idx])
     x_path_m = np.full_like(y_sec, x_m, dtype=float)
@@ -291,7 +293,7 @@ def main():
     if keep_n < 30:
         raise RuntimeError(
             f"Too few valid-ocean cells along x_idx={x_idx} for Weddell in {args.year}-{args.month:02d}. "
-            f"keep.sum()={keep_n}. Try a different month/year or relax the concept of 'ocean_valid'."
+            f"keep.sum()={keep_n}. Try a different month/year or relax ocean_valid."
         )
 
     idxs = np.where(keep)[0]
@@ -306,25 +308,23 @@ def main():
     if edge_candidates.size > 0:
         edge_i = int(edge_candidates[np.nanargmax(latv[edge_candidates])])
     else:
-        # fallback: closest-to-edge, tie-break by most northward
         d_keep = dv[idxs]
         dmin = np.nanmin(d_keep)
         close = idxs[np.where(np.isclose(d_keep, dmin, atol=1e-6))[0]]
         edge_i = int(close[np.nanargmax(latv[close])])
         if args.debug:
-            print(f"[debug] no dist<=edge_eps found; using min dist={dmin:.3f} km (northward tie-break)", flush=True)
+            print(f"[debug] no dist<=edge_eps found; using min dist={dmin:.3f} km", flush=True)
 
     s_coast = float(s_km[coast_i])
     s_edge = float(s_km[edge_i])
-
     if s_edge <= s_coast:
         if args.debug:
-            print("[debug] s_km ordering opposite of latitude ordering; swapping s_coast/s_edge for fraction calc", flush=True)
+            print("[debug] swapping s_coast/s_edge for fraction calc", flush=True)
         s_coast, s_edge = s_edge, s_coast
 
     D = s_edge - s_coast
     if D <= 0:
-        raise RuntimeError(f"Non-positive coast→edge distance: D={D:.3f} (s_coast={s_coast:.3f}, s_edge={s_edge:.3f})")
+        raise RuntimeError(f"Non-positive coast→edge distance: D={D:.3f}")
 
     in_segment = keep & (s_km >= s_coast) & (s_km <= s_edge)
     seg_idx = np.where(in_segment)[0]
@@ -360,34 +360,32 @@ def main():
     print(f"[info] wrote points CSV: {csv_path}", flush=True)
 
     # --------------------------
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-
-    # --- Projections
-    ax_proj = ccrs.SouthPolarStereo()  # display projection (what you’re used to)
-    data_crs = ccrs.epsg(3412)  # CRS of x_sic/y_sic meters
+    # Plot: SouthPolarStereo display, EPSG:3412 data CRS for x/y meters
+    # --------------------------
+    ax_proj = ccrs.SouthPolarStereo()
+    data_crs = ccrs.epsg(3412)
     pc = ccrs.PlateCarree()
 
     fig = plt.figure(figsize=(13, 6))
     ax0 = fig.add_subplot(1, 2, 1, projection=ax_proj)
     ax1 = fig.add_subplot(1, 2, 2, projection=ax_proj)
 
-    # --- Set extents in lon/lat (stable + familiar)
+    # Extents in lon/lat (familiar + stable)
     ax0.set_extent([-180, 180, -90, -50], crs=pc)
     ax1.set_extent([-80, 20, -85, -45], crs=pc)
 
-    # --- Context features (cosmetic)
+    # Context features (cosmetic)
     for ax in (ax0, ax1):
         ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
         ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
 
-    # --- Land mask underlay from your grid (unambiguous land on the grid)
+    # Land mask underlay (from the SIC grid)
     ax0.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
                    shading="auto", alpha=0.35, zorder=2)
     ax1.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
                    shading="auto", alpha=0.35, zorder=2)
 
-    # --- SIC background (your native grid)
+    # SIC background
     pm0 = ax0.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
                          shading="auto", vmin=0.0, vmax=1.0, zorder=3)
     pm1 = ax1.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
@@ -396,14 +394,14 @@ def main():
     ax0.set_title(f"Antarctic overview: mean SIC {args.year}-{args.month:02d}")
     ax1.set_title("Weddell zoom + selected points")
 
-    # --- Zoom box on overview (define in lon/lat because extents are lon/lat)
+    # Zoom box on overview (lon/lat)
     zx0, zx1 = -80, 20
     zy0, zy1 = -85, -45
     ax0.plot([zx0, zx1, zx1, zx0, zx0],
              [zy0, zy0, zy1, zy1, zy0],
              transform=pc, linewidth=1.5, zorder=6)
 
-    # --- Edge contour (on native grid)
+    # Edge contour (native grid, meters)
     try:
         ax1.contour(x_sic, y_sic, dist2d.values, levels=[0.0],
                     linewidths=1.2, transform=data_crs, zorder=5)
@@ -411,7 +409,7 @@ def main():
         if args.debug:
             print(f"[debug] edge contour failed: {e}", flush=True)
 
-    # --- Points (x/y meters) + labels
+    # Points (x/y meters)
     px = x_sic[df["x_idx"].astype(int).values]
     py = y_sic[df["y_idx"].astype(int).values]
     ax1.scatter(px, py, s=60, transform=data_crs, zorder=7)
