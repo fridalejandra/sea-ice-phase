@@ -38,6 +38,11 @@ __pycache__/
  results/figures/*.pdf
  results/figures/*.jpeg
 
+ # diagnostics outputs
+results/diagnostics/
+scripts/python/processing/sensitivity/threshold/*.out
+__pycache__/
+
 # ==========================
 # Future structure
 # ==========================
