@@ -10,6 +10,7 @@ Col 1: Step-change sign agreement (post–pre), categorical
     "earlier" = negative change; "later" = positive change
 Col 2: Sector-mean step change (post–pre), static vs dynamic
 Col 3: Trend agreement (linear): both methods have negative slope (earlier over time)
+       **NOW restricted to ACTIVE pixels for that phase & both methods.**
 
 Periods:
   pre  = 1980–2017
@@ -55,7 +56,7 @@ PROJECT_ROOT = PROJECT_ROOT_CLUSTER
 ANOM_DIR = PROJECT_ROOT / "results" / "anomalies"
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
-REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
+REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
 SUBFOLDER = "trends"
 
 # Pre/post definition
@@ -71,6 +72,9 @@ sector_labels = {
     4: "EA",    # East Antarctica
     5: "RA",    # Ross–Amundsen (check your mask; rename label if you want)
 }
+
+# Active pixel criterion (for trend panels c/f only)
+MIN_FRAC_ACTIVE = 0.80  # e.g., require valid timing >=80% of years for BOTH methods
 
 
 # ---------------------------------------------------------------------
@@ -160,6 +164,23 @@ def load_fs_ms_clim_anom() -> dict[str, xr.DataArray]:
         "valid_ocean": valid_ocean,
         "sector_mask": sector_mask,
     }
+
+
+# ---------------------------------------------------------------------
+# Active pixel masks (for trend panels only)
+# ---------------------------------------------------------------------
+def activity_mask_from_anom(anom_da: xr.DataArray, min_frac: float = 0.8) -> xr.DataArray:
+    """
+    Active pixel definition for a *phase/method*:
+      active = finite values in >= min_frac of years.
+
+    anom_da dims: [year, y, x]
+    returns: boolean [y, x]
+    """
+    n_total = anom_da.sizes["year"]
+    n_valid = anom_da.notnull().sum("year")
+    frac = n_valid / float(n_total)
+    return (frac >= min_frac)
 
 
 # ---------------------------------------------------------------------
@@ -267,15 +288,21 @@ def compute_trend_slopes(anom_da: xr.DataArray) -> xr.DataArray:
     return slopes
 
 
-def make_trend_agreement_mask(slope_dyn: xr.DataArray, slope_sta: xr.DataArray, valid_ocean: xr.DataArray) -> xr.DataArray:
+def make_trend_agreement_mask(
+    slope_dyn: xr.DataArray,
+    slope_sta: xr.DataArray,
+    valid_ocean: xr.DataArray,
+    active_mask: xr.DataArray,
+) -> xr.DataArray:
     """
     Return a float mask suitable for plotting:
-      1.0 where BOTH slopes < 0 (earlier over time)
-      NaN elsewhere (including non-ocean)
+      1.0 where BOTH slopes < 0 (earlier over time) AND pixel is ACTIVE
+      NaN elsewhere (including non-ocean and inactive)
     """
-    agree = (slope_dyn < 0.0) & (slope_sta < 0.0) & valid_ocean
+    mask = valid_ocean & active_mask
+    agree = (slope_dyn < 0.0) & (slope_sta < 0.0) & mask
     out = xr.where(agree, 1.0, np.nan)
-    out.name = "trend_agree_both_negative"
+    out.name = "trend_agree_both_negative_active"
     return out
 
 
@@ -319,7 +346,7 @@ def plot_sign_class_map(ax, da_class: xr.DataArray, title: str):
 
 def plot_trend_agreement(ax, agree_mask: xr.DataArray, title: str):
     """
-    Plot NaN/1 mask: only show blue where both trends are earlier.
+    Plot NaN/1 mask: only show blue where both trends are earlier (ACTIVE-only).
     """
     cmap = mcolors.ListedColormap(["#2b8cbe"])
     cmap.set_bad((1, 1, 1, 0))  # transparent for NaN
@@ -360,31 +387,41 @@ def main():
     # Col 2: sector mean bars
     df_sector = sector_mean_deltas(fs_dyn_diff, fs_sta_diff, ms_dyn_diff, ms_sta_diff, sector_mask, valid_ocean)
 
-    # Col 3: trend agreement (both negative slopes)
+    # Col 3: trend agreement (both negative slopes) -- ACTIVE ONLY
     years = fields["FS_dynamic_anom"]["year"].values
     print(f"[INFO] Trend years span: {years.min()}–{years.max()}")
+
+    # Active masks (per phase) require BOTH methods to be "active"
+    fs_active = activity_mask_from_anom(fields["FS_dynamic_anom"], MIN_FRAC_ACTIVE) & activity_mask_from_anom(fields["FS_static_anom"], MIN_FRAC_ACTIVE)
+    ms_active = activity_mask_from_anom(fields["MS_dynamic_anom"], MIN_FRAC_ACTIVE) & activity_mask_from_anom(fields["MS_static_anom"], MIN_FRAC_ACTIVE)
 
     fs_slope_dyn = compute_trend_slopes(fields["FS_dynamic_anom"])
     fs_slope_sta = compute_trend_slopes(fields["FS_static_anom"])
     ms_slope_dyn = compute_trend_slopes(fields["MS_dynamic_anom"])
     ms_slope_sta = compute_trend_slopes(fields["MS_static_anom"])
 
-    fs_trend_agree = make_trend_agreement_mask(fs_slope_dyn, fs_slope_sta, valid_ocean)
-    ms_trend_agree = make_trend_agreement_mask(ms_slope_dyn, ms_slope_sta, valid_ocean)
+    fs_trend_agree = make_trend_agreement_mask(fs_slope_dyn, fs_slope_sta, valid_ocean, fs_active)
+    ms_trend_agree = make_trend_agreement_mask(ms_slope_dyn, ms_slope_sta, valid_ocean, ms_active)
 
-    # Fractions (relative to valid ocean gridcells)
+    # Fractions
     ocean_n = int(valid_ocean.values.sum())
 
-    def frac_class(da, k):
-        return float(np.isfinite(da.values).astype(int).sum() and np.nansum(da.values == k)) / ocean_n
+    def frac_step_both_earlier(da_class: xr.DataArray) -> float:
+        # fraction of ALL valid ocean pixels in class 1 (kept as-is)
+        return float(np.nansum(da_class.values == 1)) / float(ocean_n)
 
-    def frac_trend(da):
-        return float(np.nansum(np.isfinite(da.values))) / ocean_n
+    def frac_trend_active(agree_mask: xr.DataArray, active_mask: xr.DataArray) -> float:
+        # fraction of ACTIVE ocean pixels showing agreement (value==1)
+        denom = int((valid_ocean & active_mask).values.sum())
+        if denom == 0:
+            return np.nan
+        num = int(np.nansum(agree_mask.values == 1.0))
+        return num / float(denom)
 
-    print("[INFO] Step-change BOTH EARLIER fraction (FS):", frac_class(fs_class, 1))
-    print("[INFO] Step-change BOTH EARLIER fraction (MS):", frac_class(ms_class, 1))
-    print("[INFO] Trend BOTH NEG SLOPE fraction (FS):", frac_trend(fs_trend_agree))
-    print("[INFO] Trend BOTH NEG SLOPE fraction (MS):", frac_trend(ms_trend_agree))
+    print("[INFO] Step-change BOTH EARLIER fraction (FS) [denom=valid ocean]:", frac_step_both_earlier(fs_class))
+    print("[INFO] Step-change BOTH EARLIER fraction (MS) [denom=valid ocean]:", frac_step_both_earlier(ms_class))
+    print(f"[INFO] Trend BOTH NEG SLOPE fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:", frac_trend_active(fs_trend_agree, fs_active))
+    print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:", frac_trend_active(ms_trend_agree, ms_active))
 
     # ---------- Figure layout ----------
     fig = plt.figure(figsize=(12, 8))
@@ -395,10 +432,10 @@ def main():
     # Panel titles (short, no bleeding)
     t_a = "(a) FS sign (post−pre)"
     t_b = "(b) FS sector mean Δ"
-    t_c = "(c) FS trend agree (both earlier)"
+    t_c = "(c) FS trend agree (active)"
     t_d = "(d) MS sign (post−pre)"
     t_e = "(e) MS sector mean Δ"
-    t_f = "(f) MS trend agree (both earlier)"
+    t_f = "(f) MS trend agree (active)"
 
     # ----- Row 1: FS -----
     ax_a = make_polar_ax(fig, gs, 0, 0)
@@ -448,7 +485,7 @@ def main():
 
     # ---------- Colorbars (compact, no "mask/land") ----------
     # Smaller, left-shifted colorbar for sign agreement
-    cax1 = fig.add_axes([0.08, 0.055, 0.28, 0.013])  # [left, bottom, width, height]
+    cax1 = fig.add_axes([0.075, 0.055, 0.26, 0.012])  # [left, bottom, width, height]
 
     cb1 = fig.colorbar(
         im_class,
@@ -464,21 +501,13 @@ def main():
     )
     cb1.outline.set_visible(False)
 
-    # Trend agreement legend (just a label; map is blue-only)
-    # If you want a colorbar anyway, uncomment below.
-    # cax2 = fig.add_axes([0.58, 0.06, 0.30, 0.015])
-    # cb2 = fig.colorbar(im_trend, cax=cax2, orientation="horizontal")
-    # cb2.set_ticks([])
-    # cb2.set_label("Both methods: negative linear slope (earlier over time)", fontsize=9)
-    # cb2.outline.set_visible(False)
-
     # Layout (avoid tight_layout with cartopy)
     fig.subplots_adjust(left=0.03, right=0.97, top=0.93, bottom=0.11, wspace=0.25, hspace=0.26)
 
     # ---------- Save / upload ----------
     fig_name = (
         f"Fig7_FS_MS_stepchange_and_trend_static_vs_dynamic_"
-        f"pre{PRE_START}-{PRE_END}_post{POST_START}-{POST_END}.png"
+        f"pre{PRE_START}-{PRE_END}_post{POST_START}-{POST_END}_active{int(MIN_FRAC_ACTIVE*100)}.png"
     )
     out_path = get_fig_path(PROJECT_ROOT, subfolder=SUBFOLDER, fig_name=fig_name)
 
@@ -487,5 +516,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
