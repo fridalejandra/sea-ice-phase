@@ -390,7 +390,7 @@ def main():
     fig = plt.figure(figsize=(12, 8))
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], width_ratios=[1.25, 1.0, 1.25])
 
-    fig.suptitle(f"Step change: {POST_START}–{POST_END} minus {PRE_START}–{PRE_END}", y=0.985, fontsize=11)
+    fig.suptitle(f"Post-2017 timing shift (2018–2023 minus 1980–2017)", y=0.985, fontsize=11)
 
     # Panel titles (short, no bleeding)
     t_a = "(a) FS sign (post−pre)"
@@ -447,16 +447,21 @@ def main():
     _ = plot_trend_agreement(ax_f, ms_trend_agree, t_f)
 
     # ---------- Colorbars (compact, no "mask/land") ----------
-    # Step-change sign agreement colorbar (class)
-    cax1 = fig.add_axes([0.10, 0.06, 0.34, 0.015])
+    # Smaller, left-shifted colorbar for sign agreement
+    cax1 = fig.add_axes([0.08, 0.055, 0.28, 0.013])  # [left, bottom, width, height]
+
     cb1 = fig.colorbar(
         im_class,
         cax=cax1,
         orientation="horizontal",
         ticks=[1, 2, 3, 4],
     )
+
     cb1.set_label("Sign agreement class", fontsize=9)
-    cb1.ax.set_xticklabels(["both −", "dyn − only", "stat − only", "both +"], fontsize=7)
+    cb1.ax.set_xticklabels(
+        ["both −", "dyn − only", "stat − only", "both +"],
+        fontsize=7,
+    )
     cb1.outline.set_visible(False)
 
     # Trend agreement legend (just a label; map is blue-only)
