@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-weddell_30lon_5points.py
+weddell_30lon_points.py
 
-Pick 5 fractional-distance points along a Weddell meridional transect near 30°W
-using a *monthly climatological* distance-to-edge field (e.g., month11).
+Pick fractional-distance points along a Weddell meridional transect near 30°W
+using a monthly climatological distance-to-edge field (e.g., month11).
 
 Key behavior:
   1) SIC is fractional (0–1) but Bootstrap-style files include flag codes:
@@ -14,10 +14,9 @@ Key behavior:
   3) Ocean validity mask requires (ocean) AND (any finite SIC in target month).
   4) Plotting uses Cartopy with a SouthPolarStereo display projection, and treats the
      gridded x/y meters as being in EPSG:3412 (data CRS).
-  5) Two-panel figure: overview + Weddell zoom, with Weddell panel larger and both panels
-     auto-zoomed to valid SIC data to avoid empty white space.
-  6) Transect is a true ~constant-lon path: for each y-row, we choose the x-cell in Weddell
-     whose lon is closest to target_lon. This yields a diagonal/curved transect in projection.
+  5) Single-panel reference map (NO overview), auto-zoomed to Weddell + finite SIC.
+  6) Transect is a true ~constant-lon path: for each y-row, choose the x-cell in Weddell
+     whose lon is closest to target_lon → diagonal/curved in projection.
 
 Outputs (in --outdir):
   - weddell_lon30_fracpoints_monthMM_YYYY.csv
@@ -31,7 +30,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import matplotlib.cm as cm
 
 import cartopy.crs as ccrs
@@ -70,10 +68,7 @@ def _wrap_lon_diff(a, b):
 
 
 def _month_bounds(year: int, month: int):
-    """
-    Return numpy datetime64 start (inclusive) and end (inclusive) for a month.
-    Avoids including day 1 of next month.
-    """
+    """Return numpy datetime64 start (inclusive) and end (inclusive) for a month."""
     t0 = np.datetime64(f"{year}-{month:02d}-01")
     if month == 12:
         t1 = np.datetime64(f"{year+1}-01-01")
@@ -98,19 +93,17 @@ def _build_lon_transect_indices(
     dist2d: xr.DataArray,
     sector_id: int,
     target_lon: float,
-    min_rows: int = 200,
+    min_rows: int = 100,
     debug: bool = False,
 ):
     """
-    Build a meridional-ish transect by, for EACH y-row, choosing the x-cell in sector_id
-    whose lon is closest to target_lon (wrap-aware). This yields a curved/diagonal line
-    in projected space (because x varies with y).
+    For each y-row, choose the x-cell within sector_id with lon closest to target_lon.
     Returns arrays y_idx, x_idx (same length, ordered by y).
     """
     lon = lon2d.values
     sec = sector2d.values
     dist = dist2d.values
-    ny, nx = lon.shape
+    ny, _ = lon.shape
 
     ys = []
     xs = []
@@ -129,8 +122,8 @@ def _build_lon_transect_indices(
 
     if ys.size < min_rows:
         raise RuntimeError(
-            f"Transect too short: only {ys.size} rows intersect sector {sector_id} "
-            f"with finite lon/dist. (min_rows={min_rows})"
+            f"Transect too short: only {ys.size} rows intersect sector {sector_id} with finite lon/dist. "
+            f"(min_rows={min_rows})"
         )
 
     if debug:
@@ -148,7 +141,7 @@ def _cumulative_distance_polyline_km(x_m: np.ndarray, y_m: np.ndarray) -> np.nda
     return np.concatenate([[0.0], np.cumsum(ds)])
 
 
-def _extent_from_mask(lon2d: xr.DataArray, lat2d: xr.DataArray, mask: np.ndarray, pad_deg: float = 3.0):
+def _extent_from_mask(lon2d: xr.DataArray, lat2d: xr.DataArray, mask: np.ndarray, pad_deg: float = 2.0):
     """Return [lon_min, lon_max, lat_min, lat_max] from a boolean mask in lon/lat space."""
     if mask.sum() < 10:
         raise RuntimeError("Extent mask too small to compute extent.")
@@ -165,19 +158,20 @@ def _extent_from_mask(lon2d: xr.DataArray, lat2d: xr.DataArray, mask: np.ndarray
 # Main
 # --------------------------
 def main():
-    ap = argparse.ArgumentParser(description="Weddell 30°W: pick 5 fractional points + projected map")
+    ap = argparse.ArgumentParser(description="Weddell 30°W: pick fractional points + single reference map")
     ap.add_argument("--sic", required=True, type=Path, help="Merged daily SIC NetCDF")
     ap.add_argument("--var", default="N07_ICECON", help="SIC variable name (default: N07_ICECON)")
     ap.add_argument("--sectors", required=True, type=Path, help="canonical_sectors.nc")
     ap.add_argument("--dist-month", required=True, type=Path, help="monthly dist_to_edge_km_monthMM.nc")
     ap.add_argument("--outdir", required=True, type=Path, help="Output directory")
-    ap.add_argument("--target-lon", type=float, default=-30.0, help="Target lon for transect (degE, -30=30W)")
-    ap.add_argument("--fractions", default="0.1,0.3,0.5,0.7,0.9", help="Comma-separated fractions 0<f<1 (expect 5)")
-    ap.add_argument("--year", type=int, default=2022, help="Year for SIC background/ocean mask (default: 2022)")
-    ap.add_argument("--month", type=int, default=11, help="Month for SIC background/ocean mask (default: 11)")
-    ap.add_argument("--weddell-id", type=int, required=True, help="Weddell sector numeric ID (you said: 2)")
-    ap.add_argument("--min-transect-rows", type=int, default=200, help="Minimum rows required in transect build")
-    ap.add_argument("--edge-eps-km", type=float, default=1e-3, help="Edge candidate threshold for dist_to_edge (km)")
+    ap.add_argument("--target-lon", type=float, default=-30.0, help="Target lon (degE, -30=30W)")
+    ap.add_argument("--fractions", default="0.3,0.5,0.7,0.9",
+                    help="Comma-separated fractions 0<f<1 (default: 0.3,0.5,0.7,0.9)")
+    ap.add_argument("--year", type=int, default=2022, help="Year for SIC background/ocean mask")
+    ap.add_argument("--month", type=int, default=11, help="Month for SIC background/ocean mask")
+    ap.add_argument("--weddell-id", type=int, required=True, help="Weddell sector numeric ID (e.g., 2)")
+    ap.add_argument("--min-transect-rows", type=int, default=100, help="Minimum rows required in transect build")
+    ap.add_argument("--edge-eps-km", type=float, default=1e-3, help="Edge threshold for dist_to_edge (km)")
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args()
 
@@ -185,14 +179,14 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
 
     fracs = [float(x) for x in args.fractions.split(",") if x.strip() != ""]
-    if len(fracs) != 5:
-        raise ValueError("This script expects exactly 5 fractions (e.g., 0.1,0.3,0.5,0.7,0.9).")
+    if len(fracs) < 2:
+        raise ValueError("Provide at least 2 fractions (e.g., 0.3,0.5,0.7,0.9).")
     if not all(0.0 < f < 1.0 for f in fracs):
         raise ValueError("All fractions must be between 0 and 1 (exclusive).")
 
     weddell_id = int(args.weddell_id)
 
-    # ---- Load canonical sectors (lat/lon + sector id)
+    # ---- Load canonical sectors
     ds_sec = xr.open_dataset(args.sectors)
     if "lat" not in ds_sec or "lon" not in ds_sec:
         raise RuntimeError("canonical_sectors.nc must contain lat(y,x) and lon(y,x).")
@@ -219,8 +213,8 @@ def main():
 
     if args.debug:
         print(f"[debug] sector_var={sector_var} weddell_id={weddell_id}", flush=True)
-        print(f"[debug] sector grid: y={ds_sec.dims.get('y')} x={ds_sec.dims.get('x')}", flush=True)
-        print(f"[debug] dist grid:   y={ds_d.dims.get('y')} x={ds_d.dims.get('x')}", flush=True)
+        print(f"[debug] sector grid: y={ds_sec.sizes.get('y')} x={ds_sec.sizes.get('x')}", flush=True)
+        print(f"[debug] dist grid:   y={ds_d.sizes.get('y')} x={ds_d.sizes.get('x')}", flush=True)
 
     # ---- Load SIC (flag-aware masking)
     ds_sic = xr.open_dataset(args.sic)
@@ -231,12 +225,12 @@ def main():
     if not {"time", "y", "x"}.issubset(set(sic_raw.dims)):
         raise RuntimeError(f"SIC dims are {sic_raw.dims}; expected to include ('time','y','x').")
 
-    # Hard sanity check: grids must match, or everything downstream is suspect
-    if (ds_sec.dims["y"] != ds_sic.dims["y"]) or (ds_sec.dims["x"] != ds_sic.dims["x"]):
+    # Hard sanity check: grids must match
+    if (ds_sec.sizes["y"] != ds_sic.sizes["y"]) or (ds_sec.sizes["x"] != ds_sic.sizes["x"]):
         raise RuntimeError(
             "Sector grid and SIC grid shapes differ; regrid or build an index mapping first.\n"
-            f"sectors: (y,x)=({ds_sec.dims['y']},{ds_sec.dims['x']})  "
-            f"sic: (y,x)=({ds_sic.dims['y']},{ds_sic.dims['x']})"
+            f"sectors: (y,x)=({ds_sec.sizes['y']},{ds_sec.sizes['x']})  "
+            f"sic: (y,x)=({ds_sic.sizes['y']},{ds_sic.sizes['x']})"
         )
 
     x_sic = _require_1d_finite("ds_sic['x']", ds_sic["x"].values)
@@ -247,21 +241,21 @@ def main():
     ocean_2d = ~land_2d
 
     # Clean SIC: flags -> NaN, then enforce physical bounds
-    sic = sic_raw.where(sic_raw < 100)          # kills 1100/1200 codes
+    sic = sic_raw.where(sic_raw < 100)
     sic = sic.where((sic >= 0.0) & (sic <= 1.0))
 
     # Land underlay for plotting (1=land, NaN=ocean)
     land_under = land_2d.astype(float).values
     land_under[land_under == 0] = np.nan
 
-    # ---- Time slice for the chosen month/year (inclusive bounds)
+    # ---- Time slice for chosen month/year
     t0, t_end = _month_bounds(args.year, args.month)
     sic_month = sic.sel(time=slice(t0, t_end))
 
-    # Ocean validity mask: must be ocean AND have any finite SIC within month window
+    # Ocean validity mask: ocean AND any finite SIC in month
     ocean_valid_2d = ocean_2d & np.isfinite(sic_month).any("time")
 
-    # Mean SIC background for the map
+    # Mean SIC background
     sic_m = sic_month.mean("time", skipna=True)
 
     if args.debug:
@@ -273,7 +267,7 @@ def main():
                 flush=True,
             )
 
-    # ---- Build a true (~constant lon) transect path: x varies with y
+    # ---- Build ~constant lon transect
     ty, tx = _build_lon_transect_indices(
         lon2d=lon2d,
         sector2d=sector2d,
@@ -284,16 +278,13 @@ def main():
         debug=args.debug,
     )
 
-    # Extract transect values
     t_lat = lat2d.values[ty, tx]
     t_lon = lon2d.values[ty, tx]
     t_dist = dist2d.values[ty, tx]
 
-    # Ocean + ocean_valid along transect
     t_ocean = ocean_2d.values[ty, tx].astype(bool)
     t_ocean_valid = ocean_valid_2d.values[ty, tx].astype(bool)
 
-    # Keep only valid ocean cells with finite geo/dist
     t_keep = np.isfinite(t_lat) & np.isfinite(t_lon) & np.isfinite(t_dist) & t_ocean & t_ocean_valid
     tyk = ty[t_keep]
     txk = tx[t_keep]
@@ -304,14 +295,14 @@ def main():
     if tyk.size < 30:
         raise RuntimeError(f"Too few valid transect points after ocean filtering: {tyk.size}")
 
-    # Build polyline distance along kept transect
+    # Along-transect cumulative distance
     x_coords = ds_sec["x"].values.astype(float)
     y_coords = ds_sec["y"].values.astype(float)
     x_path_m = x_coords[txk]
     y_path_m = y_coords[tyk]
     s_km = _cumulative_distance_polyline_km(x_path_m, y_path_m)
 
-    # ---- Coast (poleward) and edge (northward) anchors
+    # ---- Coast and edge anchors
     coast_i = int(np.argmin(latk))
 
     edge_candidates = np.where(distk <= args.edge_eps_km)[0]
@@ -338,13 +329,12 @@ def main():
     if seg_idx.size < 10:
         raise RuntimeError("Too few cells between coast and edge anchors along the chosen transect.")
 
-    # ---- Select points at fractions of D
+    # ---- Select points at fractions
     points = []
     for f in fracs:
         target_s = s_coast + f * D
         j = int(seg_idx[np.argmin(np.abs(s_km[seg_idx] - target_s))])
 
-        # Hard assertion: never land
         if not bool(ocean_2d.values[tyk[j], txk[j]]):
             raise RuntimeError(f"Selected point is on land! x_idx={int(txk[j])} y_idx={int(tyk[j])} f={f}")
 
@@ -367,78 +357,55 @@ def main():
     print(f"[info] wrote points CSV: {csv_path}", flush=True)
 
     # --------------------------
-    # Plot: SouthPolarStereo display, EPSG:3412 data CRS for x/y meters
+    # Single reference map (no overview)
     # --------------------------
     ax_proj = ccrs.SouthPolarStereo()
     data_crs = ccrs.epsg(3412)
     pc = ccrs.PlateCarree()
 
-    # Auto extents from data to reduce empty white space
+    # auto extent: Weddell sector + finite SIC (reduces empty white)
     finite_mask = np.isfinite(sic_m.values)
     zoom_mask = finite_mask & (sector2d.values == weddell_id)
     zoom_extent = _extent_from_mask(lon2d, lat2d, zoom_mask, pad_deg=2.0)
 
-    zx0, zx1, zy0, zy1 = zoom_extent
-    overview_extent = [zx0 - 25, zx1 + 25, max(-90, zy0 - 8), min(-35, zy1 + 8)]
+    fig = plt.figure(figsize=(8.5, 7.5))
+    ax = fig.add_subplot(1, 1, 1, projection=ax_proj)
+    ax.set_extent(zoom_extent, crs=pc)
 
-    fig = plt.figure(figsize=(14, 6))
-    gs = gridspec.GridSpec(nrows=1, ncols=2, width_ratios=[1.0, 1.9], wspace=0.08)
-    ax0 = fig.add_subplot(gs[0, 0], projection=ax_proj)
-    ax1 = fig.add_subplot(gs[0, 1], projection=ax_proj)
+    ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
 
-    ax0.set_extent(overview_extent, crs=pc)
-    ax1.set_extent(zoom_extent, crs=pc)
-
-    # Context features
-    for ax in (ax0, ax1):
-        ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
-        ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
-
-    # Land mask underlay (from the SIC grid)
-    ax0.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
-                   shading="auto", alpha=0.35, zorder=2)
-    ax1.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
-                   shading="auto", alpha=0.35, zorder=2)
+    # land underlay from SIC flags
+    ax.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
+                  shading="auto", alpha=0.35, zorder=2)
 
     # SIC background
-    pm0 = ax0.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
-                         shading="auto", vmin=0.0, vmax=1.0, zorder=3)
-    pm1 = ax1.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
-                         shading="auto", vmin=0.0, vmax=1.0, zorder=3)
+    pm = ax.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
+                       shading="auto", vmin=0.0, vmax=1.0, zorder=3)
 
-    ax0.set_title(f"Overview: mean SIC {args.year}-{args.month:02d}")
-    ax1.set_title("Weddell zoom + selected points")
-
-    # Zoom box on overview (lon/lat)
-    ax0.plot([zx0, zx1, zx1, zx0, zx0],
-             [zy0, zy0, zy1, zy1, zy0],
-             transform=pc, linewidth=1.5, zorder=6)
-
-    # Edge contour (climatological dist field)
+    # edge contour
     try:
-        ax1.contour(x_sic, y_sic, dist2d.values, levels=[0.0],
-                    linewidths=1.2, transform=data_crs, zorder=5)
+        ax.contour(x_sic, y_sic, dist2d.values, levels=[0.0],
+                   linewidths=1.2, transform=data_crs, zorder=5)
     except Exception as e:
         if args.debug:
             print(f"[debug] edge contour failed: {e}", flush=True)
 
-    # Draw the transect polyline for sanity (subtle)
-    ax1.plot(x_coords[txk], y_coords[tyk], transform=data_crs, linewidth=1.2, zorder=6)
+    # transect line
+    ax.plot(x_coords[txk], y_coords[tyk], transform=data_crs, linewidth=1.2, zorder=6)
 
-    # Points (x/y meters) with distinct colors
+    # points, colored
     px = x_sic[df["x_idx"].astype(int).values]
     py = y_sic[df["y_idx"].astype(int).values]
     cvals = np.arange(len(df))
     cmap = cm.get_cmap("tab10", len(df))
 
-    ax1.scatter(
-        px, py, s=90, c=cvals, cmap=cmap,
-        edgecolor="k", linewidth=0.6,
-        transform=data_crs, zorder=7
-    )
+    ax.scatter(px, py, s=90, c=cvals, cmap=cmap,
+               edgecolor="k", linewidth=0.6,
+               transform=data_crs, zorder=7)
 
     for i, r in enumerate(df.itertuples(index=False)):
-        ax1.text(
+        ax.text(
             float(x_sic[int(r.x_idx)]) + 25_000,
             float(y_sic[int(r.y_idx)]) + 25_000,
             f"{r.point}\n{r.lat:.2f}, {r.lon:.2f}",
@@ -448,13 +415,12 @@ def main():
             zorder=8
         )
 
-    fig.suptitle(
+    ax.set_title(
         f"Weddell (~30°W) fractional points (month{args.month:02d} edge)\n"
-        f"Background: mean SIC {args.year}-{args.month:02d} | Edge: climatological month{args.month:02d}",
-        y=1.02
+        f"Mean SIC {args.year}-{args.month:02d} | Edge: climatological month{args.month:02d}"
     )
 
-    cb = fig.colorbar(pm1, ax=[ax0, ax1], fraction=0.046, pad=0.04)
+    cb = fig.colorbar(pm, ax=ax, fraction=0.046, pad=0.04)
     cb.set_label(f"Mean SIC (fraction) ({args.year}-{args.month:02d})")
 
     png_path = outdir / f"weddell_lon30_fracpoints_month{args.month:02d}_{args.year}_map.png"
