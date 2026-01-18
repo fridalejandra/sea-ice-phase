@@ -73,7 +73,7 @@ sector_labels = {
     5: "RA",    # Ross–Amundsen (check your mask; rename label if you want)
 }
 
-# Active pixel criterion (for trend panels c/f only)
+# Active pixel criterion (used for trend panels AND sector-mean bars)
 MIN_FRAC_ACTIVE = 0.80  # e.g., require valid timing >=80% of years for BOTH methods
 
 
@@ -166,22 +166,6 @@ def load_fs_ms_clim_anom() -> dict[str, xr.DataArray]:
     }
 
 
-# ---------------------------------------------------------------------
-# Active pixel masks (for trend panels only)
-# ---------------------------------------------------------------------
-def activity_mask_from_anom(anom_da: xr.DataArray, min_frac: float = 0.8) -> xr.DataArray:
-    """
-    Active pixel definition for a *phase/method*:
-      active = finite values in >= min_frac of years.
-
-    anom_da dims: [year, y, x]
-    returns: boolean [y, x]
-    """
-    n_total = anom_da.sizes["year"]
-    n_valid = anom_da.notnull().sum("year")
-    frac = n_valid / float(n_total)
-    return (frac >= min_frac)
-
 
 # ---------------------------------------------------------------------
 # Core math: step change post−pre
@@ -234,28 +218,35 @@ def make_sign_class_map(diff_dyn: xr.DataArray, diff_sta: xr.DataArray, valid_oc
     return cls
 
 
-def sector_mean_deltas(diff_dyn_fs: xr.DataArray, diff_sta_fs: xr.DataArray,
-                       diff_dyn_ms: xr.DataArray, diff_sta_ms: xr.DataArray,
-                       sector_mask: xr.DataArray, valid_ocean: xr.DataArray) -> pd.DataFrame:
-    """
-    Sector-mean step change (post−pre) for dynamic and static, FS and MS.
-    """
+def sector_mean_deltas(
+    diff_dyn_fs: xr.DataArray, diff_sta_fs: xr.DataArray,
+    diff_dyn_ms: xr.DataArray, diff_sta_ms: xr.DataArray,
+    sector_mask: xr.DataArray, valid_ocean: xr.DataArray,
+    fs_active: xr.DataArray, ms_active: xr.DataArray,
+) -> pd.DataFrame:
     records: list[dict] = []
 
-    for phase, d_dyn, d_sta in [
-        ("FS", diff_dyn_fs, diff_sta_fs),
-        ("MS", diff_dyn_ms, diff_sta_ms),
-    ]:
+    phase_specs = [
+        ("FS", diff_dyn_fs, diff_sta_fs, fs_active),
+        ("MS", diff_dyn_ms, diff_sta_ms, ms_active),
+    ]
+
+    for phase, d_dyn, d_sta, active in phase_specs:
         for sec in sector_ids:
-            mask = (sector_mask == sec) & valid_ocean
+            mask = (sector_mask == sec) & valid_ocean & active
+
             dyn_mean = float(np.nanmean(d_dyn.where(mask).values))
             sta_mean = float(np.nanmean(d_sta.where(mask).values))
+
             records += [
-                {"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec], "method": "Static", "delta": sta_mean},
-                {"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec], "method": "Dynamic", "delta": dyn_mean},
+                {"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec],
+                 "method": "Static", "delta": sta_mean},
+                {"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec],
+                 "method": "Dynamic", "delta": dyn_mean},
             ]
 
     return pd.DataFrame.from_records(records)
+
 
 
 # ---------------------------------------------------------------------
@@ -266,6 +257,23 @@ def _slope_from_series(y: np.ndarray, years: np.ndarray) -> float:
     if m.sum() < 2:
         return np.nan
     return float(np.polyfit(years[m], y[m], 1)[0])
+
+def make_activity_mask(anom_dyn: xr.DataArray, anom_sta: xr.DataArray,
+                       valid_ocean: xr.DataArray, frac_required: float = 0.80) -> xr.DataArray:
+    """
+    Activity mask = pixels with valid data in BOTH methods for at least
+    frac_required of years.
+
+    Returns: boolean [y,x]
+    """
+    years_n = anom_dyn.sizes["year"]
+
+    dyn_ok = anom_dyn.notnull().sum("year") / years_n
+    sta_ok = anom_sta.notnull().sum("year") / years_n
+
+    active = (dyn_ok >= frac_required) & (sta_ok >= frac_required) & valid_ocean
+    active.name = "active_mask"
+    return active
 
 
 def compute_trend_slopes(anom_da: xr.DataArray) -> xr.DataArray:
@@ -300,8 +308,9 @@ def make_trend_agreement_mask(
       NaN elsewhere (including non-ocean and inactive)
     """
     mask = valid_ocean & active_mask
-    agree = (slope_dyn < 0.0) & (slope_sta < 0.0) & mask
+    agree = (slope_dyn < 0.0) & (slope_sta < 0.0) & active_mask
     out = xr.where(agree, 1.0, np.nan)
+
     out.name = "trend_agree_both_negative_active"
     return out
 
@@ -380,20 +389,39 @@ def main():
     _, _, ms_dyn_diff = compute_pre_post(fields["MS_dynamic_clim"], fields["MS_dynamic_anom"])
     _, _, ms_sta_diff = compute_pre_post(fields["MS_static_clim"], fields["MS_static_anom"])
 
+    # Activity masks for trend panels and (now) sector means
+
+    # Activity masks for trend panels AND sector means
+    fs_active = make_activity_mask(
+        fields["FS_dynamic_anom"], fields["FS_static_anom"],
+        valid_ocean, frac_required=MIN_FRAC_ACTIVE
+    )
+    ms_active = make_activity_mask(
+        fields["MS_dynamic_anom"], fields["MS_static_anom"],
+        valid_ocean, frac_required=MIN_FRAC_ACTIVE
+    )
+
+    print(
+        f"[INFO] Active mask @ {MIN_FRAC_ACTIVE:.2f}: "
+        f"FS={int(fs_active.values.sum())}, MS={int(ms_active.values.sum())}"
+    )
+
     # Col 1: sign agreement classes (NaN outside ocean)
     fs_class = make_sign_class_map(fs_dyn_diff, fs_sta_diff, valid_ocean, thresh=0.0)
     ms_class = make_sign_class_map(ms_dyn_diff, ms_sta_diff, valid_ocean, thresh=0.0)
 
     # Col 2: sector mean bars
-    df_sector = sector_mean_deltas(fs_dyn_diff, fs_sta_diff, ms_dyn_diff, ms_sta_diff, sector_mask, valid_ocean)
+    df_sector = sector_mean_deltas(
+        fs_dyn_diff, fs_sta_diff,
+        ms_dyn_diff, ms_sta_diff,
+        sector_mask, valid_ocean,
+        fs_active, ms_active
+    )
 
     # Col 3: trend agreement (both negative slopes) -- ACTIVE ONLY
     years = fields["FS_dynamic_anom"]["year"].values
     print(f"[INFO] Trend years span: {years.min()}–{years.max()}")
 
-    # Active masks (per phase) require BOTH methods to be "active"
-    fs_active = activity_mask_from_anom(fields["FS_dynamic_anom"], MIN_FRAC_ACTIVE) & activity_mask_from_anom(fields["FS_static_anom"], MIN_FRAC_ACTIVE)
-    ms_active = activity_mask_from_anom(fields["MS_dynamic_anom"], MIN_FRAC_ACTIVE) & activity_mask_from_anom(fields["MS_static_anom"], MIN_FRAC_ACTIVE)
 
     fs_slope_dyn = compute_trend_slopes(fields["FS_dynamic_anom"])
     fs_slope_sta = compute_trend_slopes(fields["FS_static_anom"])
@@ -406,9 +434,18 @@ def main():
     # Fractions
     ocean_n = int(valid_ocean.values.sum())
 
-    def frac_step_both_earlier(da_class: xr.DataArray) -> float:
-        # fraction of ALL valid ocean pixels in class 1 (kept as-is)
-        return float(np.nansum(da_class.values == 1)) / float(ocean_n)
+    def frac_step_both_earlier_active(da_class: xr.DataArray, active_mask: xr.DataArray) -> float:
+        denom = int((valid_ocean & active_mask).values.sum())
+        if denom == 0:
+            return np.nan
+        num = int(np.nansum((da_class.where(active_mask)).values == 1))
+        return num / float(denom)
+
+    print(f"[INFO] Step-change BOTH EARLIER fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_step_both_earlier_active(fs_class, fs_active))
+
+    print(f"[INFO] Step-change BOTH EARLIER fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_step_both_earlier_active(ms_class, ms_active))
 
     def frac_trend_active(agree_mask: xr.DataArray, active_mask: xr.DataArray) -> float:
         # fraction of ACTIVE ocean pixels showing agreement (value==1)
@@ -418,8 +455,8 @@ def main():
         num = int(np.nansum(agree_mask.values == 1.0))
         return num / float(denom)
 
-    print("[INFO] Step-change BOTH EARLIER fraction (FS) [denom=valid ocean]:", frac_step_both_earlier(fs_class))
-    print("[INFO] Step-change BOTH EARLIER fraction (MS) [denom=valid ocean]:", frac_step_both_earlier(ms_class))
+    print("[INFO] Step-change BOTH EARLIER fraction (FS) [denom=valid ocean]:", frac_step_both_earlier_active(fs_class))
+    print("[INFO] Step-change BOTH EARLIER fraction (MS) [denom=valid ocean]:", frac_step_both_earlier_active(ms_class))
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:", frac_trend_active(fs_trend_agree, fs_active))
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:", frac_trend_active(ms_trend_agree, ms_active))
 
