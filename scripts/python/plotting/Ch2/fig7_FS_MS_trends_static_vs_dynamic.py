@@ -9,8 +9,9 @@ Layout: 2 rows (FS, MS) x 3 cols:
 Col 1: Step-change sign agreement (post–pre), categorical
     "earlier" = negative change; "later" = positive change
 Col 2: Sector-mean step change (post–pre), static vs dynamic
+       **computed over ACTIVE pixels only**
 Col 3: Trend agreement (linear): both methods have negative slope (earlier over time)
-       **NOW restricted to ACTIVE pixels for that phase & both methods.**
+       **restricted to ACTIVE pixels only**
 
 Periods:
   pre  = 1980–2017
@@ -63,18 +64,18 @@ SUBFOLDER = "trends"
 PRE_START, PRE_END = 1980, 2017
 POST_START, POST_END = 2018, 2023
 
-# Canonical sectors: numeric IDs for logic, labels for plotting
+# Canonical sectors
 sector_ids = [1, 2, 3, 4, 5]
 sector_labels = {
     1: "A–B",   # Amundsen–Bellingshausen
     2: "WED",   # Weddell
     3: "KHV",   # King Haakon VII
     4: "EA",    # East Antarctica
-    5: "RA",    # Ross–Amundsen (check your mask; rename label if you want)
+    5: "RA",    # Ross–Amundsen (rename if mask differs)
 }
 
-# Active pixel criterion (used for trend panels AND sector-mean bars)
-MIN_FRAC_ACTIVE = 0.80  # e.g., require valid timing >=80% of years for BOTH methods
+# Active pixel criterion (applies to Col 2 + Col 3)
+MIN_FRAC_ACTIVE = 0.80  # require valid timing in >=80% of years for BOTH methods
 
 
 # ---------------------------------------------------------------------
@@ -85,7 +86,6 @@ def _open_da(path: Path, candidates: list[str], decode_times: bool = True) -> xr
         raise FileNotFoundError(f"Missing: {path}")
 
     ds = xr.open_dataset(path, decode_times=decode_times)
-
     for name in candidates:
         if name in ds:
             da = ds[name].load()
@@ -102,50 +102,18 @@ def load_fs_ms_clim_anom() -> dict[str, xr.DataArray]:
     Load FS/MS climatology + anomaly fields for static + dynamic,
     and the sector/ocean mask.
     """
-    fs_dyn_clim = _open_da(
-        ANOM_DIR / "FS_dynamic_climatology.nc",
-        ["FS_dynamic_clim"],
-        decode_times=True,
-    )
-    fs_dyn_anom = _open_da(
-        ANOM_DIR / "FS_dynamic_anomalies.nc",
-        ["FS_dynamic_anom"],
-        decode_times=True,
-    )
+    fs_dyn_clim = _open_da(ANOM_DIR / "FS_dynamic_climatology.nc", ["FS_dynamic_clim"], decode_times=True)
+    fs_dyn_anom = _open_da(ANOM_DIR / "FS_dynamic_anomalies.nc", ["FS_dynamic_anom"], decode_times=True)
 
-    # MS files may have a time-units attr that xarray tries to decode.
-    ms_dyn_clim = _open_da(
-        ANOM_DIR / "MS_dynamic_climatology.nc",
-        ["MS_dynamic_clim_dsa", "MS_dynamic_clim"],
-        decode_times=False,
-    )
-    ms_dyn_anom = _open_da(
-        ANOM_DIR / "MS_dynamic_anomalies.nc",
-        ["MS_dynamic_anom_dsa", "MS_dynamic_anom"],
-        decode_times=False,
-    )
+    # MS NetCDFs may have a time-units attr xarray tries to decode -> decode_times=False
+    ms_dyn_clim = _open_da(ANOM_DIR / "MS_dynamic_climatology.nc", ["MS_dynamic_clim_dsa", "MS_dynamic_clim"], decode_times=False)
+    ms_dyn_anom = _open_da(ANOM_DIR / "MS_dynamic_anomalies.nc", ["MS_dynamic_anom_dsa", "MS_dynamic_anom"], decode_times=False)
 
-    fs_sta_clim = _open_da(
-        ANOM_DIR / "FS_static_climatology.nc",
-        ["FS_static_clim"],
-        decode_times=True,
-    )
-    fs_sta_anom = _open_da(
-        ANOM_DIR / "FS_static_anomalies.nc",
-        ["FS_static_anom"],
-        decode_times=True,
-    )
+    fs_sta_clim = _open_da(ANOM_DIR / "FS_static_climatology.nc", ["FS_static_clim"], decode_times=True)
+    fs_sta_anom = _open_da(ANOM_DIR / "FS_static_anomalies.nc", ["FS_static_anom"], decode_times=True)
 
-    ms_sta_clim = _open_da(
-        ANOM_DIR / "MS_static_climatology.nc",
-        ["MS_static_clim_dsa", "MS_static_clim"],
-        decode_times=False,
-    )
-    ms_sta_anom = _open_da(
-        ANOM_DIR / "MS_static_anomalies.nc",
-        ["MS_static_anom_dsa", "MS_static_anom"],
-        decode_times=False,
-    )
+    ms_sta_clim = _open_da(ANOM_DIR / "MS_static_climatology.nc", ["MS_static_clim_dsa", "MS_static_clim"], decode_times=False)
+    ms_sta_anom = _open_da(ANOM_DIR / "MS_static_anomalies.nc", ["MS_static_anom_dsa", "MS_static_anom"], decode_times=False)
 
     ds_mask = xr.open_dataset(SECTOR_FILE)
     valid_ocean = ds_mask["valid_ocean"].astype(bool)
@@ -166,17 +134,43 @@ def load_fs_ms_clim_anom() -> dict[str, xr.DataArray]:
     }
 
 
+# ---------------------------------------------------------------------
+# Active pixel masks (per phase; BOTH methods must be active)
+# ---------------------------------------------------------------------
+def make_activity_mask(
+    anom_dyn: xr.DataArray,
+    anom_sta: xr.DataArray,
+    valid_ocean: xr.DataArray,
+    frac_required: float = 0.80,
+) -> xr.DataArray:
+    """
+    Active pixel definition:
+      active = finite values in BOTH methods for >= frac_required of years.
+
+    Inputs are anomalies [year,y,x].
+    Returns boolean [y,x].
+    """
+    n_years = float(anom_dyn.sizes["year"])
+    dyn_frac = anom_dyn.notnull().sum("year") / n_years
+    sta_frac = anom_sta.notnull().sum("year") / n_years
+    active = (dyn_frac >= frac_required) & (sta_frac >= frac_required) & valid_ocean
+    active.name = "active_mask"
+    return active
+
 
 # ---------------------------------------------------------------------
-# Core math: step change post−pre
+# Step change post−pre
 # ---------------------------------------------------------------------
-def compute_pre_post(clim: xr.DataArray, anom: xr.DataArray) -> tuple[xr.DataArray, xr.DataArray, xr.DataArray]:
+def compute_pre_post(
+    clim: xr.DataArray,
+    anom: xr.DataArray,
+) -> tuple[xr.DataArray, xr.DataArray, xr.DataArray]:
     """
-    Reconstruct mean fields over pre and post periods:
-      field(year) = clim + anom(year)
-      pre_mean  = mean(field) over PRE_START..PRE_END
-      post_mean = mean(field) over POST_START..POST_END
-      diff      = post_mean − pre_mean
+    field(year) = clim + anom(year)
+
+    pre_mean  = mean(field) over PRE_START..PRE_END
+    post_mean = mean(field) over POST_START..POST_END
+    diff      = post_mean − pre_mean
     """
     anom_pre = anom.sel(year=slice(PRE_START, PRE_END))
     anom_post = anom.sel(year=slice(POST_START, POST_END))
@@ -187,17 +181,20 @@ def compute_pre_post(clim: xr.DataArray, anom: xr.DataArray) -> tuple[xr.DataArr
     return pre_mean, post_mean, diff
 
 
-def make_sign_class_map(diff_dyn: xr.DataArray, diff_sta: xr.DataArray, valid_ocean: xr.DataArray, thresh: float = 0.0) -> xr.DataArray:
+def make_sign_class_map(
+    diff_dyn: xr.DataArray,
+    diff_sta: xr.DataArray,
+    valid_ocean: xr.DataArray,
+    thresh: float = 0.0,
+) -> xr.DataArray:
     """
-    Integer classification map:
+    Categorical agreement map for step change (post−pre):
 
       NaN = non-ocean
-        1 = both earlier   (dyn < -thresh and sta < -thresh)
+        1 = both earlier   (dyn < -thresh AND sta < -thresh)
         2 = dyn earlier only
         3 = stat earlier only
-        4 = both later     (dyn > +thresh and sta > +thresh)
-
-    Note: "earlier" means negative step change (post−pre < 0).
+        4 = both later     (dyn > +thresh AND sta > +thresh)
     """
     dyn = diff_dyn.where(valid_ocean)
     sta = diff_sta.where(valid_ocean)
@@ -219,11 +216,18 @@ def make_sign_class_map(diff_dyn: xr.DataArray, diff_sta: xr.DataArray, valid_oc
 
 
 def sector_mean_deltas(
-    diff_dyn_fs: xr.DataArray, diff_sta_fs: xr.DataArray,
-    diff_dyn_ms: xr.DataArray, diff_sta_ms: xr.DataArray,
-    sector_mask: xr.DataArray, valid_ocean: xr.DataArray,
-    fs_active: xr.DataArray, ms_active: xr.DataArray,
+    diff_dyn_fs: xr.DataArray,
+    diff_sta_fs: xr.DataArray,
+    diff_dyn_ms: xr.DataArray,
+    diff_sta_ms: xr.DataArray,
+    sector_mask: xr.DataArray,
+    valid_ocean: xr.DataArray,
+    fs_active: xr.DataArray,
+    ms_active: xr.DataArray,
 ) -> pd.DataFrame:
+    """
+    Sector-mean step change (post−pre) for dynamic and static, restricted to ACTIVE pixels.
+    """
     records: list[dict] = []
 
     phase_specs = [
@@ -238,19 +242,14 @@ def sector_mean_deltas(
             dyn_mean = float(np.nanmean(d_dyn.where(mask).values))
             sta_mean = float(np.nanmean(d_sta.where(mask).values))
 
-            records += [
-                {"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec],
-                 "method": "Static", "delta": sta_mean},
-                {"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec],
-                 "method": "Dynamic", "delta": dyn_mean},
-            ]
+            records.append({"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec], "method": "Static", "delta": sta_mean})
+            records.append({"phase": phase, "sector_id": sec, "sector_label": sector_labels[sec], "method": "Dynamic", "delta": dyn_mean})
 
     return pd.DataFrame.from_records(records)
 
 
-
 # ---------------------------------------------------------------------
-# Core math: linear trends (agreement on negative slope)
+# Linear trends (agreement on negative slope)
 # ---------------------------------------------------------------------
 def _slope_from_series(y: np.ndarray, years: np.ndarray) -> float:
     m = np.isfinite(y)
@@ -258,31 +257,13 @@ def _slope_from_series(y: np.ndarray, years: np.ndarray) -> float:
         return np.nan
     return float(np.polyfit(years[m], y[m], 1)[0])
 
-def make_activity_mask(anom_dyn: xr.DataArray, anom_sta: xr.DataArray,
-                       valid_ocean: xr.DataArray, frac_required: float = 0.80) -> xr.DataArray:
-    """
-    Activity mask = pixels with valid data in BOTH methods for at least
-    frac_required of years.
-
-    Returns: boolean [y,x]
-    """
-    years_n = anom_dyn.sizes["year"]
-
-    dyn_ok = anom_dyn.notnull().sum("year") / years_n
-    sta_ok = anom_sta.notnull().sum("year") / years_n
-
-    active = (dyn_ok >= frac_required) & (sta_ok >= frac_required) & valid_ocean
-    active.name = "active_mask"
-    return active
-
 
 def compute_trend_slopes(anom_da: xr.DataArray) -> xr.DataArray:
     """
     slope (days/year) from anomalies time series at each gridcell.
-    (Same slope as for the underlying field because clim is constant.)
+    (Same slope as the underlying field because clim is constant.)
     """
     years = anom_da["year"].values.astype(float)
-
     slopes = xr.apply_ufunc(
         _slope_from_series,
         anom_da,
@@ -308,9 +289,8 @@ def make_trend_agreement_mask(
       NaN elsewhere (including non-ocean and inactive)
     """
     mask = valid_ocean & active_mask
-    agree = (slope_dyn < 0.0) & (slope_sta < 0.0) & active_mask
+    agree = (slope_dyn < 0.0) & (slope_sta < 0.0) & mask
     out = xr.where(agree, 1.0, np.nan)
-
     out.name = "trend_agree_both_negative_active"
     return out
 
@@ -329,9 +309,6 @@ def make_polar_ax(fig, gs, row: int, col: int):
 
 
 def plot_sign_class_map(ax, da_class: xr.DataArray, title: str):
-    """
-    Categorical step-change sign agreement.
-    """
     cmap = mcolors.ListedColormap(
         [
             "#2b8cbe",  # 1 both earlier
@@ -343,7 +320,6 @@ def plot_sign_class_map(ax, da_class: xr.DataArray, title: str):
     bounds = [0.5, 1.5, 2.5, 3.5, 4.5]
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
-    # Plot (NaNs are transparent)
     im = ax.pcolormesh(
         da_class["x"], da_class["y"], da_class,
         transform=ccrs.SouthPolarStereo(),
@@ -354,11 +330,8 @@ def plot_sign_class_map(ax, da_class: xr.DataArray, title: str):
 
 
 def plot_trend_agreement(ax, agree_mask: xr.DataArray, title: str):
-    """
-    Plot NaN/1 mask: only show blue where both trends are earlier (ACTIVE-only).
-    """
     cmap = mcolors.ListedColormap(["#2b8cbe"])
-    cmap.set_bad((1, 1, 1, 0))  # transparent for NaN
+    cmap.set_bad((1, 1, 1, 0))  # transparent NaN
 
     im = ax.pcolormesh(
         agree_mask["x"], agree_mask["y"], agree_mask,
@@ -389,28 +362,16 @@ def main():
     _, _, ms_dyn_diff = compute_pre_post(fields["MS_dynamic_clim"], fields["MS_dynamic_anom"])
     _, _, ms_sta_diff = compute_pre_post(fields["MS_static_clim"], fields["MS_static_anom"])
 
-    # Activity masks for trend panels and (now) sector means
-
-    # Activity masks for trend panels AND sector means
-    fs_active = make_activity_mask(
-        fields["FS_dynamic_anom"], fields["FS_static_anom"],
-        valid_ocean, frac_required=MIN_FRAC_ACTIVE
-    )
-    ms_active = make_activity_mask(
-        fields["MS_dynamic_anom"], fields["MS_static_anom"],
-        valid_ocean, frac_required=MIN_FRAC_ACTIVE
-    )
-
-    print(
-        f"[INFO] Active mask @ {MIN_FRAC_ACTIVE:.2f}: "
-        f"FS={int(fs_active.values.sum())}, MS={int(ms_active.values.sum())}"
-    )
+    # ACTIVE masks (used for Col 2 + Col 3)
+    fs_active = make_activity_mask(fields["FS_dynamic_anom"], fields["FS_static_anom"], valid_ocean, frac_required=MIN_FRAC_ACTIVE)
+    ms_active = make_activity_mask(fields["MS_dynamic_anom"], fields["MS_static_anom"], valid_ocean, frac_required=MIN_FRAC_ACTIVE)
+    print(f"[INFO] Active mask @ {MIN_FRAC_ACTIVE:.2f}: FS={int(fs_active.values.sum())}, MS={int(ms_active.values.sum())}")
 
     # Col 1: sign agreement classes (NaN outside ocean)
     fs_class = make_sign_class_map(fs_dyn_diff, fs_sta_diff, valid_ocean, thresh=0.0)
     ms_class = make_sign_class_map(ms_dyn_diff, ms_sta_diff, valid_ocean, thresh=0.0)
 
-    # Col 2: sector mean bars
+    # Col 2: sector mean bars (ACTIVE-only)
     df_sector = sector_mean_deltas(
         fs_dyn_diff, fs_sta_diff,
         ms_dyn_diff, ms_sta_diff,
@@ -418,10 +379,9 @@ def main():
         fs_active, ms_active
     )
 
-    # Col 3: trend agreement (both negative slopes) -- ACTIVE ONLY
+    # Col 3: trend agreement (ACTIVE-only)
     years = fields["FS_dynamic_anom"]["year"].values
     print(f"[INFO] Trend years span: {years.min()}–{years.max()}")
-
 
     fs_slope_dyn = compute_trend_slopes(fields["FS_dynamic_anom"])
     fs_slope_sta = compute_trend_slopes(fields["FS_static_anom"])
@@ -431,48 +391,44 @@ def main():
     fs_trend_agree = make_trend_agreement_mask(fs_slope_dyn, fs_slope_sta, valid_ocean, fs_active)
     ms_trend_agree = make_trend_agreement_mask(ms_slope_dyn, ms_slope_sta, valid_ocean, ms_active)
 
-    # Fractions
-    ocean_n = int(valid_ocean.values.sum())
-
+    # ---------------- Fractions (make denominators explicit) ----------------
     def frac_step_both_earlier_active(da_class: xr.DataArray, active_mask: xr.DataArray) -> float:
         denom = int((valid_ocean & active_mask).values.sum())
         if denom == 0:
             return np.nan
+        # class==1 among ACTIVE pixels
         num = int(np.nansum((da_class.where(active_mask)).values == 1))
         return num / float(denom)
 
-    print(f"[INFO] Step-change BOTH EARLIER fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
-          frac_step_both_earlier_active(fs_class, fs_active))
-
-    print(f"[INFO] Step-change BOTH EARLIER fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
-          frac_step_both_earlier_active(ms_class, ms_active))
-
-    def frac_trend_active(agree_mask: xr.DataArray, active_mask: xr.DataArray) -> float:
-        # fraction of ACTIVE ocean pixels showing agreement (value==1)
+    def frac_trend_agree_active(agree_mask: xr.DataArray, active_mask: xr.DataArray) -> float:
         denom = int((valid_ocean & active_mask).values.sum())
         if denom == 0:
             return np.nan
         num = int(np.nansum(agree_mask.values == 1.0))
         return num / float(denom)
 
-    print("[INFO] Step-change BOTH EARLIER fraction (FS) [denom=valid ocean]:", frac_step_both_earlier_active(fs_class))
-    print("[INFO] Step-change BOTH EARLIER fraction (MS) [denom=valid ocean]:", frac_step_both_earlier_active(ms_class))
-    print(f"[INFO] Trend BOTH NEG SLOPE fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:", frac_trend_active(fs_trend_agree, fs_active))
-    print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:", frac_trend_active(ms_trend_agree, ms_active))
+    print(f"[INFO] Step-change BOTH EARLIER fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_step_both_earlier_active(fs_class, fs_active))
+    print(f"[INFO] Step-change BOTH EARLIER fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_step_both_earlier_active(ms_class, ms_active))
+    print(f"[INFO] Trend BOTH NEG SLOPE fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_trend_agree_active(fs_trend_agree, fs_active))
+    print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_trend_agree_active(ms_trend_agree, ms_active))
 
-    # ---------- Figure layout ----------
+    # ---------------- Figure layout ----------------
     fig = plt.figure(figsize=(12, 8))
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], width_ratios=[1.25, 1.0, 1.25])
 
-    fig.suptitle(f"Post-2017 timing shift (2018–2023 minus 1980–2017)", y=0.985, fontsize=11)
+    fig.suptitle("Post-2017 timing shift (2018–2023 minus 1980–2017)", y=0.985, fontsize=11)
 
-    # Panel titles (short, no bleeding)
+    # Short panel titles (no bleeding)
     t_a = "(a) FS sign (post−pre)"
-    t_b = "(b) FS sector mean Δ"
-    t_c = "(c) FS trend agree "
+    t_b = "(b) FS sector Δ (active)"
+    t_c = "(c) FS trend agree (active)"
     t_d = "(d) MS sign (post−pre)"
-    t_e = "(e) MS sector mean Δ"
-    t_f = "(f) MS trend agree "
+    t_e = "(e) MS sector Δ (active)"
+    t_f = "(f) MS trend agree (active)"
 
     # ----- Row 1: FS -----
     ax_a = make_polar_ax(fig, gs, 0, 0)
@@ -498,7 +454,7 @@ def main():
     ax_b.legend(frameon=True, fontsize=8)
 
     ax_c = make_polar_ax(fig, gs, 0, 2)
-    im_trend = plot_trend_agreement(ax_c, fs_trend_agree, t_c)
+    _ = plot_trend_agreement(ax_c, fs_trend_agree, t_c)
 
     # ----- Row 2: MS -----
     ax_d = make_polar_ax(fig, gs, 1, 0)
@@ -520,22 +476,11 @@ def main():
     ax_f = make_polar_ax(fig, gs, 1, 2)
     _ = plot_trend_agreement(ax_f, ms_trend_agree, t_f)
 
-    # ---------- Colorbars (compact, no "mask/land") ----------
-    # Smaller, left-shifted colorbar for sign agreement
+    # ---------- Colorbar (compact; no land/mask label) ----------
     cax1 = fig.add_axes([0.075, 0.055, 0.26, 0.012])  # [left, bottom, width, height]
-
-    cb1 = fig.colorbar(
-        im_class,
-        cax=cax1,
-        orientation="horizontal",
-        ticks=[1, 2, 3, 4],
-    )
-
+    cb1 = fig.colorbar(im_class, cax=cax1, orientation="horizontal", ticks=[1, 2, 3, 4])
     cb1.set_label("Sign agreement class", fontsize=9)
-    cb1.ax.set_xticklabels(
-        ["both −", "dyn − only", "stat − only", "both +"],
-        fontsize=7,
-    )
+    cb1.ax.set_xticklabels(["both −", "dyn − only", "stat − only", "both +"], fontsize=7)
     cb1.outline.set_visible(False)
 
     # Layout (avoid tight_layout with cartopy)
