@@ -469,10 +469,10 @@ def main():
     # Panel titles (short, no bleeding)
     t_a = "(a) FS sign (post−pre)"
     t_b = "(b) FS sector mean Δ"
-    t_c = "(c) FS trend agree (active)"
+    t_c = "(c) FS trend agree "
     t_d = "(d) MS sign (post−pre)"
     t_e = "(e) MS sector mean Δ"
-    t_f = "(f) MS trend agree (active)"
+    t_f = "(f) MS trend agree "
 
     # ----- Row 1: FS -----
     ax_a = make_polar_ax(fig, gs, 0, 0)
