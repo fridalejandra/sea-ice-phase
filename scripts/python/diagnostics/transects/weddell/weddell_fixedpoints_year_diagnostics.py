@@ -132,11 +132,60 @@ def _plot_2x2(times, series_dict, labels, title, ylabel, outpath):
     plt.close(fig)
 
 
+def _parse_years(year: int, years: str | None):
+    if years is None:
+        return [int(year)]
+    years = years.strip()
+    if "-" in years and "," not in years:
+        a, b = years.split("-")
+        a = int(a); b = int(b)
+        return list(range(a, b + 1))
+    out = []
+    for tok in years.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        out.append(int(tok))
+    return out
+
+
+def _monthly_mean_panel(fig, axes, x_sic, y_sic, land_under, sic, extent_xy, year, pt_xy, pt_colors, labels,
+                        ax_proj, data_crs):
+    mappable = None
+    for mi, month in enumerate(range(1, 13)):
+        ax = axes[mi]
+        ax.set_extent(extent_xy, crs=data_crs)
+        ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.5, zorder=1)
+
+        ax.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
+                      shading="auto", alpha=0.25, zorder=2)
+
+        t0, t1 = _month_bounds(year, month)
+        sic_m = sic.sel(time=slice(t0, t1)).mean("time", skipna=True)
+
+        m = ax.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
+                          shading="auto", vmin=0.0, vmax=1.0, zorder=3)
+        mappable = m
+
+        # points
+        px, py = pt_xy
+        for i in range(len(labels)):
+            ax.scatter(px[i], py[i], s=45, color=pt_colors[i],
+                       edgecolor="k", linewidth=0.4, transform=data_crs, zorder=6)
+
+        ax.set_title(f"{year}-{month:02d}", fontsize=10)
+
+    cb = fig.colorbar(mappable, ax=axes.tolist(), fraction=0.03, pad=0.02)
+    cb.set_label("Monthly mean SIC (fraction)")
+    fig.suptitle(f"Monthly mean SIC ({year}) at fixed Weddell transect points", y=0.98)
+
+
 # --------------------------
 # Main
 # --------------------------
 def main():
-    ap = argparse.ArgumentParser(description="Fixed-point Weddell diagnostics (month09 reference)")
+    ap = argparse.ArgumentParser(description="Fixed-point Weddell diagnostics (ref-month fixed point selection)")
     ap.add_argument("--sic", required=True, type=Path, help="Merged daily SIC NetCDF")
     ap.add_argument("--var", default="N07_ICECON", help="SIC variable name")
     ap.add_argument("--sectors", required=True, type=Path, help="canonical_sectors.nc")
@@ -144,15 +193,18 @@ def main():
     ap.add_argument("--dist-pattern", default="dist_to_edge_km_month{mm:02d}.nc",
                     help="Filename pattern inside dist-dir")
     ap.add_argument("--outdir", required=True, type=Path, help="Output directory (base weddell folder)")
-    ap.add_argument("--year", type=int, default=2022, help="Year to plot")
+    ap.add_argument("--year", type=int, default=2022, help="Single year (ignored if --years is provided)")
+    ap.add_argument("--years", type=str, default=None, help="Year list '1980,1981' or range '1980-2023'")
     ap.add_argument("--target-lon", type=float, default=-30.0, help="Target lon (degE, -30=30W)")
     ap.add_argument("--weddell-id", type=int, required=True, help="Weddell sector numeric ID")
     ap.add_argument("--fractions", default="0.3,0.5,0.7,0.9", help="Fractions (exactly 4)")
-    ap.add_argument("--ref-month", type=int, default=9, help="Reference month for fixed point selection (default 9)")
+    ap.add_argument("--ref-month", type=int, default=9, help="Reference month for fixed point selection")
     ap.add_argument("--min-transect-rows", type=int, default=80, help="Minimum rows in transect build")
     ap.add_argument("--edge-eps-km", type=float, default=1e-3, help="Edge threshold for dist_to_edge (km)")
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args()
+
+    years = _parse_years(args.year, args.years)
 
     fracs = [float(x) for x in args.fractions.split(",") if x.strip() != ""]
     if len(fracs) != 4:
@@ -167,8 +219,8 @@ def main():
     # output structure
     base = args.outdir / "fixed_points"
     base.mkdir(parents=True, exist_ok=True)
-    maps_dir = base / "maps_monthly_mean"
-    maps_dir.mkdir(parents=True, exist_ok=True)
+    maps_panel_dir = base / "maps_monthly_mean_panels"
+    maps_panel_dir.mkdir(parents=True, exist_ok=True)
     ts_dir = base / "timeseries"
     ts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -213,8 +265,10 @@ def main():
         raise RuntimeError(f"Could not find dist var in {dist_path}")
     dist2d_ref = ds_d[dvar].transpose("y", "x")
 
-    # ---- ocean_valid for reference month (selection gate)
-    t0_ref, t1_ref = _month_bounds(args.year, refm)
+    # ---- ocean_valid for reference month (selection gate) USING FIRST YEAR IN LIST
+    # This is intentional: fixed points are defined once.
+    sel_year = int(years[0])
+    t0_ref, t1_ref = _month_bounds(sel_year, refm)
     sic_ref_month = sic.sel(time=slice(t0_ref, t1_ref))
     ocean_valid_ref = ocean_2d & np.isfinite(sic_ref_month).any("time")
 
@@ -275,7 +329,6 @@ def main():
     for f, lab in zip(fracs, labels):
         target_s = s_coast + f * D
         j = int(seg_idx[np.argmin(np.abs(s_km[seg_idx] - target_s))])
-
         points.append({
             "point": lab,
             "fraction": f,
@@ -286,140 +339,64 @@ def main():
             "dist_along_km_ref": float(s_km[j] - s_coast),
             "dist_to_edge_km_ref": float(distk[j]),
             "ref_month": refm,
-            "ref_year_mask": args.year,
+            "ref_year_mask": sel_year,
             "target_lon": args.target_lon,
             "weddell_id": args.weddell_id,
         })
 
     df = pd.DataFrame(points).sort_values("fraction").reset_index(drop=True)
-    points_csv = base / f"points_fixed_lon{args.target_lon:.0f}_refmonth{refm:02d}.csv"
+    points_csv = base / f"points_fixed_lon{args.target_lon:.0f}_refmonth{refm:02d}_maskyear{sel_year}.csv"
     df.to_csv(points_csv, index=False)
     print(f"[info] wrote fixed points CSV: {points_csv}", flush=True)
 
-    # --------------------------
-    # FIG 1: reference map = mean SIC for ref month of this year
-    # --------------------------
+    # precompute point xy
+    px = x_sic[df["x_idx"].astype(int).values]
+    py = y_sic[df["y_idx"].astype(int).values]
+    pt_xy = (px, py)
+
+    # plotting CRS
     ax_proj = ccrs.SouthPolarStereo()
     data_crs = ccrs.epsg(3412)
 
-    sic_ref_mean = sic_ref_month.mean("time", skipna=True)
-
-    fig = plt.figure(figsize=(9, 8))
-    ax = fig.add_subplot(1, 1, 1, projection=ax_proj)
-    ax.set_extent(extent_xy, crs=data_crs)
-
-    ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.5, zorder=1)
-    ax.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
-                  shading="auto", alpha=0.25, zorder=2)
-
-    pm = ax.pcolormesh(x_sic, y_sic, sic_ref_mean.values, transform=data_crs,
-                       shading="auto", vmin=0.0, vmax=1.0, zorder=3)
-
-    # edge contour (ref month climatology)
-    try:
-        ax.contour(x_sic, y_sic, dist2d_ref.values, levels=[0.0],
-                   linewidths=0.9, transform=data_crs, zorder=5)
-    except Exception as e:
-        if args.debug:
-            print(f"[debug] edge contour failed: {e}", flush=True)
-
-    # transect line (ref-month filtered)
-    ax.plot(x_coords[txk], y_coords[tyk], transform=data_crs, linewidth=1.0, zorder=6)
-
-    # points
-    px = x_sic[df["x_idx"].astype(int).values]
-    py = y_sic[df["y_idx"].astype(int).values]
-    ax.scatter(px, py, s=90, c=pt_colors, edgecolor="k", linewidth=0.6,
-               transform=data_crs, zorder=7)
-
-    for i, r in enumerate(df.itertuples(index=False)):
-        ax.text(
-            float(x_sic[int(r.x_idx)]) + 25_000,
-            float(y_sic[int(r.y_idx)]) + 25_000,
-            f"{r.point}\n{r.lat:.2f}, {r.lon:.2f}",
-            fontsize=8,
-            color=pt_colors[i],
-            transform=data_crs,
-            zorder=8
-        )
-
-    ax.set_title(f"Weddell fixed points (ref month {refm:02d}) | mean SIC {args.year}-{refm:02d}")
-    cb = fig.colorbar(pm, ax=ax, fraction=0.04, pad=0.02)
-    cb.set_label(f"Mean SIC (fraction) ({args.year}-{refm:02d})")
-
-    refmap_path = base / f"refmap_meanSIC_{args.year}-{refm:02d}.png"
-    fig.savefig(refmap_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[info] wrote reference map: {refmap_path}", flush=True)
-
-    # --------------------------
-    # FIG 2: 12 separate monthly mean maps for this year (fixed points)
-    # --------------------------
-    for month in range(1, 13):
-        t0, t1 = _month_bounds(args.year, month)
-        sic_m = sic.sel(time=slice(t0, t1)).mean("time", skipna=True)
-
-        fig = plt.figure(figsize=(9, 8))
-        ax = fig.add_subplot(1, 1, 1, projection=ax_proj)
-        ax.set_extent(extent_xy, crs=data_crs)
-
-        ax.add_feature(cfeature.LAND, facecolor="0.85", zorder=0)
-        ax.add_feature(cfeature.COASTLINE, linewidth=0.5, zorder=1)
-        ax.pcolormesh(x_sic, y_sic, land_under, transform=data_crs,
-                      shading="auto", alpha=0.25, zorder=2)
-
-        pm = ax.pcolormesh(x_sic, y_sic, sic_m.values, transform=data_crs,
-                           shading="auto", vmin=0.0, vmax=1.0, zorder=3)
-
-        # fixed points
-        ax.scatter(px, py, s=90, c=pt_colors, edgecolor="k", linewidth=0.6,
-                   transform=data_crs, zorder=7)
-
-        for i, r in enumerate(df.itertuples(index=False)):
-            ax.text(
-                float(x_sic[int(r.x_idx)]) + 25_000,
-                float(y_sic[int(r.y_idx)]) + 25_000,
-                r.point,
-                fontsize=9,
-                color=pt_colors[i],
-                transform=data_crs,
-                zorder=8
-            )
-
-        ax.set_title(f"Mean SIC {args.year}-{month:02d} (fixed points from ref month {refm:02d})")
-        cb = fig.colorbar(pm, ax=ax, fraction=0.04, pad=0.02)
-        cb.set_label("Mean SIC (fraction)")
-
-        outpng = maps_dir / f"meanSIC_{args.year}_{month:02d}.png"
+    # ---- per-year outputs
+    for Y in years:
+        # (1) 3x4 monthly mean maps
+        fig, axes = plt.subplots(3, 4, figsize=(16, 12), subplot_kw={"projection": ax_proj})
+        axes = axes.ravel()
+        _monthly_mean_panel(fig, axes, x_sic, y_sic, land_under, sic, extent_xy, Y,
+                            pt_xy, pt_colors, labels, ax_proj, data_crs)
+        outpng = maps_panel_dir / f"monthly_mean_SIC_3x4_{Y}.png"
         fig.savefig(outpng, dpi=200, bbox_inches="tight")
         plt.close(fig)
+        print(f"[info] wrote monthly panel: {outpng}", flush=True)
 
-    print(f"[info] wrote 12 monthly mean maps to: {maps_dir}", flush=True)
+        # (2) full-year SIC and ΔSIC at fixed points
+        t0y = np.datetime64(f"{Y}-01-01")
+        t1y = np.datetime64(f"{Y+1}-01-01")
+        sic_y = sic.sel(time=slice(t0y, t1y - np.timedelta64(1, "D")))
+        times = sic_y["time"].values
 
-    # --------------------------
-    # FIG 3: full-year SIC and ΔSIC at fixed points (2 figures)
-    # --------------------------
-    t0y = np.datetime64(f"{args.year}-01-01")
-    t1y = np.datetime64(f"{args.year+1}-01-01")
-    sic_y = sic.sel(time=slice(t0y, t1y - np.timedelta64(1, "D")))
+        ts = {}
+        for lab, yi, xi in zip(df["point"].values, df["y_idx"].astype(int).values, df["x_idx"].astype(int).values):
+            ts[lab] = sic_y.isel(y=int(yi), x=int(xi)).values.astype(float)
 
-    # extract timeseries at fixed indices
-    ts = {}
-    for lab, yi, xi in zip(df["point"].values, df["y_idx"].astype(int).values, df["x_idx"].astype(int).values):
-        ts[lab] = sic_y.isel(y=int(yi), x=int(xi)).values.astype(float)
+        # ΔSIC with NaN safety: if either day is NaN → NaN
+        dts = {}
+        for lab in labels:
+            v = ts[lab]
+            dv = np.full_like(v, np.nan, dtype=float)
+            good = np.isfinite(v[1:]) & np.isfinite(v[:-1])
+            dv[1:][good] = v[1:][good] - v[:-1][good]
+            dts[lab] = dv
 
-    times = sic_y["time"].values
-    dts = {lab: np.diff(vals) for lab, vals in ts.items()}
-    dtimes = times[1:]
+        sic_ts_path = ts_dir / f"sic_2x2_{Y}.png"
+        _plot_2x2(times, ts, labels, f"Daily SIC at fixed points ({Y})", "SIC", sic_ts_path)
 
-    sic_ts_path = ts_dir / f"sic_2x2_{args.year}.png"
-    _plot_2x2(times, ts, labels, f"Daily SIC at fixed points ({args.year})", "SIC", sic_ts_path)
-    print(f"[info] wrote SIC timeseries: {sic_ts_path}", flush=True)
+        dsic_ts_path = ts_dir / f"dsic_2x2_{Y}.png"
+        _plot_2x2(times, dts, labels, f"Daily ΔSIC at fixed points ({Y})", "ΔSIC", dsic_ts_path)
 
-    dsic_ts_path = ts_dir / f"dsic_2x2_{args.year}.png"
-    _plot_2x2(dtimes, dts, labels, f"Daily ΔSIC at fixed points ({args.year})", "ΔSIC", dsic_ts_path)
-    print(f"[info] wrote ΔSIC timeseries: {dsic_ts_path}", flush=True)
+        print(f"[info] wrote timeseries: {sic_ts_path}", flush=True)
+        print(f"[info] wrote delta:      {dsic_ts_path}", flush=True)
 
 
 if __name__ == "__main__":
