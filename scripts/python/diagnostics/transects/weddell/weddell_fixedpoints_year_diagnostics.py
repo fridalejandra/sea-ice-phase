@@ -150,8 +150,10 @@ def _parse_years(year: int, years: str | None):
 
 
 def _monthly_mean_panel(fig, axes, x_sic, y_sic, land_under, sic, extent_xy, year, pt_xy, pt_colors, labels,
-                        ax_proj, data_crs):
+                        data_crs):
     mappable = None
+    px, py = pt_xy
+
     for mi, month in enumerate(range(1, 13)):
         ax = axes[mi]
         ax.set_extent(extent_xy, crs=data_crs)
@@ -168,8 +170,6 @@ def _monthly_mean_panel(fig, axes, x_sic, y_sic, land_under, sic, extent_xy, yea
                           shading="auto", vmin=0.0, vmax=1.0, zorder=3)
         mappable = m
 
-        # points
-        px, py = pt_xy
         for i in range(len(labels)):
             ax.scatter(px[i], py[i], s=45, color=pt_colors[i],
                        edgecolor="k", linewidth=0.4, transform=data_crs, zorder=6)
@@ -204,7 +204,6 @@ def main():
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--mask-year", type=int, default=2022,
                     help="Year used to define fixed-point geometry/mask (default 2022)")
-
     args = ap.parse_args()
 
     years = _parse_years(args.year, args.years)
@@ -240,6 +239,8 @@ def main():
 
     # ---- SIC
     ds_sic = xr.open_dataset(args.sic)
+    if args.var not in ds_sic.data_vars:
+        raise RuntimeError(f"SIC var '{args.var}' not found. Available: {list(ds_sic.data_vars)}")
     sic_raw = ds_sic[args.var]
 
     if (ds_sic.sizes["y"] != ds_sec.sizes["y"]) or (ds_sic.sizes["x"] != ds_sec.sizes["x"]):
@@ -265,11 +266,10 @@ def main():
     ds_d = xr.open_dataset(dist_path)
     dvar = _find_var(ds_d, ["dist_to_edge_km", "dist_to_edge", "distance_to_edge_km"])
     if dvar is None:
-        raise RuntimeError(f"Could not find dist var in {dist_path}")
+        raise RuntimeError(f"Could not find dist var in {dist_path}. Found: {list(ds_d.data_vars)}")
     dist2d_ref = ds_d[dvar].transpose("y", "x")
 
-    # ---- ocean_valid for reference month (selection gate) USING FIRST YEAR IN LIST
-    # This is intentional: fixed points are defined once.
+    # ---- ocean_valid for reference month (selection gate) using mask-year
     sel_year = int(args.mask_year)
     t0_ref, t1_ref = _month_bounds(sel_year, refm)
     sic_ref_month = sic.sel(time=slice(t0_ref, t1_ref))
@@ -366,17 +366,24 @@ def main():
         # (1) 3x4 monthly mean maps
         fig, axes = plt.subplots(3, 4, figsize=(16, 12), subplot_kw={"projection": ax_proj})
         axes = axes.ravel()
-        _monthly_mean_panel(fig, axes, x_sic, y_sic, land_under, sic, extent_xy, Y,
-                            pt_xy, pt_colors, labels, ax_proj, data_crs)
+        _monthly_mean_panel(
+            fig, axes, x_sic, y_sic, land_under, sic, extent_xy, Y,
+            pt_xy, pt_colors, labels, data_crs
+        )
         outpng = maps_panel_dir / f"monthly_mean_SIC_3x4_{Y}.png"
         fig.savefig(outpng, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print(f"[info] wrote monthly panel: {outpng}", flush=True)
 
-        # (2) full-year SIC and ΔSIC at fixed points
+        # (2) full-year SIC and ΔSIC and |ΔSIC| at fixed points
         t0y = np.datetime64(f"{Y}-01-01")
         t1y = np.datetime64(f"{Y+1}-01-01")
         sic_y = sic.sel(time=slice(t0y, t1y - np.timedelta64(1, "D")))
+
+        if sic_y.sizes.get("time", 0) == 0:
+            print(f"[warn] no SIC data for year {Y}; skipping timeseries plots", flush=True)
+            continue
+
         times = sic_y["time"].values
 
         ts = {}
@@ -392,14 +399,20 @@ def main():
             dv[1:][good] = v[1:][good] - v[:-1][good]
             dts[lab] = dv
 
+        # |ΔSIC|
+        adts = {lab: np.abs(dts[lab]) for lab in labels}
+
         sic_ts_path = ts_dir / f"sic_2x2_{Y}.png"
-        _plot_2x2(times, ts, labels, f"Daily SIC at fixed points ({Y})", "SIC", sic_ts_path)
-
         dsic_ts_path = ts_dir / f"dsic_2x2_{Y}.png"
-        _plot_2x2(times, dts, labels, f"Daily ΔSIC at fixed points ({Y})", "ΔSIC", dsic_ts_path)
+        abs_dsic_ts_path = ts_dir / f"abs_dsic_2x2_{Y}.png"
 
-        print(f"[info] wrote timeseries: {sic_ts_path}", flush=True)
-        print(f"[info] wrote delta:      {dsic_ts_path}", flush=True)
+        _plot_2x2(times, ts, labels, f"Daily SIC at fixed points ({Y})", "SIC", sic_ts_path)
+        _plot_2x2(times, dts, labels, f"Daily ΔSIC at fixed points ({Y})", "ΔSIC", dsic_ts_path)
+        _plot_2x2(times, adts, labels, f"Daily |ΔSIC| at fixed points ({Y})", "|ΔSIC|", abs_dsic_ts_path)
+
+        print(f"[info] wrote SIC:    {sic_ts_path}", flush=True)
+        print(f"[info] wrote ΔSIC:   {dsic_ts_path}", flush=True)
+        print(f"[info] wrote |ΔSIC|: {abs_dsic_ts_path}", flush=True)
 
 
 if __name__ == "__main__":
