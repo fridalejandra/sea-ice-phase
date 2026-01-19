@@ -202,6 +202,9 @@ def main():
     ap.add_argument("--min-transect-rows", type=int, default=80, help="Minimum rows in transect build")
     ap.add_argument("--edge-eps-km", type=float, default=1e-3, help="Edge threshold for dist_to_edge (km)")
     ap.add_argument("--debug", action="store_true")
+    ap.add_argument("--mask-year", type=int, default=2022,
+                    help="Year used to define fixed-point geometry/mask (default 2022)")
+
     args = ap.parse_args()
 
     years = _parse_years(args.year, args.years)
@@ -267,7 +270,7 @@ def main():
 
     # ---- ocean_valid for reference month (selection gate) USING FIRST YEAR IN LIST
     # This is intentional: fixed points are defined once.
-    sel_year = int(years[0])
+    sel_year = int(args.mask_year)
     t0_ref, t1_ref = _month_bounds(sel_year, refm)
     sic_ref_month = sic.sel(time=slice(t0_ref, t1_ref))
     ocean_valid_ref = ocean_2d & np.isfinite(sic_ref_month).any("time")
