@@ -416,6 +416,32 @@ def main():
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
           frac_trend_agree_active(ms_trend_agree, ms_active))
 
+    def frac_trend_both_positive_active(
+        slope_dyn: xr.DataArray, slope_sta: xr.DataArray, active_mask: xr.DataArray
+    ) -> float:
+        """Fraction of ACTIVE pixels where BOTH methods have positive slope (later over time)."""
+        denom = int((valid_ocean & active_mask).values.sum())
+        if denom == 0:
+            return np.nan
+        both_pos = (slope_dyn > 0.0) & (slope_sta > 0.0) & valid_ocean & active_mask
+        num = int(both_pos.values.sum())
+        return num / float(denom)
+    print(f"[INFO] Trend BOTH POS SLOPE fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_trend_both_positive_active(fs_slope_dyn, fs_slope_sta, fs_active))
+    print(f"[INFO] Trend BOTH POS SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_trend_both_positive_active(ms_slope_dyn, ms_slope_sta, ms_active))
+
+    def frac_step_both_later_active(da_class: xr.DataArray, active_mask: xr.DataArray) -> float:
+        denom = int((valid_ocean & active_mask).values.sum())
+        if denom == 0:
+            return np.nan
+        num = int(np.nansum((da_class.where(active_mask)).values == 4))
+        return num / float(denom)
+    print(f"[INFO] Step-change BOTH LATER fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_step_both_later_active(fs_class, fs_active))
+    print(f"[INFO] Step-change BOTH LATER fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
+          frac_step_both_later_active(ms_class, ms_active))
+
     # ---------------- Figure layout ----------------
     fig = plt.figure(figsize=(12, 8))
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], width_ratios=[1.25, 1.0, 1.25])
