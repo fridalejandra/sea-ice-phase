@@ -107,4 +107,4 @@ cbar1.set_label("Std of daily SIC change")
 cbar2 = fig.colorbar(im2, ax=axes[2], orientation="vertical", shrink=0.9)
 cbar2.set_label("Δ Std of daily SIC change")
 
-plt.savefig('/user/geog/falejandraperez/sea-ice-phase/results/figures/clic/std_daily_sic_variability.png', dpi=300)
+plt.savefig('/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster/std_daily_sic_variability.png', dpi=300)
