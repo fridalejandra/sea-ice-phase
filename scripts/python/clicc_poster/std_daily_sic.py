@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # -----------------------------
 # USER INPUTS
 # -----------------------------
-sic_file = "/user/geog/falejandraperez/sea-ice-phase/data/SIC_07132012_04082025_merged.nc"
+sic_file = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc"
 sic_var  = "N07_ICECON"                     # variable name in NetCDF
 mask_threshold = 0.15                # SIC threshold
 vmax = 0.15                          # adjust after first look
