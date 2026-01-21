@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-Compute and plot daily sea ice concentration (SIC) variability as the
-standard deviation of the magnitude of day-to-day SIC changes: std(|ΔSIC|).
+Three diagnostics of daily sea ice concentration (SIC) variability:
 
-This is a "basics-first" script:
-- No SIC threshold masking by default (you can turn it on at the bottom).
-- Same computation for each period.
-- Robust scaling check (0–1 vs 0–100).
-- Feb 29 removed to avoid leap-day artifacts.
+FIG 1: std(|ΔSIC|)  = standard deviation of the magnitude of day-to-day SIC changes
+FIG 2: std(SIC)     = standard deviation of SIC (includes seasonal cycle)
+FIG 3: std(SIC')    = standard deviation of SIC anomalies after removing day-of-year climatology
+
+Each figure is 3 panels: Pre, Post, Post-Pre.
+
+Notes:
+- Removes Feb 29 to keep day-of-year climatology consistent (365-day).
+- Uses quantile-based color scaling so you don't guess vmax.
+- Uses numpy abs() for compatibility with xarray versions lacking DataArray.abs().
 """
 
 import xarray as xr
@@ -24,24 +28,16 @@ sic_var  = "N07_ICECON"
 pre_start, pre_end   = "1979-01-01", "2016-12-31"
 post_start, post_end = "2017-01-01", "2024-12-31"
 
-# Plot controls
+out_dir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster"
+
+# Color scaling via quantiles (recommended)
+main_q = 0.99   # for pre/post panels
+diff_q = 0.99   # for diff panel (symmetric about 0)
+
+# Colormaps
 cmap_main = "viridis"
 cmap_diff = "RdBu_r"
 
-# If None: choose vmax from the data (recommended)
-vmax_main = None          # e.g., 0.05 if you want fixed scaling
-vmax_diff = None          # e.g., 0.02 if you want fixed scaling
-
-# Quantile-based color scaling (used only when vmax_* is None)
-vmax_quantile_main = 0.99
-vmax_quantile_diff = 0.99
-
-# Optional masking (OFF for "start with basics")
-apply_common_mask = False
-mask_threshold = 0.15      # SIC threshold used only if apply_common_mask=True
-
-# Output
-out_png = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster/std_daily_sic_variability.png"
 dpi = 300
 
 
@@ -57,25 +53,74 @@ def ensure_fractional_sic(sic_da: xr.DataArray) -> xr.DataArray:
 
 
 def drop_feb29(sic_da: xr.DataArray) -> xr.DataArray:
-    """Remove Feb 29 to avoid leap-day discontinuities."""
+    """Remove Feb 29 to keep day-of-year climatology consistent."""
     return sic_da.sel(time=~((sic_da.time.dt.month == 2) & (sic_da.time.dt.day == 29)))
 
 
-def daily_volatility_std(sic_da: xr.DataArray) -> xr.DataArray:
-    """
-    Compute std(|ΔSIC|) over time for each grid cell.
-    ΔSIC is day-to-day difference; abs() gives magnitude (volatility).
-    """
+def qval(da: xr.DataArray, q: float) -> float:
+    """Return float quantile robustly."""
+    return float(da.quantile(q).values)
+
+
+def std_abs_daily_change(sic_da: xr.DataArray) -> xr.DataArray:
+    """std(|ΔSIC|) over time, computed at each grid cell."""
     dsic = sic_da.diff("time")
     metric = np.abs(dsic)
     return metric.std("time", skipna=True)
-    print("ΔSIC range:", float(dsic.min()), float(dsic.max()))
-    print("Std(|ΔSIC|) 99th pct:", float(metric.std("time").quantile(0.99)))
 
 
-def qval(da: xr.DataArray, q: float) -> float:
-    """Return float quantile (robust with xarray/dask)."""
-    return float(da.quantile(q).values)
+def std_sic(sic_da: xr.DataArray) -> xr.DataArray:
+    """std(SIC) over time, computed at each grid cell."""
+    return sic_da.std("time", skipna=True)
+
+
+def std_sic_anom_doy(sic_da: xr.DataArray) -> xr.DataArray:
+    """
+    std(SIC') where SIC' = SIC - climatology(day-of-year).
+    Day-of-year climatology is computed from the same period.
+    """
+    doy = sic_da.time.dt.dayofyear
+    clim = sic_da.groupby(doy).mean("time", skipna=True)
+    anom = sic_da.groupby(doy) - clim
+    return anom.std("time", skipna=True)
+
+
+def plot_triptych(field_pre, field_post, title_pre, title_post, title_diff,
+                  cbar_label_main, cbar_label_diff, outfile_png):
+    """Make a 3-panel plot: pre, post, post-pre."""
+    field_diff = field_post - field_pre
+
+    # Shared scaling for pre/post
+    vmax_main = max(qval(field_pre, main_q), qval(field_post, main_q))
+    # Symmetric scaling for diff
+    vmax_diff = qval(np.abs(field_diff), diff_q)
+
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 5), constrained_layout=True)
+
+    im0 = field_pre.plot(ax=axes[0], cmap=cmap_main, vmin=0, vmax=vmax_main, add_colorbar=False)
+    axes[0].set_title(title_pre)
+    axes[0].set_xlabel(""); axes[0].set_ylabel("")
+
+    im1 = field_post.plot(ax=axes[1], cmap=cmap_main, vmin=0, vmax=vmax_main, add_colorbar=False)
+    axes[1].set_title(title_post)
+    axes[1].set_xlabel(""); axes[1].set_ylabel("")
+
+    im2 = field_diff.plot(ax=axes[2], cmap=cmap_diff, vmin=-vmax_diff, vmax=vmax_diff, add_colorbar=False)
+    axes[2].set_title(title_diff)
+    axes[2].set_xlabel(""); axes[2].set_ylabel("")
+
+    cbar1 = fig.colorbar(im0, ax=axes[:2], orientation="vertical", shrink=0.9)
+    cbar1.set_label(cbar_label_main)
+
+    cbar2 = fig.colorbar(im2, ax=axes[2], orientation="vertical", shrink=0.9)
+    cbar2.set_label(cbar_label_diff)
+
+    plt.savefig(outfile_png, dpi=dpi)
+    plt.close()
+
+    print("Saved:", outfile_png)
+    print("  vmax_main =", vmax_main)
+    print("  vmax_diff =", vmax_diff)
 
 
 # -----------------------------
@@ -83,96 +128,62 @@ def qval(da: xr.DataArray, q: float) -> float:
 # -----------------------------
 ds = xr.open_dataset(sic_file)
 sic = ds[sic_var]
-
 sic = ensure_fractional_sic(sic)
 sic = drop_feb29(sic)
 
-# Split periods
 sic_pre  = sic.sel(time=slice(pre_start,  pre_end))
 sic_post = sic.sel(time=slice(post_start, post_end))
 
-# Compute std(|ΔSIC|)
-std_pre  = daily_volatility_std(sic_pre)
-std_post = daily_volatility_std(sic_post)
-
-# Optional: common (intersection) mask based on mean SIC > threshold in BOTH periods
-if apply_common_mask:
-    mask_common = (sic_pre.mean("time") > mask_threshold) & (sic_post.mean("time") > mask_threshold)
-    std_pre  = std_pre.where(mask_common)
-    std_post = std_post.where(mask_common)
-
-# Difference
-std_diff = std_post - std_pre
-
 
 # -----------------------------
-# COLOR LIMITS (DON'T GUESS)
+# FIGURE 1: std(|ΔSIC|)
 # -----------------------------
-# Main panels: use a shared vmax so pre/post are comparable
-if vmax_main is None:
-    vmax_main = max(qval(std_pre, vmax_quantile_main), qval(std_post, vmax_quantile_main))
+std_absdsic_pre  = std_abs_daily_change(sic_pre)
+std_absdsic_post = std_abs_daily_change(sic_post)
 
-# Difference: symmetric scaling around zero
-if vmax_diff is None:
-    vmax_diff = qval(np.abs(std_diff), vmax_quantile_diff)
-
-
-
-# -----------------------------
-# PLOT
-# -----------------------------
-fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 5), constrained_layout=True)
-
-# Pre
-im0 = std_pre.plot(
-    ax=axes[0],
-    cmap=cmap_main,
-    vmin=0,
-    vmax=vmax_main,
-    add_colorbar=False
+plot_triptych(
+    std_absdsic_pre,
+    std_absdsic_post,
+    f"Std(|ΔSIC|) (Pre: {pre_start[:4]}–{pre_end[:4]})",
+    f"Std(|ΔSIC|) (Post: {post_start[:4]}–{post_end[:4]})",
+    "Post − Pre difference",
+    "Std of |daily SIC change|, std(|ΔSIC|)",
+    "Δ std(|ΔSIC|)",
+    f"{out_dir}/fig1_std_abs_daily_change.png"
 )
-axes[0].set_title(f"Std(|ΔSIC|) (Pre: {pre_start[:4]}–{pre_end[:4]})")
-axes[0].set_xlabel("")
-axes[0].set_ylabel("")
 
-# Post
-im1 = std_post.plot(
-    ax=axes[1],
-    cmap=cmap_main,
-    vmin=0,
-    vmax=vmax_main,
-    add_colorbar=False
+
+# -----------------------------
+# FIGURE 2: std(SIC)
+# -----------------------------
+std_sic_pre  = std_sic(sic_pre)
+std_sic_post = std_sic(sic_post)
+
+plot_triptych(
+    std_sic_pre,
+    std_sic_post,
+    f"Std(SIC) (Pre: {pre_start[:4]}–{pre_end[:4]})",
+    f"Std(SIC) (Post: {post_start[:4]}–{post_end[:4]})",
+    "Post − Pre difference",
+    "Std of SIC, std(SIC)",
+    "Δ std(SIC)",
+    f"{out_dir}/fig2_std_sic.png"
 )
-axes[1].set_title(f"Std(|ΔSIC|) (Post: {post_start[:4]}–{post_end[:4]})")
-axes[1].set_xlabel("")
-axes[1].set_ylabel("")
 
-# Diff
-im2 = std_diff.plot(
-    ax=axes[2],
-    cmap=cmap_diff,
-    vmin=-vmax_diff,
-    vmax=+vmax_diff,
-    add_colorbar=False
+
+# -----------------------------
+# FIGURE 3: std(SIC anomalies), seasonal cycle removed
+# -----------------------------
+std_anom_pre  = std_sic_anom_doy(sic_pre)
+std_anom_post = std_sic_anom_doy(sic_post)
+
+plot_triptych(
+    std_anom_pre,
+    std_anom_post,
+    f"Std(SIC') (Pre: {pre_start[:4]}–{pre_end[:4]})",
+    f"Std(SIC') (Post: {post_start[:4]}–{post_end[:4]})",
+    "Post − Pre difference",
+    "Std of SIC anomalies (DOY climatology removed), std(SIC')",
+    "Δ std(SIC')",
+    f"{out_dir}/fig3_std_sic_anom_doy.png"
 )
-axes[2].set_title("Post − Pre difference")
-axes[2].set_xlabel("")
-axes[2].set_ylabel("")
-print("vmax_main =", vmax_main)
-print("vmax_diff =", vmax_diff)
-
-# Colorbars
-cbar1 = fig.colorbar(im0, ax=axes[:2], orientation="vertical", shrink=0.9)
-cbar1.set_label("Std of daily SIC change magnitude, std(|ΔSIC|)")
-
-cbar2 = fig.colorbar(im2, ax=axes[2], orientation="vertical", shrink=0.9)
-cbar2.set_label("Δ Std(|ΔSIC|)")
-
-# Save
-plt.savefig(out_png, dpi=dpi)
-plt.close()
-
-print("Saved:", out_png)
-print("vmax_main =", vmax_main)
-print("vmax_diff =", vmax_diff)
-print("apply_common_mask =", apply_common_mask, "mask_threshold =", mask_threshold)
