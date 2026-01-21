@@ -67,8 +67,10 @@ def daily_volatility_std(sic_da: xr.DataArray) -> xr.DataArray:
     ΔSIC is day-to-day difference; abs() gives magnitude (volatility).
     """
     dsic = sic_da.diff("time")
-    metric = dsic.abs()
+    metric = np.abs(dsic)
     return metric.std("time", skipna=True)
+    print("ΔSIC range:", float(dsic.min()), float(dsic.max()))
+    print("Std(|ΔSIC|) 99th pct:", float(metric.std("time").quantile(0.99)))
 
 
 def qval(da: xr.DataArray, q: float) -> float:
