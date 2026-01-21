@@ -58,14 +58,14 @@ for season, months in seasons.items():
     fig, axes = plt.subplots(1, 3, figsize=(15, 5), constrained_layout=True)
 
     std_pre.plot(ax=axes[0],
-             cmap="magma",
+             cmap="magma_r",
              vmin=0,
              vmax=vmax,
              robust=False)
     axes[0].set_title(f"{season} Std(SIC) Pre")
 
     std_post.plot(ax=axes[1],
-                  cmap="magma",
+                  cmap="magma_r",
                   vmin=0,
                   vmax=vmax,
                   robust=False)
