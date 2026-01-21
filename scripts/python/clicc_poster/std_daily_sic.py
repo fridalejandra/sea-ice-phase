@@ -114,7 +114,8 @@ if vmax_main is None:
 
 # Difference: symmetric scaling around zero
 if vmax_diff is None:
-    vmax_diff = qval(std_diff.abs(), vmax_quantile_diff)
+    vmax_diff = qval(np.abs(std_diff), vmax_quantile_diff)
+
 
 
 # -----------------------------
@@ -157,6 +158,8 @@ im2 = std_diff.plot(
 axes[2].set_title("Post − Pre difference")
 axes[2].set_xlabel("")
 axes[2].set_ylabel("")
+print("vmax_main =", vmax_main)
+print("vmax_diff =", vmax_diff)
 
 # Colorbars
 cbar1 = fig.colorbar(im0, ax=axes[:2], orientation="vertical", shrink=0.9)
