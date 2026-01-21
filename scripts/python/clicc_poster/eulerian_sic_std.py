@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 sic_file = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc"
 sic_var  = "N07_ICECON"
 
-outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clicc_poster/"
+outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster/"
 
 # periods
 pre_slice  = slice("1979-01-01", "2016-12-31")
