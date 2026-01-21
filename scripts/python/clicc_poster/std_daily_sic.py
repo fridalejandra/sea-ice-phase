@@ -58,22 +58,24 @@ for season, months in seasons.items():
     fig, axes = plt.subplots(1, 3, figsize=(15, 5), constrained_layout=True)
 
     std_pre.plot(ax=axes[0],
-                 cmap="YlOrRd",
-                 vmin=0,
-                 vmax=vmax)
+             cmap="magma",
+             vmin=0,
+             vmax=vmax,
+             robust=False)
     axes[0].set_title(f"{season} Std(SIC) Pre")
 
     std_post.plot(ax=axes[1],
-                  cmap="YlOrRd",
+                  cmap="magma",
                   vmin=0,
-                  vmax=vmax)
+                  vmax=vmax,
+                  robust=False)
     axes[1].set_title(f"{season} Std(SIC) Post")
 
     std_diff.plot(ax=axes[2],
                   cmap="RdBu_r",
                   vmin=-vmax_diff,
-                  vmax=vmax_diff)
-
+                  vmax=vmax_diff,
+                  robust=False)
     axes[2].set_title(f"{season} Post − Pre")
 
     for ax in axes:
