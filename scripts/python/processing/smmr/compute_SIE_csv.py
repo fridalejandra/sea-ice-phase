@@ -55,7 +55,7 @@ area.attrs["units"] = "million km^2"
 # =====================================================
 # binary ice mask
 # =====================================================
-ice = (sic >= thr).astype("int8")
+ice = (sic >= sic_threshold).astype("int8")
 
 # =====================================================
 # pan-Antarctic SIE
