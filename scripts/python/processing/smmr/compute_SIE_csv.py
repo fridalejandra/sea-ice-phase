@@ -28,7 +28,7 @@ sectors = {
 }
 
 # =====================================================
-# Load data (lazy, cluster-safe)
+# load data
 # =====================================================
 ds   = xr.open_dataset(sic_file, chunks={"time": 365})
 area = xr.open_dataset(area_file)[area_var]
@@ -36,50 +36,52 @@ mask = xr.open_dataset(mask_file)[mask_var]
 
 sic = ds[sic_var]
 
-# -----------------------------------------------------
+# =====================================================
 # detect spatial dimensions (x/y safe)
-# -----------------------------------------------------
+# =====================================================
 spatial_dims = [d for d in sic.dims if d != "time"]
-
 if len(spatial_dims) != 2:
     raise ValueError(f"Expected 2 spatial dims, found {spatial_dims}")
 
 print("Using spatial dimensions:", spatial_dims)
 
+# =====================================================
+# UNIT CONVERSION (DO THIS ONCE)
+# m^2 → million km^2
+# =====================================================
+area = area / 1e12
+area.attrs["units"] = "million km^2"
 
 # =====================================================
-# Binary ice mask
+# binary ice mask
 # =====================================================
-ice = (sic >= sic_threshold).astype("int8")
+ice = (sic >= thr).astype("int8")
 
 # =====================================================
-# Pan-Antarctic SIE
+# pan-Antarctic SIE
 # =====================================================
 sie_pan = (ice * area).sum(dim=spatial_dims)
 sie_pan = sie_pan.rename("SIE_panAntarctic")
 
 # =====================================================
-# Sector-wise SIE
+# sector-wise SIE
 # =====================================================
 sie_vars = [sie_pan]
 
 for code, name in sectors.items():
     area_sector = area.where(mask == code)
-    sie_sector = (ice * area_sector).sum(dim=(spatial_dims))
+    sie_sector = (ice * area_sector).sum(dim=spatial_dims)
     sie_sector = sie_sector.rename(f"SIE_{name}")
     sie_vars.append(sie_sector)
 
 # =====================================================
-# Combine → DataFrame → CSV
+# to CSV
 # =====================================================
 sie_ds = xr.merge(sie_vars)
-
 df = sie_ds.to_dataframe().reset_index()
 
-# optional: cleaner column order
 cols = ["time", "SIE_panAntarctic"] + [f"SIE_{v}" for v in sectors.values()]
 df = df[cols]
 
 df.to_csv(out_file, index=False)
-
-print(f"Saved CSV: {out_file}")
+print(f"Saved: {out_file}")
