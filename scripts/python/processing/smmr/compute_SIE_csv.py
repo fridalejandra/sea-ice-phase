@@ -8,7 +8,7 @@ from pathlib import Path
 # =====================================================
 sic_file   = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc"
 area_file  = "/user/geog/falejandraperez/sea-ice-phase/data/NSIDC0771_CellArea_PS_S25km_v1.0.nc"
-mask_file  = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc.nc"
+mask_file  = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
 
 out_dir = Path("/user/geog/falejandraperez/sea-ice-phase/scripts/R/Sea_Ice_Sheets")
 out_file = out_dir / "SIE_daily_pan_and_sector.csv"
