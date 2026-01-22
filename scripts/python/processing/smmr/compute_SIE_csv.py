@@ -36,6 +36,17 @@ mask = xr.open_dataset(mask_file)[mask_var]
 
 sic = ds[sic_var]
 
+# -----------------------------------------------------
+# detect spatial dimensions (x/y safe)
+# -----------------------------------------------------
+spatial_dims = [d for d in sic.dims if d != "time"]
+
+if len(spatial_dims) != 2:
+    raise ValueError(f"Expected 2 spatial dims, found {spatial_dims}")
+
+print("Using spatial dimensions:", spatial_dims)
+
+
 # =====================================================
 # Binary ice mask
 # =====================================================
@@ -44,7 +55,7 @@ ice = (sic >= sic_threshold).astype("int8")
 # =====================================================
 # Pan-Antarctic SIE
 # =====================================================
-sie_pan = (ice * area).sum(dim=("lat", "lon"))
+sie_pan = (ice * area).sum(dim=spatial_dims)
 sie_pan = sie_pan.rename("SIE_panAntarctic")
 
 # =====================================================
@@ -54,7 +65,7 @@ sie_vars = [sie_pan]
 
 for code, name in sectors.items():
     area_sector = area.where(mask == code)
-    sie_sector = (ice * area_sector).sum(dim=("lat", "lon"))
+    sie_sector = (ice * area_sector).sum(dim=(spatial_dims))
     sie_sector = sie_sector.rename(f"SIE_{name}")
     sie_vars.append(sie_sector)
 
