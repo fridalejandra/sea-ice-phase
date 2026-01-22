@@ -15,7 +15,7 @@ out_file = out_dir / "SIE_daily_pan_and_sector.csv"
 
 sic_var  = "N07_ICECON"
 area_var = "cell_area"    # km^2
-mask_var = "sector"
+mask_var = "sector_id"
 
 sic_threshold = 0.15
 
