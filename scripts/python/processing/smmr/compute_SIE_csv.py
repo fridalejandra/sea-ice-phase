@@ -1,14 +1,14 @@
-# compute_SIE_sector_and_circumpolar.py
+# calc_SIE_pan_and_sector.py
 import xarray as xr
-import pandas as pd
+import numpy as np
 from pathlib import Path
 
 # =====================================================
-# paths
+# User settings
 # =====================================================
 sic_file   = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc"
-area_file  = "/user/geog/falejandraperez/sea-ice-phase/data/static/gridcell_area_SH.nc"
-mask_file  = "/user/geog/falejandraperez/sea-ice-phase/data/static/antarctic_sector_mask.nc"
+area_file  = "/user/geog/falejandraperez/sea-ice-phase/data/NSIDC0771_CellArea_PS_S25km_v1.0.nc"
+mask_file  = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
 
 out_dir = Path("/user/geog/falejandraperez/sea-ice-phase/results/SIE")
 out_dir.mkdir(parents=True, exist_ok=True)
