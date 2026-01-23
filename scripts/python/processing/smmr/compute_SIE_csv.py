@@ -20,7 +20,7 @@ out_file = out_dir / "SIE_daily_sector_and_circumpolar_million_km2.csv"
 # =====================================================
 sic_var  = "N07_ICECON"
 area_var = "cell_area"
-mask_var = "sector"
+mask_var = "sector_id"
 
 thr = 0.15
 
