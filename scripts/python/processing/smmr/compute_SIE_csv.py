@@ -1,21 +1,26 @@
-# calc_SIE_pan_and_sector.py
+# compute_SIE_sector_and_circumpolar.py
 import xarray as xr
-import numpy as np
+import pandas as pd
 from pathlib import Path
 
 # =====================================================
-# User settings
+# paths
 # =====================================================
 sic_file   = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc"
-area_file  = "/user/geog/falejandraperez/sea-ice-phase/data/NSIDC0771_CellArea_PS_S25km_v1.0.nc"
-mask_file  = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
+area_file  = "/user/geog/falejandraperez/sea-ice-phase/data/static/gridcell_area_SH.nc"
+mask_file  = "/user/geog/falejandraperez/sea-ice-phase/data/static/antarctic_sector_mask.nc"
 
-out_dir = Path("/user/geog/falejandraperez/sea-ice-phase/scripts/R/Sea_Ice_Sheets")
-out_file = out_dir / "SIE_daily_pan_and_sector.csv"
+out_dir = Path("/user/geog/falejandraperez/sea-ice-phase/results/SIE")
+out_dir.mkdir(parents=True, exist_ok=True)
 
+out_file = out_dir / "SIE_daily_sector_and_circumpolar_million_km2.csv"
+
+# =====================================================
+# variables
+# =====================================================
 sic_var  = "N07_ICECON"
-area_var = "cell_area"    # km^2
-mask_var = "sector_id"
+area_var = "cell_area"
+mask_var = "sector"
 
 thr = 0.15
 
@@ -36,7 +41,7 @@ area = xr.open_dataset(area_file)[area_var]
 mask = xr.open_dataset(mask_file)[mask_var]
 
 # =====================================================
-# detect spatial dimensions (x/y safe)
+# detect spatial dimensions
 # =====================================================
 spatial_dims = [d for d in sic.dims if d != "time"]
 if len(spatial_dims) != 2:
@@ -45,32 +50,40 @@ if len(spatial_dims) != 2:
 print("Using spatial dimensions:", spatial_dims)
 
 # =====================================================
-# UNIT CONVERSION
+# unit conversion
 # m^2 → million km^2
 # =====================================================
 area = area / 1e12
 area.attrs["units"] = "million km^2"
 
 # =====================================================
-# Antarctic ocean mask (domain definition)
+# clean SIC (critical)
 # =====================================================
-antarctic_ocean = area.notnull()
+sic = sic.where((sic >= 0) & (sic <= 1))
 
 # =====================================================
-# binary ice mask
+# binary ice mask (extent definition)
 # =====================================================
-ice = (sic >= thr)
+ice = sic >= thr
 
 # =====================================================
-# PAN-ANTARCTIC SIE (sector-independent)
+# circumpolar Antarctic mask (union of sectors)
 # =====================================================
-sie_pan = (ice * area.where(antarctic_ocean)).sum(dim=spatial_dims)
-sie_pan = sie_pan.rename("SIE_panAntarctic")
+antarctic_ocean = mask.notnull()
 
 # =====================================================
-# SECTOR SIE (diagnostic decomposition)
+# CIRCUMPOLAR SIE (independent)
 # =====================================================
-sie_vars = [sie_pan]
+sie_circ = (
+    ice * area.where(antarctic_ocean)
+).sum(dim=spatial_dims)
+
+sie_circ = sie_circ.rename("SIE_circumpolar")
+
+# =====================================================
+# SECTOR SIE (diagnostic)
+# =====================================================
+sie_vars = [sie_circ]
 
 for code, name in sectors.items():
     area_sector = area.where(mask == code)
@@ -84,14 +97,14 @@ for code, name in sectors.items():
 sie_ds = xr.merge(sie_vars)
 df = sie_ds.to_dataframe().reset_index()
 
-cols = ["time", "SIE_panAntarctic"] + [f"SIE_{v}" for v in sectors.values()]
+cols = ["time", "SIE_circumpolar"] + [f"SIE_{v}" for v in sectors.values()]
 df = df[cols]
 
 df.to_csv(out_file, index=False)
 print(f"Saved: {out_file}")
 
 # =====================================================
-# HARD SANITY CHECKS (do not remove)
+# hard sanity checks
 # =====================================================
-assert df["SIE_panAntarctic"].max() < 25, "Pan-Antarctic SIE exceeds physical limit"
-assert df["SIE_panAntarctic"].min() > 0,  "Negative or zero SIE detected"
+assert df["SIE_circumpolar"].max() < 25, "Circumpolar SIE exceeds physical limit"
+assert df["SIE_circumpolar"].min() > 0,  "Non-positive SIE detected"
