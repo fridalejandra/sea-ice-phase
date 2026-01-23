@@ -17,7 +17,7 @@ sic_var  = "N07_ICECON"
 area_var = "cell_area"    # km^2
 mask_var = "sector_id"
 
-sic_threshold = 0.15
+thr = 0.15
 
 sectors = {
     1: "Weddell",
@@ -31,10 +31,9 @@ sectors = {
 # load data
 # =====================================================
 ds   = xr.open_dataset(sic_file, chunks={"time": 365})
+sic  = ds[sic_var]
 area = xr.open_dataset(area_file)[area_var]
 mask = xr.open_dataset(mask_file)[mask_var]
-
-sic = ds[sic_var]
 
 # =====================================================
 # detect spatial dimensions (x/y safe)
@@ -46,25 +45,30 @@ if len(spatial_dims) != 2:
 print("Using spatial dimensions:", spatial_dims)
 
 # =====================================================
-# UNIT CONVERSION (DO THIS ONCE)
+# UNIT CONVERSION
 # m^2 → million km^2
 # =====================================================
 area = area / 1e12
 area.attrs["units"] = "million km^2"
 
 # =====================================================
-# binary ice mask
+# Antarctic ocean mask (domain definition)
 # =====================================================
-ice = (sic >= sic_threshold).astype("int8")
+antarctic_ocean = area.notnull()
 
 # =====================================================
-# pan-Antarctic SIE
+# binary ice mask
 # =====================================================
-sie_pan = (ice * area).sum(dim=spatial_dims)
+ice = (sic >= thr)
+
+# =====================================================
+# PAN-ANTARCTIC SIE (sector-independent)
+# =====================================================
+sie_pan = (ice * area.where(antarctic_ocean)).sum(dim=spatial_dims)
 sie_pan = sie_pan.rename("SIE_panAntarctic")
 
 # =====================================================
-# sector-wise SIE
+# SECTOR SIE (diagnostic decomposition)
 # =====================================================
 sie_vars = [sie_pan]
 
@@ -85,3 +89,9 @@ df = df[cols]
 
 df.to_csv(out_file, index=False)
 print(f"Saved: {out_file}")
+
+# =====================================================
+# HARD SANITY CHECKS (do not remove)
+# =====================================================
+assert df["SIE_panAntarctic"].max() < 25, "Pan-Antarctic SIE exceeds physical limit"
+assert df["SIE_panAntarctic"].min() > 0,  "Negative or zero SIE detected"
