@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+# =====================================================
+# ERA5 winds → SIE grid → daily sector means
+# SAFE: file-by-file, no broadcasting, no OOM
+# =====================================================
 
 import os
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -8,16 +12,27 @@ import glob
 import numpy as np
 import pandas as pd
 import xarray as xr
+import xesmf as xe
 from tqdm import tqdm
 from pathlib import Path
 
 # =====================================================
-# paths
+# PATHS (EDIT ONLY IF NEEDED)
 # =====================================================
 ERA5_BASE = "/user/geog/falejandraperez/sea-ice-phase/data/Reanalysis_ERA5/winds"
-MASK_FILE = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
-OUT_DIR   = "/user/geog/falejandraperez/sea-ice-phase/results/ERA5"
-OUT_FILE  = "ERA5_winds_daily_sector.csv"
+
+SIE_GRID_FILE = (
+    "/user/geog/falejandraperez/sea-ice-phase/data/"
+    "merged_bootstrap_SH_latest.nc"
+)
+
+SECTOR_MASK_FILE = (
+    "/user/geog/falejandraperez/sea-ice-phase/data/"
+    "canonical_sectors.nc"
+)
+
+OUT_DIR  = "/user/geog/falejandraperez/sea-ice-phase/results/ERA5"
+OUT_FILE = "ERA5_winds_daily_sector.csv"
 
 START_YEAR = 1979
 END_YEAR   = 2024
@@ -33,68 +48,100 @@ SECTORS = {
 Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
 # =====================================================
-# load mask ONCE
+# LOAD TARGET GRID + SECTOR MASK (ONCE)
 # =====================================================
-mask = xr.open_dataset(MASK_FILE)["sector_id"]
+sie = xr.open_dataset(SIE_GRID_FILE)
+sector_mask = xr.open_dataset(SECTOR_MASK_FILE)["sector_id"]
 
-results = []
+# ensure names are x/y for consistency
+sie = sie.rename({"latitude": "lat", "longitude": "lon"}, errors="ignore")
 
 # =====================================================
-# main loop (FILE BY FILE = OOM SAFE)
+# BUILD REGRIDDER (ONCE)
 # =====================================================
+# We create a *dummy* ERA5 grid definition using one file
+sample_file = sorted(glob.glob(f"{ERA5_BASE}/{START_YEAR}/*.nc"))[0]
+era5_sample = xr.open_dataset(sample_file)
+
+regridder = xe.Regridder(
+    era5_sample,
+    sie,
+    method="bilinear",
+    reuse_weights=True
+)
+
+era5_sample.close()
+
+# =====================================================
+# MAIN LOOP (FILE-BY-FILE = SAFE)
+# =====================================================
+rows = []
+
 for year in tqdm(range(START_YEAR, END_YEAR + 1), desc="Years"):
 
     files = sorted(glob.glob(f"{ERA5_BASE}/{year}/*.nc"))
     if not files:
         continue
 
-    for f in tqdm(files, desc=f"{year}", leave=False):
+    for f in tqdm(files, desc=str(year), leave=False):
 
         ds = xr.open_dataset(f)
 
+        # rename + time handling
         ds = ds.rename({"valid_time": "time"})
+        time_val = pd.to_datetime(ds.time.values)
+
+        # derive wind speed
         ds["wind_speed"] = np.sqrt(ds.u10**2 + ds.v10**2)
 
-        weights = np.cos(np.deg2rad(ds.latitude))
+        # regrid ERA5 → SIE grid
+        ds_rg = regridder(ds[["u10", "v10", "wind_speed"]])
 
-        row = {
-            "time": pd.to_datetime(ds.time.values)
-        }
+        # area weights (SIE grid)
+        weights = np.cos(np.deg2rad(ds_rg.lat))
 
-        # circumpolar
+        row = {"time": time_val}
+
+        # -------------------------------
+        # circumpolar mean
+        # -------------------------------
         circ = (
-            ds[["u10", "v10", "wind_speed"]]
-            .where(mask.notnull())
+            ds_rg
+            .where(sector_mask.notnull())
             .weighted(weights)
-            .mean(dim=("latitude", "longitude"))
+            .mean(dim=("lat", "lon"))
         )
 
-        row["u10_circumpolar"]   = float(circ.u10)
-        row["v10_circumpolar"]   = float(circ.v10)
-        row["wind_circumpolar"]  = float(circ.wind_speed)
+        row["u10_circumpolar"]  = float(circ.u10)
+        row["v10_circumpolar"]  = float(circ.v10)
+        row["wind_circumpolar"] = float(circ.wind_speed)
 
-        # sectors
+        # -------------------------------
+        # sector means
+        # -------------------------------
         for code, name in SECTORS.items():
             sec = (
-                ds[["u10", "v10", "wind_speed"]]
-                .where(mask == code)
+                ds_rg
+                .where(sector_mask == code)
                 .weighted(weights)
-                .mean(dim=("latitude", "longitude"))
+                .mean(dim=("lat", "lon"))
             )
 
             row[f"u10_{name}"]  = float(sec.u10)
             row[f"v10_{name}"]  = float(sec.v10)
             row[f"wind_{name}"] = float(sec.wind_speed)
 
-        results.append(row)
+        rows.append(row)
 
+        # explicit cleanup
         ds.close()
+        ds_rg.close()
 
 # =====================================================
-# write output
+# WRITE OUTPUT
 # =====================================================
-df = pd.DataFrame(results)
-df = df.sort_values("time")
-df.to_csv(f"{OUT_DIR}/{OUT_FILE}", index=False)
+df = pd.DataFrame(rows).sort_values("time")
+out_path = f"{OUT_DIR}/{OUT_FILE}"
+df.to_csv(out_path, index=False)
 
-print(f"\nSaved:\n{OUT_DIR}/{OUT_FILE}")
+print(f"\nSaved ERA5 winds to:\n{out_path}")
