@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import os
-# ---- hard safety limits for HPC ----
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
@@ -13,20 +12,16 @@ from tqdm import tqdm
 from pathlib import Path
 
 # =====================================================
-# paths (EDIT ONLY IF NEEDED)
+# paths
 # =====================================================
 ERA5_BASE = "/user/geog/falejandraperez/sea-ice-phase/data/Reanalysis_ERA5/winds"
 MASK_FILE = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
 OUT_DIR   = "/user/geog/falejandraperez/sea-ice-phase/results/ERA5"
-
 OUT_FILE  = "ERA5_winds_daily_sector.csv"
 
 START_YEAR = 1979
 END_YEAR   = 2024
 
-# =====================================================
-# sector definition (must match SIE)
-# =====================================================
 SECTORS = {
     1: "Weddell",
     2: "Amundsen_Bellingshausen",
@@ -35,110 +30,71 @@ SECTORS = {
     5: "King_Haakon"
 }
 
-# =====================================================
-# setup output
-# =====================================================
 Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
 # =====================================================
-# load sector mask ONCE
+# load mask ONCE
 # =====================================================
-mask_ds = xr.open_dataset(MASK_FILE)
-sector_mask = mask_ds["sector_id"]
+mask = xr.open_dataset(MASK_FILE)["sector_id"]
+
+results = []
 
 # =====================================================
-# container for results
+# main loop (FILE BY FILE = OOM SAFE)
 # =====================================================
-all_years = []
+for year in tqdm(range(START_YEAR, END_YEAR + 1), desc="Years"):
 
-# =====================================================
-# main loop (YEARLY = SAFE)
-# =====================================================
-for year in tqdm(range(START_YEAR, END_YEAR + 1), desc="Processing years"):
-
-    files = sorted(
-        glob.glob(f"{ERA5_BASE}/{year}/*.nc")
-    )
-
-    if len(files) == 0:
+    files = sorted(glob.glob(f"{ERA5_BASE}/{year}/*.nc"))
+    if not files:
         continue
 
-    # ---- open year (NO parallelism) ----
-    ds = xr.open_mfdataset(
-        files,
-        combine="nested",
-        concat_dim="valid_time",
-        decode_times=True,
-        parallel=False,
-        chunks={}
-    )
+    for f in tqdm(files, desc=f"{year}", leave=False):
 
-    ds = ds.rename({"valid_time": "time"})
+        ds = xr.open_dataset(f)
 
-    # ---- derived wind speed ----
-    ds["wind_speed"] = np.sqrt(ds.u10**2 + ds.v10**2)
+        ds = ds.rename({"valid_time": "time"})
+        ds["wind_speed"] = np.sqrt(ds.u10**2 + ds.v10**2)
 
-    # ---- area weights ----
-    weights = np.cos(np.deg2rad(ds.latitude))
-    weights.name = "weights"
+        weights = np.cos(np.deg2rad(ds.latitude))
 
-    # =================================================
-    # circumpolar mean (same philosophy as SIE)
-    # =================================================
-    circ = (
-        ds[["u10", "v10", "wind_speed"]]
-        .where(sector_mask.notnull())
-        .weighted(weights)
-        .mean(dim=("latitude", "longitude"))
-    )
+        row = {
+            "time": pd.to_datetime(ds.time.values)
+        }
 
-    circ = circ.rename({
-        "u10": "u10_circumpolar",
-        "v10": "v10_circumpolar",
-        "wind_speed": "wind_circumpolar"
-    })
-
-    outputs = [circ]
-
-    # =================================================
-    # sector means
-    # =================================================
-    for code, name in SECTORS.items():
-        sec = (
+        # circumpolar
+        circ = (
             ds[["u10", "v10", "wind_speed"]]
-            .where(sector_mask == code)
+            .where(mask.notnull())
             .weighted(weights)
             .mean(dim=("latitude", "longitude"))
         )
 
-        sec = sec.rename({
-            "u10": f"u10_{name}",
-            "v10": f"v10_{name}",
-            "wind_speed": f"wind_{name}"
-        })
+        row["u10_circumpolar"]   = float(circ.u10)
+        row["v10_circumpolar"]   = float(circ.v10)
+        row["wind_circumpolar"]  = float(circ.wind_speed)
 
-        outputs.append(sec)
+        # sectors
+        for code, name in SECTORS.items():
+            sec = (
+                ds[["u10", "v10", "wind_speed"]]
+                .where(mask == code)
+                .weighted(weights)
+                .mean(dim=("latitude", "longitude"))
+            )
 
-    # =================================================
-    # merge + daily aggregation
-    # =================================================
-    out_ds = xr.merge(outputs)
+            row[f"u10_{name}"]  = float(sec.u10)
+            row[f"v10_{name}"]  = float(sec.v10)
+            row[f"wind_{name}"] = float(sec.wind_speed)
 
-    out_ds = out_ds.resample(time="1D").mean()
+        results.append(row)
 
-    df_year = out_ds.to_dataframe().reset_index()
-    all_years.append(df_year)
-
-    # ---- CRITICAL CLEANUP ----
-    ds.close()
-    out_ds.close()
+        ds.close()
 
 # =====================================================
-# write final CSV
+# write output
 # =====================================================
-df = pd.concat(all_years, ignore_index=True)
+df = pd.DataFrame(results)
+df = df.sort_values("time")
+df.to_csv(f"{OUT_DIR}/{OUT_FILE}", index=False)
 
-out_path = f"{OUT_DIR}/{OUT_FILE}"
-df.to_csv(out_path, index=False)
-
-print(f"\nSaved ERA5 winds to:\n{out_path}")
+print(f"\nSaved:\n{OUT_DIR}/{OUT_FILE}")
