@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # =====================================================
-# ERA5 winds → SIE (x,y) grid → daily sector means
-# SAFE, CORRECT, CLUSTER-READY
+# ERA5 wind SPEED → SIE (x,y) grid → daily sector means
+# POSTER-READY, SAFE, CLUSTER-READY
 # =====================================================
 
 import os
@@ -33,7 +33,7 @@ SECTOR_MASK_FILE = (
 )
 
 OUT_DIR  = "/user/geog/falejandraperez/sea-ice-phase/results/ERA5"
-OUT_FILE = "ERA5_winds_daily_sector.csv"
+OUT_FILE = "ERA5_windSpeed_daily_sector.csv"
 
 START_YEAR = 1979
 END_YEAR   = 2024
@@ -56,11 +56,9 @@ sector_mask = xr.open_dataset(SECTOR_MASK_FILE)["sector_id"]
 
 assert "x" in sie.dims and "y" in sie.dims
 
-from pyproj import CRS, Transformer
-
-# -----------------------------------------------------
-# Explicit CRS: NSIDC Polar Stereographic South
-# -----------------------------------------------------
+# =====================================================
+# EXPLICIT CRS: NSIDC Polar Stereographic South
+# =====================================================
 crs = CRS.from_epsg(3412)
 
 transformer = Transformer.from_crs(
@@ -76,9 +74,6 @@ sie = sie.assign_coords(
     lon=(("y", "x"), lon),
     lat=(("y", "x"), lat)
 )
-print(float(sie.lat.min()), float(sie.lat.max()))
-print(float(sie.lon.min()), float(sie.lon.max()))
-
 
 # =====================================================
 # BUILD REGRIDDER (ONCE)
@@ -102,7 +97,6 @@ era5_sample.close()
 # =====================================================
 # WEIGHTS ON SIE GRID
 # =====================================================
-# Uniform weights are acceptable for means
 weights = xr.ones_like(sector_mask)
 
 # =====================================================
@@ -121,48 +115,43 @@ for year in tqdm(range(START_YEAR, END_YEAR + 1), desc="Years"):
         ds = xr.open_dataset(f)
 
         ds = ds.rename({"valid_time": "time"})
-        time_val = pd.to_datetime(ds.time.values)
 
-        ds["wind_speed"] = np.sqrt(ds.u10**2 + ds.v10**2)
+        # ---- FIXED: scalar timestamp ----
+        time_val = pd.Timestamp(ds.time.values.item())
 
-        # Regrid ERA5 → SIE grid
-        ds_rg = regridder(ds[["u10", "v10", "wind_speed"]])
+        # ---- compute wind speed only ----
+        wind_speed = np.sqrt(ds.u10**2 + ds.v10**2)
+
+        # regrid ERA5 → SIE grid
+        wind_rg = regridder(wind_speed)
 
         row = {"time": time_val}
 
         # -------------------------
         # Circumpolar mean
         # -------------------------
-        circ = (
-            ds_rg
+        row["wind_circumpolar"] = float(
+            wind_rg
             .where(sector_mask.notnull())
             .weighted(weights)
             .mean(dim=("y", "x"))
         )
 
-        row["u10_circumpolar"]  = float(circ.u10)
-        row["v10_circumpolar"]  = float(circ.v10)
-        row["wind_circumpolar"] = float(circ.wind_speed)
-
         # -------------------------
         # Sector means
         # -------------------------
         for code, name in SECTORS.items():
-            sec = (
-                ds_rg
+            row[f"wind_{name}"] = float(
+                wind_rg
                 .where(sector_mask == code)
                 .weighted(weights)
                 .mean(dim=("y", "x"))
             )
 
-            row[f"u10_{name}"]  = float(sec.u10)
-            row[f"v10_{name}"]  = float(sec.v10)
-            row[f"wind_{name}"] = float(sec.wind_speed)
-
         rows.append(row)
 
         ds.close()
-        ds_rg.close()
+        wind_rg.close()
 
 # =====================================================
 # WRITE OUTPUT
@@ -171,4 +160,4 @@ df = pd.DataFrame(rows).sort_values("time")
 out_path = f"{OUT_DIR}/{OUT_FILE}"
 df.to_csv(out_path, index=False)
 
-print(f"\nSaved ERA5 winds to:\n{out_path}")
+print(f"\nSaved ERA5 wind speed to:\n{out_path}")
