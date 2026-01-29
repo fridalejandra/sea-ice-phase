@@ -1,77 +1,89 @@
 #!/usr/bin/env python
-# --------------------------------------------------
-# Reference map: Antarctic sector definitions
-# Poster-safe, abbreviations only
-# --------------------------------------------------
+# ==================================================
+# Antarctic sector reference map
+# - True circular polar disk
+# - Sector masks from cluster
+# - Distinct colors, ~70% opacity
+# - No labels (added manually later)
+# ==================================================
 
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
+import matplotlib.path as mpath
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-# ------------------------
+# --------------------------------------------------
 # Paths (cluster)
-# ------------------------
+# --------------------------------------------------
 SECTOR_MASK_FILE = (
     "/user/geog/falejandraperez/sea-ice-phase/data/"
     "canonical_sectors.nc"
 )
 
-# ------------------------
+# --------------------------------------------------
 # Load data
-# ------------------------
+# --------------------------------------------------
 ds = xr.open_dataset(SECTOR_MASK_FILE)
 
-sector = ds["sector_id"]   # integer mask
+sector = ds["sector"]   # integer sector IDs
 lon    = ds["lon"]
 lat    = ds["lat"]
 
-# ------------------------
+# --------------------------------------------------
 # Sector definitions
-# ------------------------
+# --------------------------------------------------
 sector_ids = [1, 2, 3, 4, 5]
 
-sector_abbr = {
-    1: "ABS",
-    2: "WED",
-    3: "KH",
-    4: "EA",
-    5: "RA",
-}
-
 sector_colors = {
-    1: "#1b9e77",  # ABS
-    2: "#66a61e",  # WED
-    3: "#7570b3",  # KH
-    4: "#e6ab02",  # EA
-    5: "#d95f02",  # RA
+    1: "#1f78b4",  # ABS – blue
+    2: "#33a02c",  # WED – green
+    3: "#6a3d9a",  # KH – purple
+    4: "#ff7f00",  # EA – orange
+    5: "#e31a1c",  # RA – red
 }
 
-# Manually tuned for visual centering (poster)
-label_positions = {
-    1: (-115, -72),  # ABS
-    2: (-35,  -66),  # WED
-    3: (40,   -66),  # KH
-    4: (110,  -72),  # EA
-    5: (165,  -77),  # RA
-}
-
-# ------------------------
-# Figure setup
-# ------------------------
+# --------------------------------------------------
+# Figure / projection
+# --------------------------------------------------
 proj = ccrs.SouthPolarStereo()
 fig = plt.figure(figsize=(8, 8))
 ax = plt.axes(projection=proj)
 
 ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
 
-ax.add_feature(cfeature.LAND, facecolor="0.45", zorder=1)
-ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=2)
+# --------------------------------------------------
+# Force circular boundary (TRUE polar disk)
+# --------------------------------------------------
+theta = np.linspace(0, 2 * np.pi, 300)
+center = np.array([0.5, 0.5])
+radius = 0.5
 
-# ------------------------
-# Plot sector fills
-# ------------------------
+verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+circle = mpath.Path(verts * radius + center)
+
+ax.set_boundary(circle, transform=ax.transAxes)
+
+# --------------------------------------------------
+# Background features
+# --------------------------------------------------
+ax.add_feature(
+    cfeature.LAND,
+    facecolor="0.65",   # light, non-dominant
+    edgecolor="none",
+    zorder=1,
+)
+
+ax.add_feature(
+    cfeature.COASTLINE,
+    linewidth=0.6,
+    zorder=2,
+)
+
+# --------------------------------------------------
+# Plot sector fills (distinct colors, high opacity)
+# --------------------------------------------------
 for sid in sector_ids:
     mask = xr.where(sector == sid, 1, np.nan)
 
@@ -81,50 +93,33 @@ for sid in sector_ids:
         mask,
         transform=ccrs.PlateCarree(),
         color=sector_colors[sid],
-        alpha=0.30,
+        alpha=0.70,          # key choice
         shading="auto",
         zorder=3,
     )
 
-# ------------------------
-# Sector boundaries
-# ------------------------
+# --------------------------------------------------
+# Sector boundaries (quiet, not dominant)
+# --------------------------------------------------
 ax.contour(
     lon,
     lat,
     sector,
     levels=[1.5, 2.5, 3.5, 4.5],
-    colors="0.3",
-    linewidths=0.8,
+    colors="0.25",
+    linewidths=0.7,
     transform=ccrs.PlateCarree(),
     zorder=4,
 )
 
-# ------------------------
-# Abbreviation labels
-# ------------------------
-for sid, (x, y) in label_positions.items():
-    ax.text(
-        x,
-        y,
-        sector_abbr[sid],
-        transform=ccrs.PlateCarree(),
-        fontsize=13,
-        fontweight="bold",
-        ha="center",
-        va="center",
-        color="white",
-        zorder=5,
-    )
-
-# ------------------------
+# --------------------------------------------------
 # Final formatting
-# ------------------------
+# --------------------------------------------------
 ax.axis("off")
 
 plt.tight_layout()
 plt.savefig(
-    "antarctic_sector_reference_map.png",
+    "antarctic_sector_reference_map_round.png",
     dpi=600,
     bbox_inches="tight",
     facecolor="white",
