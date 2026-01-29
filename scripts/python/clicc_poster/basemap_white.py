@@ -23,7 +23,7 @@ SECTOR_MASK_FILE = (
 # ------------------------
 ds = xr.open_dataset(SECTOR_MASK_FILE)
 
-sector = ds["sector"]   # integer mask
+sector = ds["sector_id"]   # integer mask
 lon    = ds["lon"]
 lat    = ds["lat"]
 
