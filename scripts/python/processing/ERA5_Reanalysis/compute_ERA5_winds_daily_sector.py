@@ -22,7 +22,7 @@ from pathlib import Path
 ERA5_BASE = "/user/geog/falejandraperez/sea-ice-phase/data/Reanalysis_ERA5/winds"
 
 SIE_GRID_FILE = (
-    "/user/geog/falejandraperez/sea-ice-phase/data/"
+    "/user/geog/falejandraperez/sea-ice-phase/data/merged/"
     "merged_bootstrap_SH_latest.nc"
 )
 
