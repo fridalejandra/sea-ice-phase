@@ -59,7 +59,7 @@ assert "x" in sie.dims and "y" in sie.dims
 # =====================================================
 # DERIVE lon/lat FOR SIE GRID (REQUIRED BY xesmf)
 # =====================================================
-crs = CRS.from_cf(sie.crs.attrs)
+crs = CRS.from_cf(sie["crs"].attrs)
 
 transformer = Transformer.from_crs(
     crs,
