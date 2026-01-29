@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # =====================================================
-# ERA5 winds → SIE grid → daily sector means
-# SAFE: file-by-file, no broadcasting, no OOM
+# ERA5 winds → SIE (x,y) grid → daily sector means
+# SAFE, CORRECT, CLUSTER-READY
 # =====================================================
 
 import os
@@ -17,12 +17,12 @@ from tqdm import tqdm
 from pathlib import Path
 
 # =====================================================
-# PATHS (EDIT ONLY IF NEEDED)
+# PATHS
 # =====================================================
 ERA5_BASE = "/user/geog/falejandraperez/sea-ice-phase/data/Reanalysis_ERA5/winds"
 
 SIE_GRID_FILE = (
-    "/user/geog/falejandraperez/sea-ice-phase/data/merged/"
+    "/user/geog/falejandraperez/sea-ice-phase/data/"
     "merged_bootstrap_SH_latest.nc"
 )
 
@@ -48,18 +48,18 @@ SECTORS = {
 Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
 # =====================================================
-# LOAD TARGET GRID + SECTOR MASK (ONCE)
+# LOAD SIE GRID + SECTOR MASK (ONCE)
 # =====================================================
 sie = xr.open_dataset(SIE_GRID_FILE)
 sector_mask = xr.open_dataset(SECTOR_MASK_FILE)["sector_id"]
 
-# ensure names are x/y for consistency
-sie = sie.rename({"latitude": "lat", "longitude": "lon"}, errors="ignore")
+# Ensure consistent naming
+# (SIE grid already uses x/y)
+assert "x" in sie.dims and "y" in sie.dims
 
 # =====================================================
 # BUILD REGRIDDER (ONCE)
 # =====================================================
-# We create a *dummy* ERA5 grid definition using one file
 sample_file = sorted(glob.glob(f"{ERA5_BASE}/{START_YEAR}/*.nc"))[0]
 era5_sample = xr.open_dataset(sample_file)
 
@@ -73,7 +73,17 @@ regridder = xe.Regridder(
 era5_sample.close()
 
 # =====================================================
-# MAIN LOOP (FILE-BY-FILE = SAFE)
+# WEIGHTS (PROJECTED GRID)
+# =====================================================
+# Option A (BEST): grid-cell area if available
+# area = xr.open_dataset("grid_cell_area.nc")["area"]
+# weights = area
+
+# Option B (ACCEPTABLE): uniform weights
+weights = xr.ones_like(sector_mask)
+
+# =====================================================
+# MAIN LOOP (FILE BY FILE = OOM SAFE)
 # =====================================================
 rows = []
 
@@ -87,7 +97,7 @@ for year in tqdm(range(START_YEAR, END_YEAR + 1), desc="Years"):
 
         ds = xr.open_dataset(f)
 
-        # rename + time handling
+        # time handling
         ds = ds.rename({"valid_time": "time"})
         time_val = pd.to_datetime(ds.time.values)
 
@@ -97,34 +107,31 @@ for year in tqdm(range(START_YEAR, END_YEAR + 1), desc="Years"):
         # regrid ERA5 → SIE grid
         ds_rg = regridder(ds[["u10", "v10", "wind_speed"]])
 
-        # area weights (SIE grid)
-        weights = np.cos(np.deg2rad(ds_rg.lat))
-
         row = {"time": time_val}
 
-        # -------------------------------
+        # ---------------------------------
         # circumpolar mean
-        # -------------------------------
+        # ---------------------------------
         circ = (
             ds_rg
             .where(sector_mask.notnull())
             .weighted(weights)
-            .mean(dim=("lat", "lon"))
+            .mean(dim=("y", "x"))
         )
 
         row["u10_circumpolar"]  = float(circ.u10)
         row["v10_circumpolar"]  = float(circ.v10)
         row["wind_circumpolar"] = float(circ.wind_speed)
 
-        # -------------------------------
+        # ---------------------------------
         # sector means
-        # -------------------------------
+        # ---------------------------------
         for code, name in SECTORS.items():
             sec = (
                 ds_rg
                 .where(sector_mask == code)
                 .weighted(weights)
-                .mean(dim=("lat", "lon"))
+                .mean(dim=("y", "x"))
             )
 
             row[f"u10_{name}"]  = float(sec.u10)
@@ -133,7 +140,6 @@ for year in tqdm(range(START_YEAR, END_YEAR + 1), desc="Years"):
 
         rows.append(row)
 
-        # explicit cleanup
         ds.close()
         ds_rg.close()
 
