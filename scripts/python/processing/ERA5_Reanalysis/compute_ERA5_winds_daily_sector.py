@@ -56,14 +56,16 @@ sector_mask = xr.open_dataset(SECTOR_MASK_FILE)["sector_id"]
 
 assert "x" in sie.dims and "y" in sie.dims
 
-# =====================================================
-# DERIVE lon/lat FOR SIE GRID (REQUIRED BY xesmf)
-# =====================================================
-crs = CRS.from_cf(sie["crs"].attrs)
+from pyproj import CRS, Transformer
+
+# -----------------------------------------------------
+# Explicit CRS: NSIDC Polar Stereographic South
+# -----------------------------------------------------
+crs = CRS.from_epsg(3412)
 
 transformer = Transformer.from_crs(
     crs,
-    CRS.from_epsg(4326),   # WGS84
+    CRS.from_epsg(4326),  # WGS84 lon/lat
     always_xy=True
 )
 
@@ -74,6 +76,9 @@ sie = sie.assign_coords(
     lon=(("y", "x"), lon),
     lat=(("y", "x"), lat)
 )
+print(float(sie.lat.min()), float(sie.lat.max()))
+print(float(sie.lon.min()), float(sie.lon.max()))
+
 
 # =====================================================
 # BUILD REGRIDDER (ONCE)
