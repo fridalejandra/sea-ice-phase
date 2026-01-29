@@ -1,6 +1,7 @@
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 
 # ============================================================
 # PATHS / VARS
@@ -10,18 +11,12 @@ sic_var  = "N07_ICECON"
 
 outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster/"
 
-# periods
 pre_slice  = slice("1979-01-01", "2016-12-31")
 post_slice = slice("2017-01-01", "2024-12-31")
 
-# masking threshold
-thr_open = 0.15
-
-# plotting
 cmap_main = "magma_r"
 cmap_diff = "RdBu_r"
 
-# seasons
 seasons = {
     "DJF": [12, 1, 2],
     "MAM": [3, 4, 5],
@@ -38,30 +33,36 @@ def drop_feb29(da):
 def ensure_01(sic):
     return sic / 100.0 if float(sic.max()) > 1.5 else sic
 
-# ============================================================
-# LOAD (WITH CHUNKING)
-# ============================================================
-ds = xr.open_dataset(
-    sic_file,
-    chunks={"time": 365}
-)
+def poster_ax(ax):
+    """Poster-style Antarctic panel."""
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_facecolor("0.85")  # grey continent/background
+    ax.set_aspect("equal")
 
+    # circular clip
+    circle = Circle((0.5, 0.5), 0.5, transform=ax.transAxes,
+                    facecolor="none", edgecolor="none")
+    ax.add_patch(circle)
+    for artist in ax.get_children():
+        artist.set_clip_path(circle)
+
+# ============================================================
+# LOAD
+# ============================================================
+ds = xr.open_dataset(sic_file, chunks={"time": 365})
 sic = ensure_01(drop_feb29(ds[sic_var]))
 
 sic_pre  = sic.sel(time=pre_slice)
 sic_post = sic.sel(time=post_slice)
 
-# daily changes — computed ONCE
 dsic_pre  = sic_pre.diff("time")
 dsic_post = sic_post.diff("time")
 
-# ============================================================
-# SEASON MASKS (ONCE)
-# ============================================================
 month = sic["time"].dt.month
-season_mask = {
-    s: month.isin(m) for s, m in seasons.items()
-}
+season_mask = {s: month.isin(m) for s, m in seasons.items()}
 
 # ============================================================
 # LOOP SEASONS
@@ -70,9 +71,6 @@ for sname in seasons:
 
     print(f"Processing {sname}...")
 
-    # --------------------------
-    # SEASONAL SUBSETS
-    # --------------------------
     sp  = sic_pre.where(season_mask[sname], drop=True)
     so  = sic_post.where(season_mask[sname], drop=True)
 
@@ -80,79 +78,66 @@ for sname in seasons:
     dso = dsic_post.where(season_mask[sname], drop=True)
 
     # ======================================================
-    # FIG A — Std(ΔSIC)
+    # FIG A — Std(ΔSIC)  (mask only 0 / NaN)
     # ======================================================
-    std_pre  = dsp.std("time", skipna=True).compute()
-    std_post = dso.std("time", skipna=True).compute()
+    mask_pre  = sp > 0
+    mask_post = so > 0
+
+    std_pre  = dsp.where(mask_pre).std("time", skipna=True).compute()
+    std_post = dso.where(mask_post).std("time", skipna=True).compute()
     std_diff = (std_post - std_pre).compute()
 
     vmax = float(max(std_pre.max(), std_post.max()))
     vmax_diff = float(np.abs(std_diff).max())
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5), constrained_layout=True)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
     im0 = std_pre.plot(ax=axes[0], cmap=cmap_main, vmin=0, vmax=vmax, add_colorbar=False)
-    axes[0].set_title(f"{sname} Std(ΔSIC) Pre")
-    axes[0].set_xlabel(""); axes[0].set_ylabel("")
-
     im1 = std_post.plot(ax=axes[1], cmap=cmap_main, vmin=0, vmax=vmax, add_colorbar=False)
-    axes[1].set_title(f"{sname} Std(ΔSIC) Post")
-    axes[1].set_xlabel(""); axes[1].set_ylabel("")
-
     im2 = std_diff.plot(ax=axes[2], cmap=cmap_diff,
                         vmin=-vmax_diff, vmax=vmax_diff,
                         add_colorbar=False)
-    axes[2].set_title(f"{sname} Post − Pre")
-    axes[2].set_xlabel(""); axes[2].set_ylabel("")
 
-    cbar1 = fig.colorbar(im0, ax=axes[:2], shrink=0.9)
+    for ax in axes:
+        poster_ax(ax)
+
+    cbar1 = fig.colorbar(im0, ax=axes[:2], shrink=0.8)
     cbar1.set_label("Std of daily SIC change")
 
-    cbar2 = fig.colorbar(im2, ax=axes[2], shrink=0.9)
-    cbar2.set_label("Δ Std(ΔSIC)")
+    cbar2 = fig.colorbar(im2, ax=axes[2], shrink=0.8)
+    cbar2.set_label("Post − Pre")
 
-    plt.savefig(f"{outdir}/std_dSIC_{sname}_pre_post_diff.png", dpi=300)
+    plt.savefig(f"{outdir}/std_dSIC_{sname}_poster.png", dpi=400, bbox_inches="tight")
     plt.close()
 
     # ======================================================
-    # FIG B — Std(SIC), masked BEFORE std
+    # FIG B — Std(SIC)  (NO 15% threshold, ever)
     # ======================================================
-    mask_pre  = sp.mean("time", skipna=True) > thr_open
-    mask_post = so.mean("time", skipna=True) > thr_open
+    std_pre  = sp.where(mask_pre).std("time", skipna=True).compute()
+    std_post = so.where(mask_post).std("time", skipna=True).compute()
+    std_diff = (std_post - std_pre).compute()
 
-    sp_m = sp.where(mask_pre)
-    so_m = so.where(mask_post)
+    vmax = float(max(std_pre.max(), std_post.max()))
+    vmax_diff = float(np.abs(std_diff).max())
 
-    std_pre_m  = sp_m.std("time", skipna=True).compute()
-    std_post_m = so_m.std("time", skipna=True).compute()
-    std_diff_m = (std_post_m - std_pre_m).compute()
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-    vmax = float(max(std_pre_m.max(), std_post_m.max()))
-    vmax_diff = float(np.abs(std_diff_m).max())
+    im0 = std_pre.plot(ax=axes[0], cmap=cmap_main, vmin=0, vmax=vmax, add_colorbar=False)
+    im1 = std_post.plot(ax=axes[1], cmap=cmap_main, vmin=0, vmax=vmax, add_colorbar=False)
+    im2 = std_diff.plot(ax=axes[2], cmap=cmap_diff,
+                        vmin=-vmax_diff, vmax=vmax_diff,
+                        add_colorbar=False)
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5), constrained_layout=True)
+    for ax in axes:
+        poster_ax(ax)
 
-    im0 = std_pre_m.plot(ax=axes[0], cmap=cmap_main, vmin=0, vmax=vmax, add_colorbar=False)
-    axes[0].set_title(f"{sname} Std(SIC) Pre (SIC>{thr_open})")
-    axes[0].set_xlabel(""); axes[0].set_ylabel("")
+    cbar1 = fig.colorbar(im0, ax=axes[:2], shrink=0.8)
+    cbar1.set_label("Std of SIC")
 
-    im1 = std_post_m.plot(ax=axes[1], cmap=cmap_main, vmin=0, vmax=vmax, add_colorbar=False)
-    axes[1].set_title(f"{sname} Std(SIC) Post (SIC>{thr_open})")
-    axes[1].set_xlabel(""); axes[1].set_ylabel("")
+    cbar2 = fig.colorbar(im2, ax=axes[2], shrink=0.8)
+    cbar2.set_label("Post − Pre")
 
-    im2 = std_diff_m.plot(ax=axes[2], cmap=cmap_diff,
-                          vmin=-vmax_diff, vmax=vmax_diff,
-                          add_colorbar=False)
-    axes[2].set_title(f"{sname} Post − Pre")
-    axes[2].set_xlabel(""); axes[2].set_ylabel("")
-
-    cbar1 = fig.colorbar(im0, ax=axes[:2], shrink=0.9)
-    cbar1.set_label("Std of SIC (masked)")
-
-    cbar2 = fig.colorbar(im2, ax=axes[2], shrink=0.9)
-    cbar2.set_label("Δ Std(SIC)")
-
-    plt.savefig(f"{outdir}/std_SIC_mask015_{sname}_pre_post_diff.png", dpi=300)
+    plt.savefig(f"{outdir}/std_SIC_{sname}_poster.png", dpi=400, bbox_inches="tight")
     plt.close()
 
 print("Done.")
