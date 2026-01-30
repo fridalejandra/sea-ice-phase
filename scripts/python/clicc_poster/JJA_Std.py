@@ -25,7 +25,7 @@ pre_slice  = slice("1979-01-01", "2016-12-31")
 post_slice = slice("2017-01-01", "2024-12-31")
 
 # choose variability definition
-VAR_MODE = "sic"   # "sic" or "dsic"
+VAR_MODE = "dsic"   # "sic" or "dsic"
 
 cmap_main = "magma_r"
 cmap_diff = "RdBu_r"
