@@ -80,9 +80,9 @@ def draw_continent(ax, land_mask, color="0.25"):
     land.plot(
         ax=ax,
         cmap=ListedColormap([color]),
-        add_colorbar=False,
-        interpolation="nearest"
+        add_colorbar=False
     )
+
 
 # ============================================================
 # LOAD
