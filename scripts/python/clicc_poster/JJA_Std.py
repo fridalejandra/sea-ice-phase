@@ -75,12 +75,30 @@ def style_poster_panel(ax):
 
     ax.set_aspect("equal")
 
-def draw_continent(ax, land_mask, color="0.25"):
-    land = xr.where(land_mask, 1.0, np.nan)
-    land.plot(
+def draw_continent(
+    ax,
+    land_mask,
+    fill_color="0.9",      # light grey (use "1.0" for white)
+    edge_color="0.1",      # dark outline
+    lw=2.5                 # thick poster-safe outline
+):
+    # ---- Fill land ----
+    land_fill = xr.where(land_mask, 1.0, np.nan)
+    land_fill.plot(
         ax=ax,
-        cmap=ListedColormap([color]),
-        add_colorbar=False
+        cmap=ListedColormap([fill_color]),
+        add_colorbar=False,
+        zorder=5
+    )
+
+    # ---- Draw coastline (explicit boundary) ----
+    land_mask.plot.contour(
+        ax=ax,
+        levels=[0.5],
+        colors=edge_color,
+        linewidths=lw,
+        add_colorbar=False,
+        zorder=6
     )
 
 
