@@ -89,9 +89,9 @@ def style_poster_panel(ax):
 def draw_continent(
     ax,
     land_mask,
-    fill_color="0.9",   # light grey (poster-safe)
-    edge_color="0.2",   # dark outline
-    lw=2.5
+    fill_color="0.65",   # light grey (poster-safe)
+    edge_color="0.15",   # dark outline
+    lw=3.0
 ):
     # ---- Fill land ----
     land_fill = xr.where(land_mask, 1.0, np.nan)
