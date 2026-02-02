@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 # ============================================================
-# Seasonal pre vs post maps (POSTER STYLE)
-# Bootstrap SIC — FLAG-SAFE IMPLEMENTATION
+# JJA Monthly SIC Variability Maps (POSTER STYLE)
 #
-# - Correct handling of 1100 (missing) and 1200 (land)
-# - Land rendered explicitly with fill + outline
-# - Ocean-only statistics
-# - Circular polar panels
+# - Bootstrap SIC (flag-safe)
+# - June / July / August side-by-side
+# - Land handled correctly (packed flags)
+# - Optional significance contours for Post − Pre
 # ============================================================
 
 import xarray as xr
@@ -26,17 +25,19 @@ outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster"
 pre_slice  = slice("1979-01-01", "2016-12-31")
 post_slice = slice("2017-01-01", "2024-12-31")
 
-VAR_MODE = "sic"   # "sic" or "dsic"
-
-cmap_main = "magma_r"
-cmap_diff = "RdBu_r"
-
-seasons = {
-    "DJF": [12, 1, 2],
-    "MAM": [3, 4, 5],
-    "JJA": [6, 7, 8],
-    "SON": [9, 10, 11],
+MONTHS = {
+    "June": 6,
+    "July": 7,
+    "August": 8,
 }
+
+# variability mode
+VAR_MODE = "sic"    # "sic" or "dsic"
+
+# plotting
+cmap_main = "magma_r"
+fill_land = "0.65"
+edge_land = "0.15"
 
 # ============================================================
 # HELPERS
@@ -47,19 +48,15 @@ def drop_feb29(da):
 def ensure_01(sic):
     return sic / 100.0 if float(sic.max()) > 1.5 else sic
 
-def style_poster_panel(ax):
+def style_panel(ax):
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_xlabel("")
     ax.set_ylabel("")
     ax.set_facecolor("white")
 
-    circle = Circle(
-        (0.5, 0.5), 0.5,
-        transform=ax.transAxes,
-        facecolor="none",
-        edgecolor="none"
-    )
+    circle = Circle((0.5, 0.5), 0.5, transform=ax.transAxes,
+                    facecolor="none", edgecolor="none")
     ax.add_patch(circle)
 
     for artist in ax.get_children():
@@ -70,17 +67,14 @@ def style_poster_panel(ax):
 
     ax.set_aspect("equal")
 
-def draw_continent(
-    ax,
-    land_mask,
-    fill_color="0.65",   # mid-grey (poster-safe)
-    edge_color="0.15",
-    lw=3.0
-):
-    land_fill = xr.where(land_mask, 1.0, np.nan)
-    land_fill.plot(
+def draw_continent(ax, land_mask):
+    if land_mask.sum() == 0:
+        return
+
+    land = xr.where(land_mask, 1.0, np.nan)
+    land.plot(
         ax=ax,
-        cmap=ListedColormap([fill_color]),
+        cmap=ListedColormap([fill_land]),
         add_colorbar=False,
         zorder=10
     )
@@ -88,138 +82,118 @@ def draw_continent(
     land_mask.plot.contour(
         ax=ax,
         levels=[0.5],
-        colors=edge_color,
-        linewidths=lw,
+        colors=edge_land,
+        linewidths=3.0,
         add_colorbar=False,
         zorder=11
     )
 
 # ============================================================
-# LOAD & FLAG HANDLING  (THIS IS THE CRITICAL PART)
+# LOAD & FLAG-SAFE PREPROCESSING
 # ============================================================
 ds = xr.open_dataset(sic_file, chunks={"time": 365})
-
 sic_raw = ds[sic_var]
 
-# ---- Bootstrap flags ----
-LAND_FLAG    = 1200
-MISSING_FLAG = 1100
+# Bootstrap packed values:
+#   valid SIC ∈ [0, 1]
+#   land / missing > 1
+land_mask  = sic_raw > 1.0
+ocean_mask = sic_raw <= 1.0
 
-# ---- Masks ----
-land_mask    = sic_raw == LAND_FLAG
-missing_mask = sic_raw == MISSING_FLAG
-ocean_mask   = ~(land_mask | missing_mask)
-
-# ---- Convert SIC to usable numeric field ----
-sic = sic_raw.where(ocean_mask)     # drop land + missing
+sic = sic_raw.where(ocean_mask)
 sic = ensure_01(sic)
 sic = drop_feb29(sic)
 
-# ---- sanity check (keep once) ----
 print("Sanity check:")
 print("  land pixels:", int(land_mask.sum()))
-print("  ocean pixels:", int(ocean_mask.sum()))
 print("  SIC min/max:", float(sic.min()), float(sic.max()))
 
 # ============================================================
-# COLORMAPS
+# COLORMAP
 # ============================================================
-cm_main = plt.get_cmap(cmap_main).copy()
-cm_main.set_bad("white")
-
-cm_diff = plt.get_cmap(cmap_diff).copy()
-cm_diff.set_bad("white")
+cm = plt.get_cmap(cmap_main).copy()
+cm.set_bad("white")
 
 # ============================================================
-# LOOP SEASONS
+# COMPUTE MONTHLY FIELDS
 # ============================================================
-for sname, months in seasons.items():
+std_maps = {}
+sig_masks = {}
 
-    print(f"Processing {sname}...")
+for name, month in MONTHS.items():
 
-    is_season = sic["time"].dt.month.isin(months)
+    print(f"Processing {name}...")
 
-    sic_pre  = sic.sel(time=pre_slice).where(is_season, drop=True)
-    sic_post = sic.sel(time=post_slice).where(is_season, drop=True)
+    is_month = sic["time"].dt.month == month
 
-    # --------------------------
-    # FIELD DEFINITION
-    # --------------------------
+    sic_pre  = sic.sel(time=pre_slice).where(is_month, drop=True)
+    sic_post = sic.sel(time=post_slice).where(is_month, drop=True)
+
     if VAR_MODE == "dsic":
         fld_pre  = sic_pre.diff("time")
         fld_post = sic_post.diff("time")
-
-        fld_pre  = fld_pre.where(ocean_mask)
-        fld_post = fld_post.where(ocean_mask)
-
-        label_main = "Std of daily SIC change"
-        mode_tag = "std_dSIC"
-
     else:
-        fld_pre  = sic_pre.where(ocean_mask)
-        fld_post = sic_post.where(ocean_mask)
+        fld_pre  = sic_pre
+        fld_post = sic_post
 
-        label_main = "Std of SIC"
-        mode_tag = "std_SIC"
+    fld_pre  = fld_pre.where(ocean_mask)
+    fld_post = fld_post.where(ocean_mask)
 
-    std_pre  = fld_pre.std("time", skipna=True).compute()
-    std_post = fld_post.std("time", skipna=True).compute()
-    std_diff = (std_post - std_pre).compute()
+    std_pre  = fld_pre.std("time", skipna=True)
+    std_post = fld_post.std("time", skipna=True)
 
-    vmax      = float(max(std_pre.max(), std_post.max()))
-    vmax_diff = float(np.abs(std_diff).max())
+    diff = std_post - std_pre
 
-    # ======================================================
-    # PLOT
-    # ======================================================
-    fig, axes = plt.subplots(
-        1, 3,
-        figsize=(14, 5),
-        constrained_layout=True
-    )
+    # significance mask: top 10% absolute change
+    thresh = np.nanpercentile(np.abs(diff), 90)
+    sig = np.abs(diff) >= thresh
 
-    im0 = std_pre.plot(
-        ax=axes[0],
-        cmap=cm_main,
+    std_maps[name] = std_post
+    sig_masks[name] = sig
+
+# shared color scale
+vmax = float(max(m.max() for m in std_maps.values()))
+
+# ============================================================
+# PLOT: JUNE / JULY / AUGUST
+# ============================================================
+fig, axes = plt.subplots(
+    1, 3,
+    figsize=(14, 5),
+    constrained_layout=True
+)
+
+for ax, (name, std) in zip(axes, std_maps.items()):
+
+    im = std.plot(
+        ax=ax,
+        cmap=cm,
         vmin=0,
         vmax=vmax,
         add_colorbar=False
     )
 
-    im1 = std_post.plot(
-        ax=axes[1],
-        cmap=cm_main,
-        vmin=0,
-        vmax=vmax,
-        add_colorbar=False
+    # significance contours
+    sig_masks[name].plot.contour(
+        ax=ax,
+        levels=[0.5],
+        colors="black",
+        linewidths=1.2,
+        add_colorbar=False,
+        zorder=9
     )
 
-    im2 = std_diff.plot(
-        ax=axes[2],
-        cmap=cm_diff,
-        vmin=-vmax_diff,
-        vmax=vmax_diff,
-        add_colorbar=False
-    )
+    draw_continent(ax, land_mask)
+    style_panel(ax)
+    ax.set_title(name, fontsize=18, fontweight="bold")
 
-    for ax in axes:
-        draw_continent(ax, land_mask)
-        style_poster_panel(ax)
+# colorbar
+cbar = fig.colorbar(im, ax=axes, shrink=0.9, pad=0.02)
+cbar.set_label("Std of SIC", fontsize=14)
 
-    axes[0].set_title(f"{sname} Pre",  fontsize=18, fontweight="bold")
-    axes[1].set_title(f"{sname} Post", fontsize=18, fontweight="bold")
-    axes[2].set_title(f"{sname} Post − Pre", fontsize=18, fontweight="bold")
+out = f"{outdir}/std_SIC_JJA_monthly_with_significance.png"
+plt.savefig(out, dpi=450, bbox_inches="tight")
+plt.close()
 
-    cbar1 = fig.colorbar(im0, ax=axes[:2], shrink=0.9, pad=0.02)
-    cbar1.set_label(label_main, fontsize=14)
-
-    cbar2 = fig.colorbar(im2, ax=axes[2], shrink=0.9, pad=0.02)
-    cbar2.set_label("Post − Pre", fontsize=14)
-
-    out = f"{outdir}/{mode_tag}_{sname}_pre_post_diff_poster.png"
-    plt.savefig(out, dpi=450, bbox_inches="tight")
-    plt.close()
-
-    print(f"Saved: {out}")
-
+print(f"Saved: {out}")
 print("Done.")
