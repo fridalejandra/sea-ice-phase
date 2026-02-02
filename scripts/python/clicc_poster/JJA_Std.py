@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 # ============================================================
 # Seasonal pre vs post maps (POSTER STYLE)
-# - light grey continent with thick outline
-# - white missing ocean
-# - round panels, no ticks
-# - Std(SIC) or Std(ΔSIC)
+# Bootstrap SIC — FLAG-SAFE IMPLEMENTATION
+#
+# - Correct handling of 1100 (missing) and 1200 (land)
+# - Land rendered explicitly with fill + outline
+# - Ocean-only statistics
+# - Circular polar panels
 # ============================================================
 
 import xarray as xr
@@ -24,7 +26,6 @@ outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster"
 pre_slice  = slice("1979-01-01", "2016-12-31")
 post_slice = slice("2017-01-01", "2024-12-31")
 
-# choose variability definition
 VAR_MODE = "sic"   # "sic" or "dsic"
 
 cmap_main = "magma_r"
@@ -45,23 +46,6 @@ def drop_feb29(da):
 
 def ensure_01(sic):
     return sic / 100.0 if float(sic.max()) > 1.5 else sic
-
-def get_land_mask(ds, sic_da):
-    """
-    Robust land mask:
-    1) Prefer explicit landmask variable
-    2) Fallback to permanent NaNs in SIC
-    """
-    candidates = [
-        "land", "LAND", "landmask", "LANDMASK",
-        "N07_LANDMASK", "mask", "MASK"
-    ]
-    for v in candidates:
-        if v in ds.variables:
-            return ds[v] > 0.5
-
-    # Fallback: land = always NaN
-    return sic_da.isel(time=0).isnull()
 
 def style_poster_panel(ax):
     ax.set_xticks([])
@@ -89,11 +73,10 @@ def style_poster_panel(ax):
 def draw_continent(
     ax,
     land_mask,
-    fill_color="0.65",   # light grey (poster-safe)
-    edge_color="0.15",   # dark outline
+    fill_color="0.65",   # mid-grey (poster-safe)
+    edge_color="0.15",
     lw=3.0
 ):
-    # ---- Fill land ----
     land_fill = xr.where(land_mask, 1.0, np.nan)
     land_fill.plot(
         ax=ax,
@@ -102,7 +85,6 @@ def draw_continent(
         zorder=10
     )
 
-    # ---- Coastline (mask boundary) ----
     land_mask.plot.contour(
         ax=ax,
         levels=[0.5],
@@ -113,17 +95,35 @@ def draw_continent(
     )
 
 # ============================================================
-# LOAD DATA
+# LOAD & FLAG HANDLING  (THIS IS THE CRITICAL PART)
 # ============================================================
 ds = xr.open_dataset(sic_file, chunks={"time": 365})
 
-sic = ensure_01(drop_feb29(ds[sic_var]))
-land_mask = get_land_mask(ds, sic)
+sic_raw = ds[sic_var]
 
-# Sanity check (keep once)
-print("Land mask unique values:", np.unique(land_mask))
+# ---- Bootstrap flags ----
+LAND_FLAG    = 1200
+MISSING_FLAG = 1100
 
-# Colormaps with white NaNs
+# ---- Masks ----
+land_mask    = sic_raw == LAND_FLAG
+missing_mask = sic_raw == MISSING_FLAG
+ocean_mask   = ~(land_mask | missing_mask)
+
+# ---- Convert SIC to usable numeric field ----
+sic = sic_raw.where(ocean_mask)     # drop land + missing
+sic = ensure_01(sic)
+sic = drop_feb29(sic)
+
+# ---- sanity check (keep once) ----
+print("Sanity check:")
+print("  land pixels:", int(land_mask.sum()))
+print("  ocean pixels:", int(ocean_mask.sum()))
+print("  SIC min/max:", float(sic.min()), float(sic.max()))
+
+# ============================================================
+# COLORMAPS
+# ============================================================
 cm_main = plt.get_cmap(cmap_main).copy()
 cm_main.set_bad("white")
 
@@ -141,12 +141,6 @@ for sname, months in seasons.items():
 
     sic_pre  = sic.sel(time=pre_slice).where(is_season, drop=True)
     sic_post = sic.sel(time=post_slice).where(is_season, drop=True)
-
-    # --------------------------------------------------------
-    # CRITICAL FIX:
-    # Mask LAND ONLY — keep zero SIC ocean values
-    # --------------------------------------------------------
-    ocean_mask = ~land_mask
 
     # --------------------------
     # FIELD DEFINITION
@@ -209,13 +203,7 @@ for sname, months in seasons.items():
     )
 
     for ax in axes:
-        draw_continent(
-            ax,
-            land_mask,
-            fill_color="0.9",
-            edge_color="0.2",
-            lw=2.5
-        )
+        draw_continent(ax, land_mask)
         style_poster_panel(ax)
 
     axes[0].set_title(f"{sname} Pre",  fontsize=18, fontweight="bold")
