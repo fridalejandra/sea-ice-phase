@@ -78,9 +78,9 @@ def style_poster_panel(ax):
 def draw_continent(
     ax,
     land_mask,
-    fill_color="0.9",      # light grey (use "1.0" for white)
-    edge_color="0.1",      # dark outline
-    lw=2.5                 # thick poster-safe outline
+    fill_color="0.9",
+    edge_color="0.2",
+    lw=2.5
 ):
     # ---- Fill land ----
     land_fill = xr.where(land_mask, 1.0, np.nan)
@@ -169,7 +169,13 @@ for sname, months in seasons.items():
                         add_colorbar=False)
 
     for ax in axes:
-        draw_continent(ax, land_mask, color="0.25")
+        draw_continent(
+            ax,
+            land_mask,
+            fill_color="0.9",
+            edge_color="0.2",
+            lw=2.5
+        )
         style_poster_panel(ax)
 
     axes[0].set_title(f"{sname} Pre",  fontsize=18, fontweight="bold")
