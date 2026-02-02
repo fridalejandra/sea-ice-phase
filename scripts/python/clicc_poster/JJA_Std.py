@@ -19,13 +19,13 @@ from matplotlib.colors import ListedColormap
 sic_file = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc"
 sic_var  = "N07_ICECON"
 
-outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster/"
+outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster"
 
 pre_slice  = slice("1979-01-01", "2016-12-31")
 post_slice = slice("2017-01-01", "2024-12-31")
 
 # choose variability definition
-VAR_MODE = "dsic"   # "sic" or "dsic"
+VAR_MODE = "sic"   # "sic" or "dsic"
 
 cmap_main = "magma_r"
 cmap_diff = "RdBu_r"
