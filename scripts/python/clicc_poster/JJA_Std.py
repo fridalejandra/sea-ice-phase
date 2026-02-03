@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # ============================================================
-# JJA Monthly SIC Variability (POSTER SAFE)
+# JJA Monthly SIC Variability (FINAL POSTER VERSION)
 #
 # - Bootstrap SIC
 # - June / July / August panels
-# - NO xarray plotting for land
-# - NO contours
-# - Explicit imshow everywhere
+# - Zero values clipped
+# - Continent drawn with Cartopy (vector land)
+# - Matplotlib imshow only for data (robust)
 # ============================================================
 
 import xarray as xr
@@ -14,6 +14,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.colors import ListedColormap
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 
 # ============================================================
 # PATHS / SETTINGS
@@ -30,6 +33,7 @@ MONTHS = {
 }
 
 cmap_main = "magma_r"
+ZERO_CLIP = 1e-3   # threshold to remove background noise
 
 # ============================================================
 # HELPERS
@@ -41,12 +45,10 @@ def ensure_01(sic):
     return sic / 100.0 if float(sic.max()) > 1.5 else sic
 
 def style_panel(ax):
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-    ax.set_facecolor("white")
+    ax.axis("off")
+    ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
 
+    # circular clip
     circle = Circle(
         (0.5, 0.5), 0.5,
         transform=ax.transAxes,
@@ -61,38 +63,6 @@ def style_panel(ax):
         except Exception:
             pass
 
-    ax.set_aspect("equal")
-
-def draw_continent(ax, land_mask):
-    """
-    Draw land with pure matplotlib to avoid xarray histogram bugs.
-    """
-    # ensure 2D
-    if land_mask.ndim == 3:
-        lm = land_mask.isel(time=0).values
-    else:
-        lm = land_mask.values
-
-    if not np.any(lm):
-        return
-
-    # land fill
-    ax.imshow(
-        lm.astype(float),
-        origin="lower",
-        cmap=ListedColormap(["0.65"]),
-        zorder=10
-    )
-
-    # coastline
-    ax.contour(
-        lm.astype(float),
-        levels=[0.5],
-        colors="0.15",
-        linewidths=3.0,
-        zorder=11
-    )
-
 # ============================================================
 # LOAD & PREPROCESS (FLAG-SAFE)
 # ============================================================
@@ -100,7 +70,7 @@ ds = xr.open_dataset(sic_file)
 
 sic_raw = ds[sic_var]
 
-# Land = pixels that are NaN for all times
+# Land = permanently missing pixels
 land_mask = sic_raw.isnull().all("time")
 
 # Ocean = ever valid
@@ -132,6 +102,10 @@ for name, month in MONTHS.items():
     sic_m = sic.where(sel, drop=True)
 
     std = sic_m.std("time", skipna=True)
+
+    # clip near-zero background
+    std = std.where(std > ZERO_CLIP)
+
     std_maps[name] = std
 
 # shared color scale
@@ -140,23 +114,36 @@ vmax = float(max(m.max() for m in std_maps.values()))
 # ============================================================
 # PLOT
 # ============================================================
+proj = ccrs.SouthPolarStereo()
+
 fig, axes = plt.subplots(
     1, 3,
     figsize=(14, 5),
-    constrained_layout=True
+    constrained_layout=True,
+    subplot_kw=dict(projection=proj)
 )
 
 for ax, (name, std) in zip(axes, std_maps.items()):
 
-    im = std.plot.imshow(
-        ax=ax,
+    im = ax.imshow(
+        std.values,
+        origin="lower",
         cmap=cm,
         vmin=0,
         vmax=vmax,
-        add_colorbar=False
+        transform=proj,
+        zorder=1
     )
 
-    draw_continent(ax, land_mask)
+    # draw continent (vector)
+    ax.add_feature(
+        cfeature.LAND,
+        facecolor="0.65",
+        edgecolor="0.15",
+        linewidth=2.5,
+        zorder=10
+    )
+
     style_panel(ax)
     ax.set_title(name, fontsize=18, fontweight="bold")
 
@@ -164,7 +151,7 @@ for ax, (name, std) in zip(axes, std_maps.items()):
 cbar = fig.colorbar(im, ax=axes, shrink=0.9, pad=0.02)
 cbar.set_label("Std of SIC", fontsize=14)
 
-out = f"{outdir}/std_SIC_JJA_monthly_poster.png"
+out = f"{outdir}/std_SIC_JJA_monthly_cartopy_poster.png"
 plt.savefig(out, dpi=450, bbox_inches="tight")
 plt.close()
 
