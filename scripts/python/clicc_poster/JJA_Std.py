@@ -131,7 +131,7 @@ for ax, (name, std) in zip(axes, std_maps.items()):
 
     im = ax.imshow(
         std.values,
-        origin="lower",
+        origin="upper",
         extent=extent,      # <<< CRITICAL FIX
         cmap=cm,
         vmin=0,
