@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # ============================================================
-# JJA Monthly SIC Variability (FINAL POSTER VERSION)
+# JJA Monthly SIC Variability (FINAL, FIXED)
 #
 # - Bootstrap SIC
 # - June / July / August panels
-# - Zero values clipped
-# - Continent drawn with Cartopy (vector land)
-# - Matplotlib imshow only for data (robust)
+# - Near-zero values clipped
+# - Raster plotted in data coordinates (extent)
+# - Continent drawn with Cartopy (vector)
 # ============================================================
 
 import xarray as xr
@@ -33,7 +33,7 @@ MONTHS = {
 }
 
 cmap_main = "magma_r"
-ZERO_CLIP = 1e-3   # threshold to remove background noise
+ZERO_CLIP = 1e-3  # removes numerical background
 
 # ============================================================
 # HELPERS
@@ -48,7 +48,6 @@ def style_panel(ax):
     ax.axis("off")
     ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
 
-    # circular clip
     circle = Circle(
         (0.5, 0.5), 0.5,
         transform=ax.transAxes,
@@ -79,6 +78,11 @@ ocean_mask = ~land_mask
 sic = sic_raw.where(ocean_mask)
 sic = ensure_01(sic)
 sic = drop_feb29(sic)
+
+# Extract grid coordinates for imshow extent
+x = ds["x"].values
+y = ds["y"].values
+extent = [x.min(), x.max(), y.min(), y.max()]
 
 print("Sanity check:")
 print("  land pixels:", int(land_mask.sum()))
@@ -128,14 +132,14 @@ for ax, (name, std) in zip(axes, std_maps.items()):
     im = ax.imshow(
         std.values,
         origin="lower",
+        extent=extent,      # <<< CRITICAL FIX
         cmap=cm,
         vmin=0,
         vmax=vmax,
-        transform=proj,
         zorder=1
     )
 
-    # draw continent (vector)
+    # Draw Antarctic continent (vector, clean)
     ax.add_feature(
         cfeature.LAND,
         facecolor="0.65",
@@ -147,7 +151,7 @@ for ax, (name, std) in zip(axes, std_maps.items()):
     style_panel(ax)
     ax.set_title(name, fontsize=18, fontweight="bold")
 
-# colorbar
+# Colorbar
 cbar = fig.colorbar(im, ax=axes, shrink=0.9, pad=0.02)
 cbar.set_label("Std of SIC", fontsize=14)
 
