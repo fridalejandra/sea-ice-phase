@@ -165,7 +165,8 @@ fig, axes = plt.subplots(
 
 for ax, (name, std) in zip(axes, std_maps.items()):
 
-    im = std.plot(
+    # --- main field ---
+    im = std.plot.imshow(
         ax=ax,
         cmap=cm,
         vmin=0,
@@ -173,15 +174,17 @@ for ax, (name, std) in zip(axes, std_maps.items()):
         add_colorbar=False
     )
 
-    # significance contours
-    sig_masks[name].plot.contour(
-        ax=ax,
-        levels=[0.5],
-        colors="black",
-        linewidths=1.2,
-        add_colorbar=False,
-        zorder=9
-    )
+    # --- significance contours (safe) ---
+    sig = sig_masks[name]
+    if np.any(sig):
+        sig.plot.contour(
+            ax=ax,
+            levels=[0.5],
+            colors="black",
+            linewidths=1.2,
+            add_colorbar=False,
+            zorder=9
+        )
 
     draw_continent(ax, land_mask)
     style_panel(ax)
