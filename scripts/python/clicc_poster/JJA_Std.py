@@ -27,9 +27,9 @@ sic_var  = "N07_ICECON"
 outdir = "/user/geog/falejandraperez/sea-ice-phase/results/figures/clic_poster"
 
 MONTHS = {
-    "March": 3,
-    "April": 4,
-    "May": 5,
+    "September": 9,
+    "October": 10,
+    "November": 11,
 }
 
 cmap_main = "magma_r"
@@ -155,7 +155,7 @@ for ax, (name, std) in zip(axes, std_maps.items()):
 cbar = fig.colorbar(im, ax=axes, shrink=0.9, pad=0.02)
 cbar.set_label("Std of SIC", fontsize=14)
 
-out = f"{outdir}/std_SIC_MAM_monthly_cartopy_poster.png"
+out = f"{outdir}/std_SIC_SON_monthly_cartopy_poster.png"
 plt.savefig(out, dpi=450, bbox_inches="tight")
 plt.close()
 
