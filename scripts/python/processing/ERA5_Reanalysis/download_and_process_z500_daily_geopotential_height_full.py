@@ -8,6 +8,15 @@ from pathlib import Path
 import cdsapi
 import xarray as xr
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--start-year", type=int, required=True)
+parser.add_argument("--end-year", type=int, required=True)
+args = parser.parse_args()
+
+YEARS = range(args.start_year, args.end_year + 1)
+
 # =========================
 # User settings
 # =========================
@@ -15,7 +24,7 @@ BASE = Path("/user/geog/falejandraperez/sea-ice-phase/data/Reanalysis_ERA5/z500_
 RAW_DIR = BASE / "raw_zip"
 FINAL_DIR = BASE / "daily_nc"
 
-YEARS = range(1979, 2024)      # 1979-2023 inclusive
+YEARS = range(2008, 2018)      # 1979-2023 inclusive
 MONTHS = range(1, 13)
 
 AREA = [-40, -180, -90, 180]   # North, West, South, East
