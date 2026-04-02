@@ -4,6 +4,8 @@
 
 # Ignore the entire data folder (big raw files)
 data/
+!scripts/R/chapter3/data/
+!scripts/R/chapter3/data/*
 
 # Figures of all types, anywhere
 *.png
