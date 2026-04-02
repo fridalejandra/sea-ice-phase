@@ -512,6 +512,84 @@ fig.suptitle("What Varies More - Timing or Magnitude?",
 fig.tight_layout()
 save(fig, "8_phase_vs_amplitude_variability.png")
 
+
+# =============================================================================
+# FIG BRIDGE — Phase anomaly as advance/retreat language
+# Himmich-style: 6-year running mean, orange/blue dots, std dev band
+# One panel per sector, two rows (min_doy_anom = retreat, max_doy_anom = advance)
+# =============================================================================
+
+print("Bridge fig: phase anomaly as retreat/advance")
+
+fig, axes = plt.subplots(2, 5, figsize=(18, 7), sharey="row", sharex=True)
+
+row_vars   = ["min_doy_anom", "max_doy_anom"]
+row_titles = ["Retreat timing anomaly\n(negative = earlier retreat)",
+              "Advance timing anomaly\n(positive = later advance)"]
+
+for row, (var, row_title) in enumerate(zip(row_vars, row_titles)):
+    for col, sec in enumerate(SECTORS):
+        ax = axes[row, col]
+        sub = annual[annual["sector"] == sec].sort_values("Year")
+        yrs = sub["Year"].values
+        vals = sub[var].values
+
+        # Raw annual anomaly (grey line)
+        ax.plot(yrs, vals, color="grey", lw=0.8, alpha=0.5, zorder=1)
+
+        # 6-year running mean
+        roll = pd.Series(vals, index=yrs).rolling(6, center=True, min_periods=4)
+        rmean = roll.mean()
+        rstd  = roll.std()
+
+        # Std dev band
+        ax.fill_between(yrs, rmean - rstd, rmean + rstd,
+                        color="grey", alpha=0.15, zorder=2)
+
+        # Orange/blue dots on running mean (Himmich style)
+        for y, m in zip(yrs, rmean):
+            if pd.isna(m):
+                continue
+            color = "#E8A020" if m > 0 else "#3A7DC9"
+            ax.scatter(y, m, color=color, s=18, zorder=4)
+
+        # Running mean line
+        ax.plot(yrs, rmean, color="black", lw=1.2, zorder=3)
+
+        # Zero line
+        ax.axhline(0, color="grey", lw=0.8, ls="--", zorder=1)
+
+        # 2016 shading
+        shade2016(ax)
+
+        # Titles top row only
+        if row == 0:
+            ax.set_title(SECTOR_LABELS[sec], fontweight="bold", fontsize=11)
+
+        # Y label leftmost only
+        if col == 0:
+            ax.set_ylabel("Anomaly (days)", fontsize=9)
+
+        # X label bottom row only
+        if row == 1:
+            ax.set_xlabel("Year", fontsize=9)
+            ax.tick_params(axis="x", rotation=30)
+
+# Row annotations
+for row, row_title in enumerate(row_titles):
+    axes[row, -1].annotate(
+        row_title, xy=(1.02, 0.5), xycoords="axes fraction",
+        rotation=270, va="center", ha="left", fontsize=9
+    )
+
+fig.suptitle(
+    "Earlier Retreat, Later Advance?\n"
+    "APAC Phase Anomalies Capture the Known Post-2016 Signal",
+    fontsize=13, fontweight="bold", y=1.02
+)
+fig.tight_layout()
+save(fig, "bridge_phase_as_retreat_advance.png")
+
 # =============================================================================
 # DONE
 # =============================================================================
