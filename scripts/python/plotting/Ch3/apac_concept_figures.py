@@ -1,7 +1,7 @@
 """
 apac_concept_figures.py
 Generates 4 PNG figures illustrating APAC phase vs amplitude decomposition.
-Clean white style, Nimbus Sans font.
+Clean white style, Nimbus Sans font. No annotations — added in Keynote.
 """
 
 import numpy as np
@@ -36,10 +36,10 @@ plt.rcParams.update({
     "savefig.facecolor": "white",
 })
 
-C_INV    = "#2C2C2A"
-C_PHASE  = "#D4537E"
-C_AMP    = "#1D9E75"
-C_ANNOT  = "#5F5E5A"
+C_INV   = "#2C2C2A"
+C_PHASE = "#D4537E"
+C_AMP   = "#1D9E75"
+C_ANNOT = "#5F5E5A"
 
 PHASE_SHIFT = 12
 AMP_CHANGE  = -0.18
@@ -58,11 +58,11 @@ shift  = min_doy - 1
 vals_c = gaussian_filter1d(np.roll(vals, -shift), sigma=2)
 days   = np.arange(365)
 
-MONTH_DAYS   = [0,  28,  59,  89, 120, 150, 181, 212, 242, 273, 303, 334]
+MONTH_DAYS   = [0, 28, 59, 89, 120, 150, 181, 212, 242, 273, 303, 334]
 MONTH_LABELS = ["Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan"]
 
 # =============================================================================
-# 2. BUILD SYNTHETIC CURVES
+# 2. SYNTHETIC CURVES
 # =============================================================================
 
 phase_vals = np.roll(vals_c, -PHASE_SHIFT)
@@ -71,7 +71,7 @@ inv_range  = vals_c.max() - inv_min
 amp_vals   = inv_min + (vals_c - inv_min) * ((inv_range + AMP_CHANGE) / inv_range)
 
 # =============================================================================
-# 3. HELPER FUNCTIONS
+# 3. HELPERS
 # =============================================================================
 
 def style_ax(ax, title, ymax=4.3):
@@ -90,29 +90,22 @@ def style_ax(ax, title, ymax=4.3):
     ax.set_yticklabels([f"{y:.1f}" for y in yticks], fontsize=11)
 
 
-def stroke(fg="white"):
-    return [pe.withStroke(linewidth=3, foreground=fg)]
+def stroke():
+    return [pe.withStroke(linewidth=3, foreground="white")]
 
 
-def find_right_min(vals, start=280):
-    seg = vals[start:]
-    return start + int(np.argmin(seg))
+def find_right_min(v, start=280):
+    return start + int(np.argmin(v[start:]))
 
 
 # =============================================================================
-# FIG 1 — Invariant cycle only
+# FIG 1 — Invariant cycle
 # =============================================================================
 
 fig, ax = plt.subplots(figsize=(11, 6))
 style_ax(ax, "The invariant annual cycle")
-
 ax.plot(days, vals_c, color=C_INV, lw=2.5, zorder=4)
 ax.fill_between(days, vals_c, 0.3, color=C_INV, alpha=0.07)
-
-ax.text(185, vals_c[185] + 0.14,
-        "Climatological mean cycle", color=C_INV,
-        fontsize=11, fontweight="bold", path_effects=stroke())
-
 fig.tight_layout()
 fig.savefig(os.path.join(OUTPUT_DIR, "apac_concept_fig1_invariant.png"))
 plt.close(fig)
@@ -124,23 +117,12 @@ print("Fig 1 saved")
 
 fig, ax = plt.subplots(figsize=(11, 6))
 style_ax(ax, "Phase shift — the whole cycle moves earlier")
-
 ax.plot(days, vals_c,     color=C_INV,   lw=2.5, alpha=0.6, zorder=4)
 ax.plot(days, phase_vals, color=C_PHASE, lw=2.5, zorder=5, linestyle="--")
-
 peak_inv   = int(np.argmax(vals_c))
 peak_phase = int(np.argmax(phase_vals))
-
-ax.axvline(peak_inv,   color=C_INV,   lw=1.0, linestyle=":", alpha=0.6, zorder=3)
-ax.axvline(peak_phase, color=C_PHASE, lw=1.0, linestyle=":", alpha=0.6, zorder=3)
-
-ax.text(190, vals_c[190] + 0.14,
-        "Climatological cycle", color=C_INV,
-        fontsize=11, fontweight="bold", path_effects=stroke())
-ax.text(163, phase_vals[163] - 0.24,
-        "Phase shifted  (−12 days)", color=C_PHASE,
-        fontsize=11, fontweight="bold", path_effects=stroke(), va="top")
-
+ax.axvline(peak_inv,   color=C_INV,   lw=1.0, linestyle=":", alpha=0.5)
+ax.axvline(peak_phase, color=C_PHASE, lw=1.0, linestyle=":", alpha=0.5)
 fig.tight_layout()
 fig.savefig(os.path.join(OUTPUT_DIR, "apac_concept_fig2_phase.png"))
 plt.close(fig)
@@ -152,20 +134,10 @@ print("Fig 2 saved")
 
 fig, ax = plt.subplots(figsize=(11, 6))
 style_ax(ax, "Amplitude change — smaller cycle, same timing")
-
 ax.plot(days, vals_c,   color=C_INV, lw=2.5, alpha=0.6, zorder=4)
 ax.plot(days, amp_vals, color=C_AMP, lw=2.5, zorder=5, linestyle="--")
-
 peak_inv = int(np.argmax(vals_c))
 ax.axvline(peak_inv, color=C_ANNOT, lw=0.8, linestyle=":", alpha=0.5)
-
-ax.text(190, vals_c[190] + 0.14,
-        "Climatological cycle", color=C_INV,
-        fontsize=11, fontweight="bold", path_effects=stroke())
-ax.text(190, amp_vals[190] - 0.24,
-        "Amplitude reduced  (−0.18 Mkm²)", color=C_AMP,
-        fontsize=11, fontweight="bold", path_effects=stroke(), va="top")
-
 fig.tight_layout()
 fig.savefig(os.path.join(OUTPUT_DIR, "apac_concept_fig3_amplitude.png"))
 plt.close(fig)
@@ -177,56 +149,16 @@ print("Fig 3 saved")
 
 fig, ax = plt.subplots(figsize=(11, 6))
 style_ax(ax, "Same low minimum — completely different mechanisms")
-
 ax.plot(days, vals_c,     color=C_INV,   lw=2.5, alpha=0.7, zorder=4)
 ax.plot(days, phase_vals, color=C_PHASE, lw=2.5, zorder=5, linestyle="--")
 ax.plot(days, amp_vals,   color=C_AMP,   lw=2.5, zorder=5, linestyle="--")
-
-min_inv   = find_right_min(vals_c)
-min_phase = find_right_min(phase_vals)
-min_amp   = find_right_min(amp_vals)
-
-val_inv   = vals_c[min_inv]
-val_phase = phase_vals[min_phase]
-val_amp   = amp_vals[min_amp]
-
-for day, val, color in [(min_inv,   val_inv,   C_INV),
-                        (min_phase, val_phase, C_PHASE),
-                        (min_amp,   val_amp,   C_AMP)]:
-    ax.plot([day - 18, day + 18], [val, val],
-            color=color, lw=1.5, linestyle=":", zorder=6)
-    ax.scatter(day, val, color=color, s=60, zorder=7,
-               edgecolors="white", linewidth=1.2)
-
-bracket_x = min_inv + 22
-ax.annotate("",
-            xy=(bracket_x, val_phase),
-            xytext=(bracket_x, val_inv),
-            arrowprops=dict(arrowstyle="<->", color=C_ANNOT, lw=1.1))
-ax.text(bracket_x + 6, (val_inv + val_phase) / 2,
-        "Lower minimum\n(same anomaly signal)",
-        ha="left", va="center", fontsize=10,
-        color=C_ANNOT, fontweight="bold",
-        path_effects=stroke())
-
-ax.text(182, 0.42,
-        "APAC reads the full curve shape — not just the endpoint.\n"
-        "Anomaly analysis sees the same signal. APAC sees why.",
-        ha="center", va="bottom", fontsize=10.5,
-        color="#2C2C2A", style="italic",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#F1EFE8",
-                  edgecolor="#B4B2A9", linewidth=0.8))
-
-ax.text(100, vals_c[100] + 0.12,
-        "Climatological", color=C_INV,
-        fontsize=11, fontweight="bold", path_effects=stroke())
-ax.text(80, phase_vals[80] - 0.20,
-        "Phase shift", color=C_PHASE,
-        fontsize=11, fontweight="bold", path_effects=stroke(), va="top")
-ax.text(120, amp_vals[120] - 0.20,
-        "Amplitude ↓", color=C_AMP,
-        fontsize=11, fontweight="bold", path_effects=stroke(), va="top")
-
+for day, val, color in [
+    (find_right_min(vals_c),     vals_c[find_right_min(vals_c)],         C_INV),
+    (find_right_min(phase_vals), phase_vals[find_right_min(phase_vals)], C_PHASE),
+    (find_right_min(amp_vals),   amp_vals[find_right_min(amp_vals)],     C_AMP),
+]:
+    ax.scatter(day, val, color=color, s=70, zorder=7,
+               edgecolors="white", linewidth=1.5)
 fig.tight_layout()
 fig.savefig(os.path.join(OUTPUT_DIR, "apac_concept_fig4_both.png"))
 plt.close(fig)
