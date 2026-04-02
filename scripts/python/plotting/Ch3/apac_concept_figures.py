@@ -1,7 +1,6 @@
 """
 apac_concept_figures.py
 Generates 4 PNG figures illustrating APAC phase vs amplitude decomposition
-in Zack Labe white style.
 
 Fig 1: Invariant annual cycle only
 Fig 2: + Phase shift (synthetic, 12 days earlier)
