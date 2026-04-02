@@ -423,28 +423,58 @@ fig.tight_layout()
 save(fig, "6_rmse_improvement_by_sector.png")
 
 # =============================================================================
-# FIG 7 — Rolling 10-year variance
+# FIG 7 — Rolling 10-year variance, small multiples (2 rows × 5 cols)
 # =============================================================================
-print("Fig 7: Rolling variance")
-fig, ax = plt.subplots(figsize=(13, 5))
+print("Fig 7: Rolling variance small multiples")
 
-for sec in SECTORS:
-    sub  = annual[annual["sector"]==sec].sort_values("Year").set_index("Year")
-    roll = sub["max_doy_anom"].rolling(10, center=True, min_periods=6).std()
-    ax.plot(roll.index, roll.values,
-            color=SECTOR_COLORS[sec], lw=2,
-            label=SECTOR_LABELS[sec], zorder=3)
+fig, axes = plt.subplots(2, 5, figsize=(18, 7), sharey="row", sharex=True)
 
-shade2016(ax)
-ax.set_xlabel("Year")
-ax.set_ylabel("10-year rolling std dev (days)")
-ax.set_title("Has Phase Variability Changed Over Time?\n"
-             "10-year Rolling Std Dev of Max DOY Anomaly",
-             fontweight="bold")
-ax.legend(ncol=2, loc="upper left")
-ax.set_xlim(yr_min + 4, yr_max - 4)
+row_vars   = ["max_doy_anom", "amplitude_anom"]
+row_labels = ["10-yr rolling std dev of phase (days)",
+              "10-yr rolling std dev of amplitude (million km²)"]
+row_titles = ["Phase Variability Over Time",
+              "Amplitude Variability Over Time"]
+
+for row, (var, ylabel, row_title) in enumerate(
+        zip(row_vars, row_labels, row_titles)):
+    for col, sec in enumerate(SECTORS):
+        ax = axes[row, col]
+        sub  = annual[annual["sector"] == sec].sort_values("Year").set_index("Year")
+        roll = sub[var].rolling(10, center=True, min_periods=6).std()
+
+        ax.plot(roll.index, roll.values,
+                color=SECTOR_COLORS[sec], lw=2, zorder=3)
+        ax.fill_between(roll.index, roll.values,
+                        color=SECTOR_COLORS[sec], alpha=0.15, zorder=2)
+
+        shade2016(ax)
+        ax.axhline(0, color="grey", lw=0.8, ls="--", zorder=1)
+        ax.set_xlim(yr_min + 4, yr_max - 4)
+
+        # Titles only on top row
+        if row == 0:
+            ax.set_title(SECTOR_LABELS[sec], fontweight="bold", fontsize=11)
+
+        # Y-label only on leftmost column
+        if col == 0:
+            ax.set_ylabel(ylabel, fontsize=9)
+
+        # X-label only on bottom row
+        if row == 1:
+            ax.set_xlabel("Year", fontsize=9)
+            ax.tick_params(axis="x", rotation=30)
+
+# Row annotations on the right side
+for row, row_title in enumerate(row_titles):
+    axes[row, -1].annotate(
+        row_title, xy=(1.02, 0.5), xycoords="axes fraction",
+        rotation=270, va="center", ha="left", fontsize=10, fontweight="bold"
+    )
+
+fig.suptitle("Has Variability Changed Over Time? Phase and Amplitude",
+             fontsize=13, fontweight="bold", y=1.01)
 fig.tight_layout()
-save(fig, "7_rolling_variance_phase.png")
+save(fig, "7_rolling_variance_phase_amplitude.png")
 
 # =============================================================================
 # FIG 8 — Phase vs amplitude side by side
