@@ -45,8 +45,9 @@ for f in files:
     ds = xr.open_dataset(f)
 
     # Monthly mean (averaging over daily time steps)
-    z_mean = ds["zg"].mean(dim="valid_time")
-
+    # Handle both single-file (valid_time) and multi-file (time) dimension names
+    time_dim = "valid_time" if "valid_time" in ds["zg"].dims else "time"
+    z_mean = ds["zg"].mean(dim=time_dim)
     monthly_records.append({
         "year":  year,
         "month": month,
