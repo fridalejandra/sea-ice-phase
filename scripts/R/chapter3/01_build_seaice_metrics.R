@@ -1,18 +1,6 @@
 # ============================================================
 # Chapter 3: Build sea ice metrics
 # ============================================================
-# Outputs:
-#   data/processed/chapter3/sector_IAC_daily.csv
-#   data/processed/chapter3/sector_seasonal_envelope.csv
-#   data/processed/chapter3/sector_annual_phase_amplitude.csv
-#   data/processed/chapter3/sector_growth_retreat_duration.csv
-#
-# Input expected:
-#   data/processed/SIE_daily_sector_and_circumpolar_million_km2.csv
-#   with columns like:
-#   Date, SIE_circumpolar, SIE_Weddell, SIE_Amundsen_Bellingshausen,
-#   SIE_Ross, SIE_East_Antarctica, SIE_King_Haakon
-# ============================================================
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -27,9 +15,9 @@ suppressPackageStartupMessages({
 # -----------------------------
 # 0. PATHS
 # -----------------------------
-BASE_DIR <- "~/Research/repos/sea-ice-phase"
-INFILE <- file.path(BASE_DIR, "data/processed/SIE_daily_sector_and_circumpolar_million_km2.csv")
-OUTDIR <- file.path(BASE_DIR, "data/processed/chapter3")
+BASE_DIR <- "~/Research/repos/sea-ice-phase/scripts/R/"
+INFILE <- file.path(BASE_DIR, "Sea_Ice_Sheets/SIE_daily_sector_and_circumpolar_million_km2.csv")
+OUTDIR <- file.path(BASE_DIR, "chapter3/data")
 
 dir.create(OUTDIR, recursive = TRUE, showWarnings = FALSE)
 
@@ -65,12 +53,10 @@ df_long <- df_wide %>%
     Day = day(Date)
   ) %>%
   filter(!is.na(Extent)) %>%
-  # remove leap day so all years have 365-day seasonal cycle
   filter(!(Month == 2 & Day == 29)) %>%
   mutate(DOY = yday(Date)) %>%
   arrange(sector, Date)
 
-# optional cleanup of sector labels for ordering
 sector_levels <- c(
   "Amundsen_Bellingshausen",
   "Ross",
@@ -82,14 +68,12 @@ sector_levels <- c(
 
 present_levels <- sector_levels[sector_levels %in% unique(df_long$sector)]
 other_levels <- setdiff(unique(df_long$sector), present_levels)
+
 df_long <- df_long %>%
   mutate(sector = factor(sector, levels = c(present_levels, other_levels)))
 
-message("Sectors found:")
-print(df_long %>% distinct(sector) %>% arrange(sector))
-
 # -----------------------------
-# 2. HELPER FUNCTIONS
+# 2. HELPERS
 # -----------------------------
 shift_vec <- function(x, lag_days) {
   n <- length(x)
@@ -137,29 +121,24 @@ compute_runs <- function(sign_vec, doy_vec, target = c("positive", "negative")) 
 # -----------------------------
 # 3. FIT IAC PER SECTOR
 # -----------------------------
-message("Fitting invariant annual cycle (IAC) per sector...")
+message("Fitting invariant annual cycle per sector...")
 
 df_long_iac <- df_long %>%
   group_by(sector) %>%
   group_modify(~{
-    dat <- .x %>% arrange(DOY)
-    
     mod <- gam(
       Extent ~ s(DOY, bs = "cc", k = 25),
-      data = dat,
+      data = .x,
       method = "REML"
     )
-    
-    dat$IAC_pred <- predict(mod, newdata = dat)
-    dat
+    .x$IAC_pred <- predict(mod, newdata = .x)
+    .x
   }) %>%
   ungroup()
 
 # -----------------------------
-# 4. BUILD DAILY IAC TABLE + ENVELOPE
+# 4. BUILD DAILY IAC + ENVELOPE
 # -----------------------------
-message("Building daily IAC and seasonal envelope tables...")
-
 iac_daily <- df_long_iac %>%
   group_by(sector, DOY) %>%
   summarise(
@@ -186,9 +165,9 @@ write_csv(iac_daily, file.path(OUTDIR, "sector_IAC_daily.csv"))
 write_csv(iac_daily, file.path(OUTDIR, "sector_seasonal_envelope.csv"))
 
 # -----------------------------
-# 5. COMPUTE ANNUAL PHASE SCALAR + AMPLITUDE
+# 5. ANNUAL PHASE + AMPLITUDE
 # -----------------------------
-message("Computing annual phase scalar and amplitude by sector...")
+message("Computing annual phase scalar and amplitude...")
 
 lags_to_test <- -40:40
 
@@ -199,13 +178,9 @@ phase_amp_sector <- df_long %>%
     
     dat <- .x %>%
       group_by(DOY) %>%
-      summarise(
-        Extent = mean(Extent, na.rm = TRUE),
-        .groups = "drop"
-      ) %>%
+      summarise(Extent = mean(Extent, na.rm = TRUE), .groups = "drop") %>%
       arrange(DOY)
     
-    # require near-full year
     if (nrow(dat) < 300) {
       return(tibble(
         phase_scalar = NA_real_,
@@ -272,10 +247,8 @@ phase_amp_sector <- df_long %>%
 write_csv(phase_amp_sector, file.path(OUTDIR, "sector_annual_phase_amplitude.csv"))
 
 # -----------------------------
-# 6. GROWTH / RETREAT DURATION FROM IAC DERIVATIVE
+# 6. GROWTH / RETREAT DURATION
 # -----------------------------
-message("Computing growth and retreat durations from dIAC...")
-
 duration_tbl <- iac_daily %>%
   group_by(sector) %>%
   group_modify(~{
@@ -320,65 +293,5 @@ summary_tbl <- phase_amp_sector %>%
 
 write_csv(summary_tbl, file.path(OUTDIR, "sector_summary_metrics.csv"))
 
-# -----------------------------
-# 8. LIGHT SANITY PLOTS
-# -----------------------------
-message("Writing quick sanity plots...")
-
-p_phase <- ggplot(phase_amp_sector, aes(Year, phase_scalar)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray45", linewidth = 0.4) +
-  geom_line(linewidth = 0.5, color = "black") +
-  geom_point(size = 1.1, color = "black") +
-  geom_smooth(method = "loess", se = FALSE, span = 0.35, color = "red", linewidth = 0.8) +
-  facet_wrap(~sector, scales = "free_y", ncol = 3) +
-  labs(
-    title = "Sectoral phase variability",
-    subtitle = "Negative = ahead of phase; Positive = behind phase",
-    x = "Year",
-    y = "Phase shift (days)"
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(panel.grid.minor = element_blank())
-
-p_amp <- ggplot(phase_amp_sector, aes(Year, amplitude_range)) +
-  geom_line(linewidth = 0.5, color = "black") +
-  geom_point(size = 1.1, color = "black") +
-  geom_smooth(method = "loess", se = FALSE, span = 0.35, color = "red", linewidth = 0.8) +
-  facet_wrap(~sector, scales = "free_y", ncol = 3) +
-  labs(
-    title = "Sectoral amplitude variability",
-    subtitle = "Annual max-min range in sea ice extent",
-    x = "Year",
-    y = expression("Amplitude range (million km"^2*")")
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(panel.grid.minor = element_blank())
-
-p_diac <- ggplot(iac_daily, aes(DOY, dIAC)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray45") +
-  geom_line(linewidth = 0.8, color = "black") +
-  facet_wrap(~sector, scales = "free_y", ncol = 3) +
-  scale_x_continuous(
-    breaks = c(1, 91, 182, 274, 365),
-    labels = c("Jan", "Apr", "Jul", "Oct", "Dec")
-  ) +
-  labs(
-    title = "Rate of change of invariant annual cycle",
-    x = "Month",
-    y = expression(Delta*"SIE per day")
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(panel.grid.minor = element_blank())
-
-ggsave(file.path(OUTDIR, "check_phase_timeseries.png"), p_phase, width = 11, height = 8, dpi = 300)
-ggsave(file.path(OUTDIR, "check_amplitude_timeseries.png"), p_amp, width = 11, height = 8, dpi = 300)
-ggsave(file.path(OUTDIR, "check_IAC_derivative.png"), p_diac, width = 11, height = 8, dpi = 300)
-
-# -----------------------------
-# 9. DONE
-# -----------------------------
 message("Done.")
-message("Outputs written to: ", OUTDIR)
-
-message("\nFiles created:")
 print(list.files(OUTDIR, full.names = FALSE))
