@@ -1,6 +1,6 @@
 """
 rolling_correlations.py
-Computes 15-year rolling Pearson r between APAC phase/amplitude anomalies
+Computes 15-year trailing Pearson r between APAC phase/amplitude anomalies
 and key atmospheric indices. Plots temporal evolution with post-2016 shading.
 """
 
@@ -20,7 +20,7 @@ INDICES_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/indices/"
 OUTPUT_DIR  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/figures/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-WINDOW = 15  # years
+WINDOW = 15
 
 # =============================================================================
 # 1. LOAD AND DETREND APAC
@@ -71,37 +71,32 @@ def seasonal_mean(df, val_col, months, new_col):
     sub.columns = ["Year", new_col]
     return sub
 
-# SAM
 sam_long = load_wide(
     os.path.join(INDICES_DIR, "marshall_sam_monthly.txt"), "SAM")
 sam_son = seasonal_mean(sam_long, "SAM", [9,10,11], "SAM_SON")
 
-# AAO
 aao_long = load_wide(
     os.path.join(INDICES_DIR, "daily_aao_sam.txt"), "AAO")
 aao_jja = seasonal_mean(aao_long, "AAO", [6,7,8], "AAO_JJA")
 
-# ZW3 Goyal
 zw3g = pd.read_csv(os.path.join(INDICES_DIR, "ZW3_goyal_annual.csv"))
 zw3g = zw3g[zw3g["year"].between(1979, 2022)]
 zw3g.columns = ["Year","ZW3G_PC1","ZW3G_PC2","ZW3G_magnitude","ZW3G_phase"]
 
-# Merge into one index table
 idx = sam_son.merge(aao_jja, on="Year", how="outer")
 idx = idx.merge(zw3g[["Year","ZW3G_PC2"]], on="Year", how="outer")
 
-# Detrend
 for col in ["SAM_SON","AAO_JJA","ZW3G_PC2"]:
     tmp = detrend_series(idx[["Year",col]].dropna(), "Year", col)
     idx.loc[tmp.index, col] = tmp[col].values
 
 # =============================================================================
-# 3. ROLLING CORRELATION FUNCTION
+# 3. TRAILING ROLLING CORRELATION FUNCTION
 # =============================================================================
 
 def rolling_corr(apac_df, sector, apac_var, idx_df, idx_col, window=15):
     """
-    Compute rolling Pearson r centred on each year.
+    Compute trailing Pearson r — window covers [yr-window+1, yr].
     Returns DataFrame with Year, r, p, n.
     """
     sec = apac_df[apac_df["sector"] == sector][["Year", apac_var]].dropna()
@@ -111,10 +106,9 @@ def rolling_corr(apac_df, sector, apac_var, idx_df, idx_col, window=15):
     years = merged["Year"].values
     results = []
 
-    for i, yr in enumerate(years):
-        half = window // 2
-        mask = (years >= yr - half) & (years <= yr + half)
-        sub = merged[mask]
+    for yr in years:
+        mask = (years >= yr - window + 1) & (years <= yr)
+        sub  = merged[mask]
         if len(sub) < 8:
             continue
         r, p = stats.pearsonr(sub[idx_col], sub[apac_var])
@@ -123,26 +117,25 @@ def rolling_corr(apac_df, sector, apac_var, idx_df, idx_col, window=15):
     return pd.DataFrame(results)
 
 # =============================================================================
-# 4. COMPUTE ROLLING CORRELATIONS FOR KEY PAIRS
+# 4. COMPUTE ROLLING CORRELATIONS
 # =============================================================================
 
 pairs = [
-    # (sector_col, apac_var, idx_col, label, color)
     ("SIE_Weddell",                "max_doy_anom",   "ZW3G_PC2",
-     "Weddell phase vs ZW3 (Goyal PC2)",    "#7F77DD"),
+     "Weddell phase vs ZW3 (Goyal PC2)",  "#7F77DD"),
     ("SIE_Amundsen_Bellingshausen","amplitude_anom", "AAO_JJA",
-     "ABS amplitude vs AAO (JJA)",           "#D4537E"),
+     "ABS amplitude vs AAO (JJA)",         "#D4537E"),
     ("SIE_East_Antarctica",        "max_doy_anom",   "SAM_SON",
-     "East Antarctica phase vs SAM (SON)",   "#1D9E75"),
+     "East Antarctica phase vs SAM (SON)", "#1D9E75"),
     ("SIE_Ross",                   "max_doy_anom",   "SAM_SON",
-     "Ross phase vs SAM (SON) — contrast",   "#BA7517"),
+     "Ross phase vs SAM (SON) — contrast", "#BA7517"),
 ]
 
 roll_results = {}
 for sec_col, apac_var, idx_col, label, color in pairs:
     df = rolling_corr(annual_dt, sec_col, apac_var, idx, idx_col, WINDOW)
     roll_results[label] = (df, color)
-    print(f"{label}: {len(df)} rolling windows")
+    print(f"{label}: {len(df)} windows, last year={df['Year'].max()}")
 
 # =============================================================================
 # 5. PLOT
@@ -153,20 +146,20 @@ plt.rcParams.update({"font.family": "Nimbus Sans"})
 fig, axes = plt.subplots(2, 2, figsize=(14, 8), sharey=True, sharex=True)
 axes = axes.flatten()
 
-# Significance threshold for n=15, p=0.05 (two-tailed)
-r_crit = 0.514
+r_crit = 0.514  # p=0.05, two-tailed, n=15
 
 for ax, (label, (df, color)) in zip(axes, roll_results.items()):
+
     # Significance band
-    ax.axhspan(-r_crit, r_crit, color="#F1EFE8", alpha=0.6, zorder=1)
-    ax.axhline(0,      color="#B4B2A9", lw=0.8, zorder=2)
+    ax.axhspan(-r_crit, r_crit, color="#F1EFE8", alpha=0.5, zorder=1)
+    ax.axhline(0,       color="#B4B2A9", lw=0.8, zorder=2)
     ax.axhline( r_crit, color="#B4B2A9", lw=0.8, ls="--", zorder=2)
     ax.axhline(-r_crit, color="#B4B2A9", lw=0.8, ls="--", zorder=2)
 
     # Post-2016 shading
-    ax.axvspan(2016, 2022, color="#D3D1C7", alpha=0.4, zorder=1)
+    ax.axvspan(2016, 2023, color="#D3D1C7", alpha=0.4, zorder=1)
 
-    # Significant points
+    # Split significant vs not
     sig  = df[df["p"] < 0.05]
     nsig = df[df["p"] >= 0.05]
 
@@ -178,30 +171,28 @@ for ax, (label, (df, color)) in zip(axes, roll_results.items()):
                linewidth=0.8, alpha=0.6)
 
     ax.set_title(label, fontsize=11, fontweight="bold", pad=8)
-    ax.set_xlim(1979 + WINDOW//2, 2022 - WINDOW//2 + 1)
+    ax.set_xlim(1979 + WINDOW - 1, 2023)
     ax.set_ylim(-0.85, 0.85)
     ax.tick_params(labelsize=10)
 
-    # Add n label
-    ax.text(0.02, 0.04, f"Window = {WINDOW} yr",
-            transform=ax.transAxes, fontsize=9,
-            color="#5F5E5A",
+    ax.text(0.02, 0.04, f"Trailing window = {WINDOW} yr",
+            transform=ax.transAxes, fontsize=9, color="#5F5E5A",
             path_effects=[pe.withStroke(linewidth=2, foreground="white")])
 
-# Shared labels
-fig.text(0.5, 0.02, "Year (window centred)",
+# Shared axis labels
+fig.text(0.5,  0.01, "Year (trailing window end)",
          ha="center", fontsize=12)
-fig.text(0.02, 0.5, "Pearson r (rolling)",
+fig.text(0.07, 0.5,  "Pearson r",
          va="center", rotation="vertical", fontsize=12)
 
 fig.suptitle(
-    f"Temporal stability of atmosphere–sea ice relationships\n"
-    f"{WINDOW}-year rolling correlations, linearly detrended  |  "
-    f"dashed lines = p<0.05 threshold  |  shading = post-2016",
+    "Temporal stability of atmosphere–sea ice relationships\n"
+    f"{WINDOW}-year trailing window correlations, linearly detrended  |  "
+    "dashed lines = p<0.05 threshold  |  shading = post-2016",
     fontsize=11, y=1.01
 )
-fig.tight_layout()
+fig.tight_layout(rect=[0.08, 0.03, 1, 1])
 fig.savefig(os.path.join(OUTPUT_DIR, "rolling_correlations.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
-print("Rolling correlations figure saved")
+print(f"\nSaved to {OUTPUT_DIR}rolling_correlations.png")
