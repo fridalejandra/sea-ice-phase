@@ -757,6 +757,7 @@ fig.suptitle("Has Variability Changed? Pre vs Post 2016",
              fontsize=14, fontweight="bold")
 fig.tight_layout()
 save(fig, "8_phase_vs_amplitude_variability.png")
+
 # =============================================================================
 # BRIDGE — Phase anomaly as retreat/advance language
 # =============================================================================
