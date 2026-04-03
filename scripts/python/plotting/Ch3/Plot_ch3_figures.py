@@ -159,7 +159,7 @@ def save(fig, name):
     plt.close(fig)
 
 # =============================================================================
-# FIG 1 — Sector SIE anomaly timeseries
+# FIG 1 — Sector SIE anomaly timeseries + circumpolar
 # =============================================================================
 print("\nFig 1: Sector SIE anomaly timeseries")
 
@@ -167,29 +167,42 @@ sie = pd.read_csv(SIE_CSV)
 sie["Date"]  = pd.to_datetime(sie["Date"], format="%m/%d/%y")
 sie["Year"]  = sie["Date"].dt.year
 sie["DOY"]   = sie["Date"].dt.dayofyear
-sie["Month"] = sie["Date"].dt.month                          # ADD THIS
+sie["Month"] = sie["Date"].dt.month
 sie = sie[sie["Year"].between(1979, 2022)].sort_values("Date").reset_index(drop=True)
 
-for col in SECTORS:
+# All columns to process — sectors + circumpolar
+ALL_COLS = SECTORS + ["SIE_circumpolar"]
+
+for col in ALL_COLS:
     sie[col] = uniform_filter1d(
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
 
 # 1979-2010 baseline climatology
 clim_sie = (sie[sie["Year"].between(1979, 2010)]
-            .groupby("DOY")[SECTORS].mean())
+            .groupby("DOY")[ALL_COLS].mean())
 
-for col in SECTORS:
+for col in ALL_COLS:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim_sie[col])
 
-# September mean anomaly per sector per year
+# September mean anomaly
 sep_anom = (sie[sie["Month"] == 9]
-            .groupby("Year")[[f"{col}_anom" for col in SECTORS]]
+            .groupby("Year")[[f"{col}_anom" for col in ALL_COLS]]
             .mean().reset_index())
 
-fig, axes = plt.subplots(1, 5, figsize=(18, 5),
+# Plot — 6 panels: 5 sectors + circumpolar
+PLOT_COLS = {
+    "SIE_Weddell":                 ("Weddell",       "#2196F3"),
+    "SIE_Amundsen_Bellingshausen": ("ABS",            "#F44336"),
+    "SIE_Ross":                    ("Ross",           "#4CAF50"),
+    "SIE_East_Antarctica":         ("East Antarctica","#FF9800"),
+    "SIE_King_Haakon":             ("King Haakon",    "#9C27B0"),
+    "SIE_circumpolar":             ("Circumpolar",    "#2C2C2A"),
+}
+
+fig, axes = plt.subplots(1, 6, figsize=(22, 5),
                          sharey=False, sharex=True)
 
-for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
+for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
     anom_col = f"{sec_col}_anom"
     yrs  = sep_anom["Year"].values
     vals = sep_anom[anom_col].values
@@ -200,6 +213,7 @@ for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
     ax.fill_between(yrs, vals, 0,
                     where=vals < 0, color="#D4537E",
                     alpha=0.8, linewidth=0, zorder=3)
+
     ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
     ax.axvline(2016, color="#2C2C2A", lw=1.2,
                ls="--", alpha=0.7, zorder=5)
@@ -220,8 +234,18 @@ for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
             color="#D4537E", ha="right",
             path_effects=stroke())
 
-    ax.set_title(sec_label, fontsize=12,
-                 fontweight="bold", pad=8)
+    # Circumpolar panel gets a dividing line on the left
+    if sec_col == "SIE_circumpolar":
+        ax.spines["left"].set_linewidth(2.0)
+        ax.spines["left"].set_color("#B4B2A9")
+        ax.set_title(sec_label, fontsize=12,
+                     fontweight="bold", pad=8,
+                     color=sec_color,
+                     style="italic")
+    else:
+        ax.set_title(sec_label, fontsize=12,
+                     fontweight="bold", pad=8)
+
     ax.tick_params(labelsize=10)
     ax.set_xlim(1977, 2024)
 
@@ -658,41 +682,81 @@ fig.tight_layout()
 save(fig, "7_rolling_variance_phase_amplitude.png")
 
 # =============================================================================
-# FIG 8 — Phase vs amplitude variability bars
+# FIG 8 — Phase vs amplitude variability — pre/post 2016 grouped bars
 # =============================================================================
-print("Fig 8: Phase vs amplitude variability")
+print("Fig 8: Phase vs amplitude variability pre/post 2016")
 
-phase_stds = [annual[annual["sector"]==s]["max_doy_anom"].dropna().std()
-              for s in SECTORS]
-amp_stds   = [annual[annual["sector"]==s]["amplitude_anom"].dropna().std()
-              for s in SECTORS]
-labels     = [SECTOR_LABELS[s] for s in SECTORS]
-colors     = [SECTOR_COLORS[s] for s in SECTORS]
+pre  = annual[annual["Year"] <  2016]
+post = annual[annual["Year"] >= 2016]
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-for ax, vals, ylabel, title, fmt in zip(
+phase_pre  = [pre[pre["sector"]==s]["max_doy_anom"].dropna().std()  for s in SECTORS]
+phase_post = [post[post["sector"]==s]["max_doy_anom"].dropna().std() for s in SECTORS]
+amp_pre    = [pre[pre["sector"]==s]["amplitude_anom"].dropna().std()  for s in SECTORS]
+amp_post   = [post[post["sector"]==s]["amplitude_anom"].dropna().std() for s in SECTORS]
+
+labels = [SECTOR_LABELS[s] for s in SECTORS]
+colors = [SECTOR_COLORS[s] for s in SECTORS]
+
+x      = np.arange(len(SECTORS))
+width  = 0.35
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+for ax, pre_vals, post_vals, ylabel, title, fmt in zip(
     axes,
-    [phase_stds, amp_stds],
-    ["Std dev of max DOY anomaly (days)",
+    [phase_pre,  amp_pre],
+    [phase_post, amp_post],
+    ["Std dev of phase anomaly (days)",
      "Std dev of amplitude anomaly (million km²)"],
     ["Phase Variability\n(timing of maximum)",
      "Amplitude Variability\n(size of seasonal cycle)"],
     ["{:.1f}d", "{:.2f}"]
 ):
-    bars = ax.bar(labels, vals, color=colors, width=0.6, edgecolor="white")
-    bar_labels(ax, bars, vals, fmt)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title, fontweight="bold")
-    ax.set_ylim(0, max(vals) * 1.3)
-    ax.tick_params(axis="x", rotation=25)
-    for lbl in ax.get_xticklabels():
-        lbl.set_ha("right")
+    bars_pre  = ax.bar(x - width/2, pre_vals,  width,
+                       color=colors, alpha=1.0,
+                       edgecolor="white", label="1979–2015", zorder=3)
+    bars_post = ax.bar(x + width/2, post_vals, width,
+                       color=colors, alpha=0.45,
+                       edgecolor="white", label="2016–2022",
+                       hatch="///", zorder=3)
 
-fig.suptitle("What Varies More — Timing or Magnitude?",
+    # Value labels
+    for bar, val in zip(bars_pre, pre_vals):
+        ax.text(bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + max(pre_vals) * 0.02,
+                fmt.format(val),
+                ha="center", va="bottom",
+                fontsize=9, fontweight="bold",
+                path_effects=stroke())
+
+    for bar, val in zip(bars_post, post_vals):
+        ax.text(bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + max(pre_vals) * 0.02,
+                fmt.format(val),
+                ha="center", va="bottom",
+                fontsize=9, color="#5F5E5A",
+                path_effects=stroke())
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=25, ha="right", fontsize=11)
+    ax.set_ylabel(ylabel, fontsize=11)
+    ax.set_title(title, fontweight="bold", fontsize=12)
+    ax.set_ylim(0, max(max(pre_vals), max(post_vals)) * 1.3)
+    ax.legend(fontsize=10, loc="upper right")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+# Note about post-2016 sample size
+fig.text(0.5, -0.02,
+         "Note: post-2016 period spans only 7 years (2016–2022) — "
+         "std dev estimates are less stable",
+         ha="center", fontsize=9, color="#5F5E5A",
+         style="italic")
+
+fig.suptitle("Has Variability Changed? Pre vs Post 2016",
              fontsize=14, fontweight="bold")
 fig.tight_layout()
 save(fig, "8_phase_vs_amplitude_variability.png")
-
 # =============================================================================
 # BRIDGE — Phase anomaly as retreat/advance language
 # =============================================================================
