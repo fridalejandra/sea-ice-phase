@@ -442,13 +442,13 @@ bars = ax.bar(labels, vals, color=colors_rmse, width=0.6,
 for bar, val in zip(bars, vals):
     ypos = (bar.get_height() + max(abs(v) for v in vals) * 0.02
             if val >= 0
-            else bar.get_height() - max(abs(v) for v in vals) * 0.06)
+            else bar.get_height() - (max(abs(v) for v in vals) * 0.14))
     ax.text(bar.get_x() + bar.get_width() / 2, ypos,
             f"{val:.1f}%", ha="center", va="bottom",
             fontsize=9, fontweight="bold")
 
 zero_line(ax)
-ax.set_ylabel("MSE improvement over invariant cycle (%)")
+ax.set_ylabel("RMSE improvement over invariant cycle (%)")
 ax.set_title("Amplitude Adjustment: Improvement by Sector\n"
              "Grey/hatched = degradation (Handcock & Raphael 2020)",
              fontweight="bold")
@@ -480,12 +480,16 @@ for row, (var, ylabel, row_title) in enumerate(
         sub  = annual[annual["sector"] == sec].sort_values("Year").set_index("Year")
         roll = sub[var].rolling(10, center=True, min_periods=6).std()
 
+        # Mask King Haakon pre-1988 SMMR artefact
+        if sec == "SIE_King_Haakon":
+            roll = roll[roll.index >= 1988]
+
         ax.plot(roll.index, roll.values,
                 color=SECTOR_COLORS[sec], lw=2, zorder=3)
         ax.fill_between(roll.index, roll.values,
                         color=SECTOR_COLORS[sec], alpha=0.15, zorder=2)
         shade2016(ax)
-        ax.axhline(0, color="grey", lw=0.8, ls="--", zorder=1)
+        # removed zero dashed line
         ax.set_xlim(yr_min + 4, yr_max - 4)
 
         if row == 0:
@@ -496,11 +500,9 @@ for row, (var, ylabel, row_title) in enumerate(
             ax.set_xlabel("Year", fontsize=9)
             ax.tick_params(axis="x", rotation=30)
 
+# Remove the old annotate block and replace with this:
 for row, row_title in enumerate(row_titles):
-    axes[row, -1].annotate(
-        row_title, xy=(1.02, 0.5), xycoords="axes fraction",
-        rotation=270, va="center", ha="left", fontsize=10, fontweight="bold"
-    )
+    axes[row, 0].set_ylabel(row_title, fontsize=9)
 
 fig.suptitle("Has Variability Changed Over Time? Phase and Amplitude",
              fontsize=13, fontweight="bold", y=1.01)
