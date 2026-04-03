@@ -238,8 +238,9 @@ fig.tight_layout()
 save(fig, "1_sector_sie_anomaly.png")
 
 # =============================================================================
-# FIG 2 & 3 — Phase and amplitude anomaly panels (all 5 sectors)
+# FIG 2, 3 & COMBINED — Phase and amplitude anomaly figures
 # =============================================================================
+
 print("Fig 2: Phase anomaly timeseries")
 
 def plot_anomaly_panel(var, ylabel, title, outfile):
@@ -292,6 +293,7 @@ def plot_anomaly_panel(var, ylabel, title, outfile):
     fig.tight_layout()
     save(fig, outfile)
 
+
 plot_anomaly_panel(
     var     = "max_doy_anom_fixed",
     ylabel  = "Phase anomaly (days)\n← Ahead of phase  |  Behind phase →",
@@ -303,7 +305,7 @@ print("Fig 3: Amplitude anomaly timeseries")
 plot_anomaly_panel(
     var     = "amplitude_anom_fixed",
     ylabel  = "Amplitude anomaly (million km²)\n← Smaller  |  Larger →",
-    title   = "Seasonal Amplitude — Anomaly from 1979–2100 Baseline",
+    title   = "Seasonal Amplitude — Anomaly from 1979–2010 Baseline",
     outfile = "3_amplitude_anomaly_timeseries.png"
 )
 
@@ -393,12 +395,11 @@ fig.legend(handles=handles, loc="lower center", ncol=6,
 
 fig.suptitle(
     "Phase and Amplitude Anomaly — Selected Sectors\n"
-    "Anomaly from 1979–2000 Baseline",
+    "Anomaly from 1979–2010 Baseline",
     fontsize=14, fontweight="bold", y=1.01
 )
 fig.tight_layout(rect=[0, 0.04, 0.97, 1])
 save(fig, "2_3_phase_amplitude_selected.png")
-
 # =============================================================================
 # CASE STUDY — 2023 record minimum
 # =============================================================================
