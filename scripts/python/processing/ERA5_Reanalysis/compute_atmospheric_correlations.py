@@ -108,7 +108,12 @@ for line in lines[1:]:
     parts = line.split()
     if len(parts) != 13:
         continue
-    year = int(parts[0])
+    # Skip non-numeric header lines
+    try:
+        year = int(parts[0])
+    except ValueError:
+        continue
+    # Skip missing value rows
     vals = [float(v) for v in parts[1:]]
     tpi_rows.append([year] + vals)
 
