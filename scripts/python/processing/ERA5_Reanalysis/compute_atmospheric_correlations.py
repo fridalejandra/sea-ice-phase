@@ -240,24 +240,24 @@ corr_df = pd.DataFrame(results)
 corr_df.to_csv(os.path.join(OUTPUT_DIR, "correlations_all.csv"), index=False)
 print(f"\nCorrelations computed: {len(corr_df)} rows")
 
-# =============================================================================
-# 6. HEATMAP — annual indices, both APAC variables
+## =============================================================================
+# 6. HEATMAP — updated: ZW3G_PC2 added, TPI removed
 # =============================================================================
 
 plt.rcParams.update({"font.family": "Nimbus Sans"})
 
 HEATMAP_INDICES = [
-    "SAM_annual","SAM_SON","SAM_DJF",
-    "AAO_annual","AAO_SON","AAO_DJF",
-    "TPI_annual","ZW3R_annual","ZW3G_magnitude"
+    "SAM_annual", "SAM_SON", "SAM_DJF",
+    "AAO_annual", "AAO_SON", "AAO_DJF",
+    "ZW3R_annual", "ZW3G_PC2", "ZW3G_magnitude"
 ]
 HEATMAP_LABELS = [
-    "SAM\nannual","SAM\nSON","SAM\nDJF",
-    "AAO\nannual","AAO\nSON","AAO\nDJF",
-    "TPI\nannual","ZW3\nRaphael","ZW3\nGoyal mag"
+    "SAM\nannual", "SAM\nSON", "SAM\nDJF",
+    "AAO\nannual", "AAO\nSON", "AAO\nDJF",
+    "ZW3\nRaphael", "ZW3\nGoyal PC2", "ZW3\nGoyal mag"
 ]
 
-sector_order = ["Weddell","ABS","Ross","East Antarctica","King Haakon"]
+sector_order = ["Weddell", "ABS", "Ross", "East Antarctica", "King Haakon"]
 
 fig, axes = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
 
@@ -305,7 +305,12 @@ for ax, apac_var, title in zip(
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-plt.colorbar(im, ax=axes, label="Pearson r", shrink=0.8, pad=0.02)
+# Fixed colorbar — horizontal, below figure
+cbar = fig.colorbar(im, ax=axes, label="Pearson r",
+                    orientation="horizontal",
+                    shrink=0.4, pad=0.12, aspect=30)
+cbar.ax.tick_params(labelsize=10)
+
 fig.suptitle(
     "APAC anomalies vs atmospheric indices — linearly detrended, 1979–2022\n"
     "* p<0.05   . p<0.10",
@@ -316,7 +321,6 @@ fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
 print("Heatmap saved")
-
 # =============================================================================
 # 7. TERMINAL PREVIEW
 # =============================================================================
