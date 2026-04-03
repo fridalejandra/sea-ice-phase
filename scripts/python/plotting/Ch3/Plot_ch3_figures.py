@@ -4,15 +4,17 @@ Plot_ch3_figures.py
 All Chapter 3 figures for departmental seminar.
 
 Figures:
-  1.  sector_sie_anomaly.png           — sector SIE anomaly timeseries
-  2.  phase_anomaly_timeseries.png     — phase anomaly, fixed baseline, decade colours
-  3.  amplitude_anomaly_timeseries.png — amplitude anomaly, fixed baseline, decade colours
-  4.  season_length_timeseries.png     — growth + retreat season length anomaly
-  5.  rate_of_change.png               — advance + retreat rates
-  6.  rmse_improvement_by_sector.png   — RMSE comparison
+  1.  sector_sie_anomaly.png               — sector SIE anomaly timeseries
+  2.  phase_anomaly_timeseries.png         — phase anomaly, fixed baseline, decade colours
+  3.  amplitude_anomaly_timeseries.png     — amplitude anomaly, fixed baseline, decade colours
+  2_3. phase_amplitude_selected.png        — combined phase + amplitude, selected sectors
+  case_study_2023.png                      — 2023 record minimum case study
+  4.  season_length_timeseries.png         — growth + retreat season length anomaly
+  5.  rate_of_change.png                   — advance + retreat rates
+  6.  rmse_improvement_by_sector.png       — RMSE comparison
   7.  rolling_variance_phase_amplitude.png — 10-yr rolling std dev
   8.  phase_vs_amplitude_variability.png   — std dev comparison bars
-  bridge_phase_as_retreat_advance.png  — Himmich-style retreat/advance
+  bridge_phase_as_retreat_advance.png      — Himmich-style retreat/advance
 """
 
 import os
@@ -80,7 +82,6 @@ SECTOR_LABELS = {
 
 SECTORS = list(SECTOR_COLORS.keys())
 
-# Decade colours for Figs 2 & 3
 def decade_color(year):
     if year < 1990:   return "#888780"
     elif year < 2000: return "#378ADD"
@@ -157,7 +158,7 @@ def save(fig, name):
     print(f"  -> {name}")
     plt.close(fig)
 
-## =============================================================================
+# =============================================================================
 # FIG 1 — Sector SIE anomaly timeseries
 # =============================================================================
 print("\nFig 1: Sector SIE anomaly timeseries")
@@ -172,13 +173,11 @@ for col in SECTORS:
     sie[col] = uniform_filter1d(
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
 
-# Full record climatology
 clim_sie = sie.groupby("DOY")[SECTORS].mean()
 
 for col in SECTORS:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim_sie[col])
 
-# Annual mean anomaly
 annual_anom = (sie.groupby("Year")
                [[f"{col}_anom" for col in SECTORS]]
                .mean().reset_index())
@@ -191,57 +190,43 @@ for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
     yrs  = annual_anom["Year"].values
     vals = annual_anom[anom_col].values
 
-    # Fill above/below zero
     ax.fill_between(yrs, vals, 0,
                     where=vals >= 0, color="#378ADD",
                     alpha=0.8, linewidth=0, zorder=3)
     ax.fill_between(yrs, vals, 0,
                     where=vals < 0, color="#D4537E",
                     alpha=0.8, linewidth=0, zorder=3)
-
-    # Zero line
     ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
+    ax.axvline(2016, color="#2C2C2A", lw=1.2, ls="--", alpha=0.7, zorder=5)
 
-    # 2016 vertical line
-    ax.axvline(2016, color="#2C2C2A", lw=1.2,
-               ls="--", alpha=0.7, zorder=5)
-
-    # Pre and post 2016 mean lines
     pre_mean  = np.nanmean(vals[yrs < 2016])
     post_mean = np.nanmean(vals[yrs >= 2016])
 
     ax.hlines(pre_mean,  yrs[0], 2015,
-              colors="#888780", linewidth=1.5,
-              linestyle="-", zorder=5)
-    ax.hlines(post_mean, 2016, yrs[-1],
-              colors="#D4537E", linewidth=1.5,
-              linestyle="-", zorder=5)
+              colors="#888780", linewidth=2.0, linestyle="-", zorder=5)
+    ax.hlines(post_mean, 2016, 2022,
+              colors="#D4537E", linewidth=2.0, linestyle="-", zorder=5)
 
-    # Post-2016 mean annotation
     ax.text(0.97, 0.04,
             f"Post-2016: {post_mean:+.2f} Mkm²",
             transform=ax.transAxes, fontsize=8,
-            color="#D4537E", ha="right",
-            path_effects=stroke())
+            color="#D4537E", ha="right", path_effects=stroke())
 
-    ax.set_title(sec_label, fontsize=12,
-                 fontweight="bold", pad=8)
+    ax.set_title(sec_label, fontsize=12, fontweight="bold", pad=8)
     ax.tick_params(labelsize=10)
     ax.set_xlim(1977, 2024)
 
     if ax == axes[0]:
-        ax.set_ylabel("SIE anomaly (million km²)",
-                      fontsize=11, labelpad=8)
+        ax.set_ylabel("SIE anomaly (million km²)", fontsize=11, labelpad=8)
     ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
-fig.suptitle(
-    "Annual Mean SIE Anomaly by Sector — Full Record Climatology",
-    fontsize=14, fontweight="bold", y=1.01
-)
+fig.suptitle("Annual Mean SIE Anomaly by Sector — Full Record Climatology",
+             fontsize=14, fontweight="bold", y=1.01)
 fig.tight_layout()
 save(fig, "1_sector_sie_anomaly.png")
+
 # =============================================================================
-# FIG 2 — Phase anomaly timeseries (fixed baseline, decade colours)
+# FIG 2 & 3 — Phase and amplitude anomaly panels (all 5 sectors)
 # =============================================================================
 print("Fig 2: Phase anomaly timeseries")
 
@@ -302,17 +287,170 @@ plot_anomaly_panel(
     outfile = "2_phase_anomaly_timeseries.png"
 )
 
-# =============================================================================
-# FIG 3 — Amplitude anomaly timeseries (fixed baseline, decade colours)
-# =============================================================================
 print("Fig 3: Amplitude anomaly timeseries")
-
 plot_anomaly_panel(
     var     = "amplitude_anom_fixed",
     ylabel  = "Amplitude anomaly (million km²)\n← Smaller  |  Larger →",
     title   = "Seasonal Amplitude — Anomaly from 1979–2000 Baseline",
     outfile = "3_amplitude_anomaly_timeseries.png"
 )
+
+# =============================================================================
+# FIG 2+3 COMBINED — Phase and amplitude, selected sectors
+# 2 rows x 3 columns: Weddell, Ross, King Haakon
+# =============================================================================
+print("Fig 2+3 combined: selected sectors")
+
+SELECTED_SECTORS = {
+    "SIE_Weddell":     "Weddell",
+    "SIE_Ross":        "Ross",
+    "SIE_King_Haakon": "King Haakon",
+}
+
+SELECTED_COLORS = {
+    "SIE_Weddell":     "#2196F3",
+    "SIE_Ross":        "#4CAF50",
+    "SIE_King_Haakon": "#9C27B0",
+}
+
+fig, axes = plt.subplots(2, 3, figsize=(16, 8),
+                         sharex=True, sharey="row")
+
+row_vars    = ["max_doy_anom_fixed", "amplitude_anom_fixed"]
+row_ylabels = [
+    "Phase anomaly (days)\n← Ahead of phase  |  Behind phase →",
+    "Amplitude anomaly (million km²)\n← Smaller  |  Larger →"
+]
+row_titles  = ["Phase", "Amplitude"]
+
+for row, (var, ylabel) in enumerate(zip(row_vars, row_ylabels)):
+    for col, (sec_col, sec_label) in enumerate(SELECTED_SECTORS.items()):
+        ax    = axes[row, col]
+        sub   = annual[annual["sector"] == sec_col].sort_values("Year")
+        yrs   = sub["Year"].values
+        vals  = sub[var].values
+        color = SELECTED_COLORS[sec_col]
+
+        ax.axhline(0, color="#B4B2A9", lw=0.8, ls="--", zorder=1)
+        ax.axvline(2016, color="#D4537E", lw=1.2, ls="--",
+                   alpha=0.7, zorder=2)
+
+        for yr, val in zip(yrs, vals):
+            ax.scatter(yr, val, color=decade_color(yr),
+                       s=50, zorder=4, edgecolors="white", linewidth=0.5)
+
+        if len(vals) >= 5:
+            smooth = uniform_filter1d(vals, size=5, mode="nearest")
+            ax.plot(yrs, smooth, color=color, lw=2.5,
+                    zorder=3, alpha=0.9)
+
+        post_mean = sub[sub["Year"] >= 2016][var].mean()
+        ax.text(0.97, 0.04,
+                f"Post-2016: {post_mean:+.1f} days" if "doy" in var
+                else f"Post-2016: {post_mean:+.3f} Mkm²",
+                transform=ax.transAxes, fontsize=9,
+                color="#D4537E", ha="right", path_effects=stroke())
+
+        if row == 0:
+            ax.set_title(sec_label, fontsize=13,
+                         fontweight="bold", pad=10, color=color)
+
+        if col == 0:
+            ax.set_ylabel(ylabel, fontsize=10, labelpad=8)
+
+        if col == 2:
+            ax.text(1.03, 0.5, row_titles[row],
+                    transform=ax.transAxes,
+                    fontsize=11, fontweight="bold",
+                    color="#2C2C2A", va="center", rotation=270)
+
+        if row == 1:
+            ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
+
+        ax.tick_params(labelsize=10)
+        ax.set_xlim(1977, 2024)
+
+handles = [plt.scatter([], [], color=c, s=50,
+                       edgecolors="white", linewidth=0.5, label=l)
+           for c, l in DECADE_LEGEND]
+handles.append(Line2D([0], [0], color="#2C2C2A", lw=2.5,
+                       label="5-yr running mean"))
+
+fig.legend(handles=handles, loc="lower center", ncol=6,
+           fontsize=10, bbox_to_anchor=(0.5, -0.04), frameon=False)
+
+fig.suptitle(
+    "Phase and Amplitude Anomaly — Selected Sectors\n"
+    "Anomaly from 1979–2000 Baseline",
+    fontsize=14, fontweight="bold", y=1.01
+)
+fig.tight_layout(rect=[0, 0.04, 0.97, 1])
+save(fig, "2_3_phase_amplitude_selected.png")
+
+# =============================================================================
+# CASE STUDY — 2023 record minimum
+# =============================================================================
+print("Case study: 2023")
+
+case_year = 2023
+case_data = annual[annual["Year"] == case_year].copy()
+case_data = case_data.set_index("sector")
+
+sector_order_case = ["SIE_Weddell", "SIE_Amundsen_Bellingshausen",
+                     "SIE_Ross", "SIE_East_Antarctica", "SIE_King_Haakon"]
+labels_case = [SECTOR_LABELS[s] for s in sector_order_case]
+colors_case = [SECTOR_COLORS[s] for s in sector_order_case]
+
+phase_vals = [float(case_data.loc[s, "max_doy_anom"]) for s in sector_order_case]
+amp_vals   = [float(case_data.loc[s, "amplitude_anom"]) for s in sector_order_case]
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+for ax, vals, title, ylabel, fmt in zip(
+    axes,
+    [phase_vals, amp_vals],
+    ["Phase anomaly — 2023",
+     "Amplitude anomaly — 2023"],
+    ["Days (negative = ahead of phase)",
+     "Million km² (negative = smaller cycle)"],
+    ["{:+.0f}d", "{:+.2f}"]
+):
+    bars = ax.bar(labels_case, vals,
+                  color=colors_case,
+                  width=0.6, edgecolor="white", zorder=3)
+
+    ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
+
+    for bar, val in zip(bars, vals):
+        ypos = (bar.get_height() + max(abs(v) for v in vals) * 0.03
+                if val >= 0
+                else bar.get_height() - max(abs(v) for v in vals) * 0.06)
+        ax.text(bar.get_x() + bar.get_width() / 2, ypos,
+                fmt.format(val),
+                ha="center", va="bottom",
+                fontsize=11, fontweight="bold",
+                color="#2C2C2A", path_effects=stroke())
+
+    ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
+    ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
+    ax.tick_params(axis="x", rotation=20, labelsize=11)
+    ax.tick_params(axis="y", labelsize=10)
+    for lbl in ax.get_xticklabels():
+        lbl.set_ha("right")
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    yabs = max(abs(v) for v in vals)
+    ax.set_ylim(-yabs * 1.4, yabs * 1.4)
+
+fig.suptitle(
+    "2023 — Record Minimum: Same Signal, Different Mechanisms\n"
+    "APAC phase and amplitude anomalies by sector",
+    fontsize=13, fontweight="bold", y=1.02
+)
+fig.tight_layout()
+save(fig, "case_study_2023.png")
 
 # =============================================================================
 # FIG 4 — Season length timeseries
@@ -480,7 +618,6 @@ for row, (var, ylabel, row_title) in enumerate(
         sub  = annual[annual["sector"] == sec].sort_values("Year").set_index("Year")
         roll = sub[var].rolling(10, center=True, min_periods=6).std()
 
-        # Mask King Haakon pre-1988 SMMR artefact
         if sec == "SIE_King_Haakon":
             roll = roll[roll.index >= 1988]
 
@@ -489,7 +626,6 @@ for row, (var, ylabel, row_title) in enumerate(
         ax.fill_between(roll.index, roll.values,
                         color=SECTOR_COLORS[sec], alpha=0.15, zorder=2)
         shade2016(ax)
-        # removed zero dashed line
         ax.set_xlim(yr_min + 4, yr_max - 4)
 
         if row == 0:
@@ -500,7 +636,6 @@ for row, (var, ylabel, row_title) in enumerate(
             ax.set_xlabel("Year", fontsize=9)
             ax.tick_params(axis="x", rotation=30)
 
-# Remove the old annotate block and replace with this:
 for row, row_title in enumerate(row_titles):
     axes[row, 0].set_ylabel(row_title, fontsize=9)
 
