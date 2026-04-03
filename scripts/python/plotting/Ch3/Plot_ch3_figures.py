@@ -159,7 +159,7 @@ def save(fig, name):
     plt.close(fig)
 
 # =============================================================================
-# FIG 1 — Sector SIE anomaly timeseries + circumpolar
+# FIG 1 — Sector SIE anomaly timeseries + circumpolar (daily)
 # =============================================================================
 print("\nFig 1: Sector SIE anomaly timeseries")
 
@@ -170,7 +170,6 @@ sie["DOY"]   = sie["Date"].dt.dayofyear
 sie["Month"] = sie["Date"].dt.month
 sie = sie[sie["Year"].between(1979, 2022)].sort_values("Date").reset_index(drop=True)
 
-# All columns to process — sectors + circumpolar
 ALL_COLS = SECTORS + ["SIE_circumpolar"]
 
 for col in ALL_COLS:
@@ -184,19 +183,18 @@ clim_sie = (sie[sie["Year"].between(1979, 2010)]
 for col in ALL_COLS:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim_sie[col])
 
-# September mean anomaly
-sep_anom = (sie[sie["Month"] == 9]
-            .groupby("Year")[[f"{col}_anom" for col in ALL_COLS]]
-            .mean().reset_index())
+# Annual mean for pre/post mean lines
+annual_anom = (sie.groupby("Year")
+               [[f"{col}_anom" for col in ALL_COLS]]
+               .mean().reset_index())
 
-# Plot — 6 panels: 5 sectors + circumpolar
 PLOT_COLS = {
-    "SIE_Weddell":                 ("Weddell",       "#2196F3"),
-    "SIE_Amundsen_Bellingshausen": ("ABS",            "#F44336"),
-    "SIE_Ross":                    ("Ross",           "#4CAF50"),
-    "SIE_East_Antarctica":         ("East Antarctica","#FF9800"),
-    "SIE_King_Haakon":             ("King Haakon",    "#9C27B0"),
-    "SIE_circumpolar":             ("Circumpolar",    "#2C2C2A"),
+    "SIE_Weddell":                 ("Weddell",        "#2196F3"),
+    "SIE_Amundsen_Bellingshausen": ("ABS",             "#F44336"),
+    "SIE_Ross":                    ("Ross",            "#4CAF50"),
+    "SIE_East_Antarctica":         ("East Antarctica", "#FF9800"),
+    "SIE_King_Haakon":             ("King Haakon",     "#9C27B0"),
+    "SIE_circumpolar":             ("Circumpolar",     "#2C2C2A"),
 }
 
 fig, axes = plt.subplots(1, 6, figsize=(22, 5),
@@ -204,28 +202,39 @@ fig, axes = plt.subplots(1, 6, figsize=(22, 5),
 
 for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
     anom_col = f"{sec_col}_anom"
-    yrs  = sep_anom["Year"].values
-    vals = sep_anom[anom_col].values
 
-    ax.fill_between(yrs, vals, 0,
+    # Daily values for fill
+    dates = sie["Date"].values
+    vals  = sie[anom_col].values
+
+    ax.fill_between(dates, vals, 0,
                     where=vals >= 0, color="#378ADD",
                     alpha=0.8, linewidth=0, zorder=3)
-    ax.fill_between(yrs, vals, 0,
+    ax.fill_between(dates, vals, 0,
                     where=vals < 0, color="#D4537E",
                     alpha=0.8, linewidth=0, zorder=3)
 
     ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
-    ax.axvline(2016, color="#2C2C2A", lw=1.2,
-               ls="--", alpha=0.7, zorder=5)
 
-    pre_mean  = np.nanmean(vals[yrs < 2016])
-    post_mean = np.nanmean(vals[yrs >= 2016])
+    # 2016 vertical line
+    ax.axvline(pd.Timestamp("2016-01-01"), color="#2C2C2A",
+               lw=1.2, ls="--", alpha=0.7, zorder=5)
 
-    ax.hlines(pre_mean,  yrs[0], 2015,
-              colors="#888780", linewidth=2.0,
+    # Pre/post mean lines from annual means
+    ann_vals = annual_anom[anom_col].values
+    ann_yrs  = annual_anom["Year"].values
+    pre_mean  = np.nanmean(ann_vals[ann_yrs < 2016])
+    post_mean = np.nanmean(ann_vals[ann_yrs >= 2016])
+
+    ax.hlines(pre_mean,
+              pd.Timestamp("1979-01-01"),
+              pd.Timestamp("2015-12-31"),
+              colors="#888780", linewidth=1.5,
               linestyle="-", zorder=5)
-    ax.hlines(post_mean, 2016, 2022,
-              colors="#D4537E", linewidth=2.0,
+    ax.hlines(post_mean,
+              pd.Timestamp("2016-01-01"),
+              pd.Timestamp("2022-12-31"),
+              colors="#D4537E", linewidth=1.5,
               linestyle="-", zorder=5)
 
     ax.text(0.97, 0.04,
@@ -234,20 +243,19 @@ for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
             color="#D4537E", ha="right",
             path_effects=stroke())
 
-    # Circumpolar panel gets a dividing line on the left
     if sec_col == "SIE_circumpolar":
         ax.spines["left"].set_linewidth(2.0)
         ax.spines["left"].set_color("#B4B2A9")
         ax.set_title(sec_label, fontsize=12,
                      fontweight="bold", pad=8,
-                     color=sec_color,
-                     style="italic")
+                     color=sec_color, style="italic")
     else:
         ax.set_title(sec_label, fontsize=12,
                      fontweight="bold", pad=8)
 
-    ax.tick_params(labelsize=10)
-    ax.set_xlim(1977, 2024)
+    ax.tick_params(labelsize=9)
+    ax.set_xlim(pd.Timestamp("1979-01-01"),
+                pd.Timestamp("2023-01-01"))
 
     if ax == axes[0]:
         ax.set_ylabel("SIE anomaly (million km²)",
@@ -255,7 +263,7 @@ for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
     ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
 fig.suptitle(
-    "September SIE Anomaly by Sector — 1979–2010 Baseline",
+    "Daily SIE Anomaly by Sector — 1979–2010 Baseline  |  5-day running mean",
     fontsize=14, fontweight="bold", y=1.01
 )
 fig.tight_layout()
