@@ -117,10 +117,10 @@ print(f"  Annual : {len(annual)} rows | {yr_min}-{yr_max}")
 print(f"  Daily  : {len(daily)} rows")
 print(f"  RMSE   : {len(rmse)} rows")
 
-# Fixed 1979-2000 baseline anomalies
-baselines_doy = (annual[annual["Year"].between(1979, 2000)]
+# Fixed 1979-2010 baseline anomalies
+baselines_doy = (annual[annual["Year"].between(1979, 2010)]
                  .groupby("sector")["max_doy"].median())
-baselines_amp = (annual[annual["Year"].between(1979, 2000)]
+baselines_amp = (annual[annual["Year"].between(1979, 2010)]
                  .groupby("sector")["amplitude"].median())
 annual["max_doy_anom_fixed"]   = (annual["max_doy"] -
                                    annual["sector"].map(baselines_doy))
@@ -164,31 +164,35 @@ def save(fig, name):
 print("\nFig 1: Sector SIE anomaly timeseries")
 
 sie = pd.read_csv(SIE_CSV)
-sie["Date"] = pd.to_datetime(sie["Date"], format="%m/%d/%y")
-sie["Year"] = sie["Date"].dt.year
-sie["DOY"]  = sie["Date"].dt.dayofyear
+sie["Date"]  = pd.to_datetime(sie["Date"], format="%m/%d/%y")
+sie["Year"]  = sie["Date"].dt.year
+sie["DOY"]   = sie["Date"].dt.dayofyear
+sie["Month"] = sie["Date"].dt.month                          # ADD THIS
 sie = sie[sie["Year"].between(1979, 2022)].sort_values("Date").reset_index(drop=True)
 
 for col in SECTORS:
     sie[col] = uniform_filter1d(
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
 
-clim_sie = sie.groupby("DOY")[SECTORS].mean()
+# 1979-2010 baseline climatology
+clim_sie = (sie[sie["Year"].between(1979, 2010)]
+            .groupby("DOY")[SECTORS].mean())
 
 for col in SECTORS:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim_sie[col])
 
-annual_anom = (sie.groupby("Year")
-               [[f"{col}_anom" for col in SECTORS]]
-               .mean().reset_index())
+# September mean anomaly per sector per year
+sep_anom = (sie[sie["Month"] == 9]
+            .groupby("Year")[[f"{col}_anom" for col in SECTORS]]
+            .mean().reset_index())
 
 fig, axes = plt.subplots(1, 5, figsize=(18, 5),
                          sharey=False, sharex=True)
 
 for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
     anom_col = f"{sec_col}_anom"
-    yrs  = annual_anom["Year"].values
-    vals = annual_anom[anom_col].values
+    yrs  = sep_anom["Year"].values
+    vals = sep_anom[anom_col].values
 
     ax.fill_between(yrs, vals, 0,
                     where=vals >= 0, color="#378ADD",
@@ -197,31 +201,39 @@ for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
                     where=vals < 0, color="#D4537E",
                     alpha=0.8, linewidth=0, zorder=3)
     ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
-    ax.axvline(2016, color="#2C2C2A", lw=1.2, ls="--", alpha=0.7, zorder=5)
+    ax.axvline(2016, color="#2C2C2A", lw=1.2,
+               ls="--", alpha=0.7, zorder=5)
 
     pre_mean  = np.nanmean(vals[yrs < 2016])
     post_mean = np.nanmean(vals[yrs >= 2016])
 
     ax.hlines(pre_mean,  yrs[0], 2015,
-              colors="#888780", linewidth=2.0, linestyle="-", zorder=5)
+              colors="#888780", linewidth=2.0,
+              linestyle="-", zorder=5)
     ax.hlines(post_mean, 2016, 2022,
-              colors="#D4537E", linewidth=2.0, linestyle="-", zorder=5)
+              colors="#D4537E", linewidth=2.0,
+              linestyle="-", zorder=5)
 
     ax.text(0.97, 0.04,
             f"Post-2016: {post_mean:+.2f} Mkm²",
             transform=ax.transAxes, fontsize=8,
-            color="#D4537E", ha="right", path_effects=stroke())
+            color="#D4537E", ha="right",
+            path_effects=stroke())
 
-    ax.set_title(sec_label, fontsize=12, fontweight="bold", pad=8)
+    ax.set_title(sec_label, fontsize=12,
+                 fontweight="bold", pad=8)
     ax.tick_params(labelsize=10)
     ax.set_xlim(1977, 2024)
 
     if ax == axes[0]:
-        ax.set_ylabel("SIE anomaly (million km²)", fontsize=11, labelpad=8)
+        ax.set_ylabel("SIE anomaly (million km²)",
+                      fontsize=11, labelpad=8)
     ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
-fig.suptitle("Annual Mean SIE Anomaly by Sector — Full Record Climatology",
-             fontsize=14, fontweight="bold", y=1.01)
+fig.suptitle(
+    "September SIE Anomaly by Sector — 1979–2010 Baseline",
+    fontsize=14, fontweight="bold", y=1.01
+)
 fig.tight_layout()
 save(fig, "1_sector_sie_anomaly.png")
 
@@ -283,7 +295,7 @@ def plot_anomaly_panel(var, ylabel, title, outfile):
 plot_anomaly_panel(
     var     = "max_doy_anom_fixed",
     ylabel  = "Phase anomaly (days)\n← Ahead of phase  |  Behind phase →",
-    title   = "Timing of Sea Ice Maximum — Anomaly from 1979–2000 Baseline",
+    title   = "Timing of Sea Ice Maximum — Anomaly from 1979–2010 Baseline",
     outfile = "2_phase_anomaly_timeseries.png"
 )
 
@@ -291,7 +303,7 @@ print("Fig 3: Amplitude anomaly timeseries")
 plot_anomaly_panel(
     var     = "amplitude_anom_fixed",
     ylabel  = "Amplitude anomaly (million km²)\n← Smaller  |  Larger →",
-    title   = "Seasonal Amplitude — Anomaly from 1979–2000 Baseline",
+    title   = "Seasonal Amplitude — Anomaly from 1979–2100 Baseline",
     outfile = "3_amplitude_anomaly_timeseries.png"
 )
 
