@@ -308,15 +308,15 @@ for ax, apac_var, title in zip(
 # Fixed colorbar — horizontal, below figure
 cbar = fig.colorbar(im, ax=axes, label="Pearson r",
                     orientation="horizontal",
-                    shrink=0.4, pad=0.12, aspect=30)
+                    shrink=0.4, pad=0.20, aspect=30)
 cbar.ax.tick_params(labelsize=10)
 
 fig.suptitle(
-    "APAC anomalies vs atmospheric indices — linearly detrended, 1979–2022\n"
+    "APAC anomalies vs atmospheric indices — 1979–2022\n"
     "* p<0.05   . p<0.10",
     fontsize=11, y=1.02
 )
-fig.tight_layout()
+fig.subplots_adjust(bottom=0.25, top=0.88, left=0.05, right=0.95, wspace=0.05)
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
