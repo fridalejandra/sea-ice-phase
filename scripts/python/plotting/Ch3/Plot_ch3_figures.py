@@ -174,9 +174,7 @@ for col in SECTORS:
     sie[col] = uniform_filter1d(
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
 
-# 1981-2010 climatology
-clim_sie = (sie[sie["Year"].between(1979, 2024)]
-            .groupby("DOY")[SECTORS].mean())
+clim_sie = sie.groupby("DOY")[SECTORS].mean()
 
 for col in SECTORS:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim_sie[col])
@@ -273,10 +271,11 @@ for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
     ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
 fig.suptitle(
-    "Annual Mean SIE Anomaly by Sector — 1981–2010 Baseline\n"
+    "Annual Mean SIE Anomaly by Sector — Full Record Climatology\n"
     "Dashed lines = statistically detected change points (Pelt/RBF)",
     fontsize=13, fontweight="bold", y=1.02
 )
+
 fig.tight_layout()
 save(fig, "1_sector_sie_anomaly.png")
 # =============================================================================
