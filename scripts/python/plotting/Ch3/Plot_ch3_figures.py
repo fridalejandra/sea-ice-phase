@@ -158,9 +158,11 @@ def save(fig, name):
     plt.close(fig)
 
 # =============================================================================
-# FIG 1 — Sector SIE anomaly timeseries
+# FIG 1 — Sector SIE anomaly with change points
 # =============================================================================
-print("\nFig 1: Sector SIE anomaly timeseries")
+print("\nFig 1: Sector SIE anomaly with change points")
+
+import ruptures as rpt
 
 sie = pd.read_csv(SIE_CSV)
 sie["Date"] = pd.to_datetime(sie["Date"], format="%m/%d/%y")
@@ -172,35 +174,93 @@ for col in SECTORS:
     sie[col] = uniform_filter1d(
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
 
-clim_sie = (sie[sie["Year"].between(1979, 2000)]
+# 1981-2010 climatology
+clim_sie = (sie[sie["Year"].between(1981, 2010)]
             .groupby("DOY")[SECTORS].mean())
 
 for col in SECTORS:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim_sie[col])
 
+# Annual mean anomaly
 annual_anom = (sie.groupby("Year")
                [[f"{col}_anom" for col in SECTORS]]
                .mean().reset_index())
 
+# Change point detection per sector
+def detect_changepoints(series, n_bkps=2):
+    """Detect n_bkps change points using Pelt with RBF cost."""
+    vals = series.dropna().values
+    algo = rpt.Pelt(model="rbf").fit(vals)
+    try:
+        bkps = algo.predict(n_bkps=n_bkps)
+        # bkps are indices — convert to years
+        years = series.dropna().index.values
+        # Last breakpoint is always len(signal) — exclude it
+        cp_years = [years[b - 1] for b in bkps[:-1]]
+        return cp_years
+    except Exception:
+        return []
+
+# Detect and print change points per sector
+print("\nChange points detected (n=2):")
+sector_changepoints = {}
+for sec_col, sec_label in SECTOR_LABELS.items():
+    anom_col = f"{sec_col}_anom"
+    series = annual_anom.set_index("Year")[anom_col]
+    cps = detect_changepoints(series, n_bkps=2)
+    sector_changepoints[sec_col] = cps
+    print(f"  {sec_label}: {cps}")
+
+# Plot
 fig, axes = plt.subplots(1, 5, figsize=(18, 5),
                          sharey=False, sharex=True)
+
+PERIOD_COLORS = ["#888780", "#378ADD", "#D4537E"]  # grey, blue, red
 
 for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
     anom_col = f"{sec_col}_anom"
     yrs  = annual_anom["Year"].values
     vals = annual_anom[anom_col].values
+    cps  = sector_changepoints[sec_col]
 
-    ax.fill_between(yrs, vals, 0,
-                    where=vals >= 0, color="#378ADD",
-                    alpha=0.7, linewidth=0, zorder=3)
-    ax.fill_between(yrs, vals, 0,
-                    where=vals < 0, color="#D4537E",
-                    alpha=0.7, linewidth=0, zorder=3)
+    # Define period boundaries
+    boundaries = [yrs[0]] + cps + [yrs[-1] + 1]
+
+    # Fill each period with its colour
+    for i in range(len(boundaries) - 1):
+        y_start = boundaries[i]
+        y_end   = boundaries[i + 1]
+        mask    = (yrs >= y_start) & (yrs < y_end)
+        color   = PERIOD_COLORS[i % len(PERIOD_COLORS)]
+
+        ax.fill_between(yrs[mask], vals[mask], 0,
+                        where=vals[mask] >= 0,
+                        color="#378ADD", alpha=0.8,
+                        linewidth=0, zorder=3)
+        ax.fill_between(yrs[mask], vals[mask], 0,
+                        where=vals[mask] < 0,
+                        color="#D4537E", alpha=0.8,
+                        linewidth=0, zorder=3)
+
+        # Period mean line
+        period_mean = np.nanmean(vals[mask])
+        ax.hlines(period_mean, y_start, y_end - 1,
+                  colors=color, linewidth=2.0,
+                  linestyle="-", zorder=5)
+
+    # Change point vertical lines
+    for cp in cps:
+        ax.axvline(cp, color="#2C2C2A", lw=1.2,
+                   ls="--", alpha=0.7, zorder=6)
+        ax.text(cp + 0.3, ax.get_ylim()[1] if ax.get_ylim()[1] != 0 else 0.5,
+                str(cp), fontsize=8, color="#2C2C2A",
+                va="top", path_effects=stroke())
+
     ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
-    ax.axvline(2016, color="#2C2C2A", lw=1.0, ls="--", alpha=0.5, zorder=4)
 
-    post_mean = annual_anom[annual_anom["Year"] >= 2016][anom_col].mean()
-    ax.text(0.97, 0.04, f"Post-2016: {post_mean:+.2f} Mkm²",
+    post_mean = np.nanmean(vals[yrs >= (cps[-1] if cps else 2016)])
+    ax.text(0.97, 0.04,
+            f"Post-{cps[-1] if cps else 2016}: {post_mean:+.2f} Mkm²",
             transform=ax.transAxes, fontsize=8,
             color="#D4537E", ha="right", path_effects=stroke())
 
@@ -212,11 +272,13 @@ for ax, (sec_col, sec_label) in zip(axes, SECTOR_LABELS.items()):
         ax.set_ylabel("SIE anomaly (million km²)", fontsize=11, labelpad=8)
     ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
-fig.suptitle("Annual Mean SIE Anomaly by Sector — 1979–2000 Baseline",
-             fontsize=14, fontweight="bold", y=1.01)
+fig.suptitle(
+    "Annual Mean SIE Anomaly by Sector — 1981–2010 Baseline\n"
+    "Dashed lines = statistically detected change points (Pelt/RBF)",
+    fontsize=13, fontweight="bold", y=1.02
+)
 fig.tight_layout()
 save(fig, "1_sector_sie_anomaly.png")
-
 # =============================================================================
 # FIG 2 — Phase anomaly timeseries (fixed baseline, decade colours)
 # =============================================================================
