@@ -175,7 +175,7 @@ for col in SECTORS:
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
 
 # 1981-2010 climatology
-clim_sie = (sie[sie["Year"].between(1981, 2010)]
+clim_sie = (sie[sie["Year"].between(1979, 2024)]
             .groupby("DOY")[SECTORS].mean())
 
 for col in SECTORS:
