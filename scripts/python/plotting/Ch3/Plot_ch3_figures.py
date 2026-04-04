@@ -544,6 +544,89 @@ plot_case_study(
 )
 
 # =============================================================================
+# CASE STUDY COMBINED — 2016 vs 2023 side by side (2x2)
+# Top row: phase anomaly 2016 | phase anomaly 2023
+# Bottom row: amplitude anomaly 2016 | amplitude anomaly 2023
+# Shared y-axes within each row for direct comparison
+# =============================================================================
+print("Case study combined: 2016 vs 2023")
+
+sector_order_case = ["SIE_Weddell", "SIE_Amundsen_Bellingshausen",
+                     "SIE_Ross", "SIE_East_Antarctica", "SIE_King_Haakon"]
+labels_case = [SECTOR_LABELS[s] for s in sector_order_case]
+colors_case = [SECTOR_COLORS[s] for s in sector_order_case]
+
+def get_vals(year, var):
+    d = annual[annual["Year"] == year].set_index("sector")
+    return [float(d.loc[s, var]) for s in sector_order_case]
+
+phase_2016 = get_vals(2016, "max_doy_raw_anom_2015")
+phase_2023 = get_vals(2023, "max_doy_raw_anom_2015")
+amp_2016   = get_vals(2016, "amplitude_raw_anom_2015")
+amp_2023   = get_vals(2023, "amplitude_raw_anom_2015")
+
+# Shared y limits within each row
+phase_ylim = max(abs(v) for v in phase_2016 + phase_2023) * 1.4
+amp_ylim   = max(abs(v) for v in amp_2016   + amp_2023)   * 1.4
+
+fig, axes = plt.subplots(2, 2, figsize=(16, 10),
+                         sharex=False, sharey="row")
+
+plot_data = [
+    (axes[0, 0], phase_2016, "Phase anomaly — 2016",
+     "Days\n(negative = ahead of phase)", "{:+.0f}d", phase_ylim),
+    (axes[0, 1], phase_2023, "Phase anomaly — 2023",
+     "", "{:+.0f}d", phase_ylim),
+    (axes[1, 0], amp_2016,   "Amplitude anomaly — 2016",
+     "Million km²\n(negative = smaller cycle)", "{:+.2f}", amp_ylim),
+    (axes[1, 1], amp_2023,   "Amplitude anomaly — 2023",
+     "", "{:+.2f}", amp_ylim),
+]
+
+for ax, vals, title, ylabel, fmt, ylim in plot_data:
+    bars = ax.bar(labels_case, vals, color=colors_case,
+                  width=0.6, edgecolor="white", zorder=3)
+    ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
+
+    for bar, val in zip(bars, vals):
+        ypos = (bar.get_height() + ylim * 0.03
+                if val >= 0
+                else bar.get_height() - ylim * 0.06)
+        ax.text(bar.get_x() + bar.get_width()/2, ypos,
+                fmt.format(val),
+                ha="center", va="bottom",
+                fontsize=10, fontweight="bold",
+                color="#2C2C2A", path_effects=stroke())
+
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=10)
+    ax.set_ylim(-ylim, ylim)
+    ax.tick_params(axis="x", rotation=20, labelsize=10)
+    for lbl in ax.get_xticklabels():
+        lbl.set_ha("right")
+    ax.tick_params(axis="y", labelsize=10)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
+
+# Column labels at top
+axes[0, 0].annotate("2016", xy=(0.5, 1.08), xycoords="axes fraction",
+                    ha="center", fontsize=14, fontweight="bold",
+                    color="#D85A30")
+axes[0, 1].annotate("2023", xy=(0.5, 1.08), xycoords="axes fraction",
+                    ha="center", fontsize=14, fontweight="bold",
+                    color="#BA7517")
+
+fig.suptitle(
+    "2016 vs 2023 — Phase and Amplitude Anomalies by Sector\n"
+    "Anomaly from 1979–2015 baseline",
+    fontsize=13, fontweight="bold", y=1.01
+)
+fig.tight_layout()
+save(fig, "case_study_2016_vs_2023.png")
+
+# =============================================================================
 # FIG 4 — Season length timeseries
 # =============================================================================
 print("Fig 4: Season length")
