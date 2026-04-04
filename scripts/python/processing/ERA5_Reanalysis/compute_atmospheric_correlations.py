@@ -476,9 +476,12 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                 cell_sig = sig_sub.values[i, j]
                 if cell_sig in ["*", "."]:
                     yoff = -0.32 if yr == 2016 else 0.32
-                    ax.plot(j + 0.35, i + yoff, "o",
-                            color=col, markersize=8,
-                            markeredgecolor="white", markeredgewidth=0.8,
+                    marker = "o" if yr == 2016 else "D"
+                    mfc = "black" if yr == 2016 else "white"
+                    mec = "white" if yr == 2016 else "black"
+                    ax.plot(j + 0.35, i + yoff, marker,
+                            color=mfc, markersize=8,
+                            markeredgecolor=mec, markeredgewidth=0.8,
                             zorder=5, clip_on=False)
 
 # Divider between SIE and Phase panels
@@ -497,10 +500,12 @@ cbar.ax.tick_params(labelsize=10)
 # Legend for overlay dots
 from matplotlib.lines import Line2D
 legend_elements = [
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="#D85A30",
-           markersize=7, label="2016 index anomalous (|z|>0.8)"),
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="#BA7517",
-           markersize=7, label="2023 index anomalous (|z|>0.8)"),
+    Line2D([0], [0], marker="o", color="w", markerfacecolor="black",
+           markeredgecolor="white", markeredgewidth=0.8,
+           markersize=8, label="2016 index anomalous (|z|>0.8)"),
+    Line2D([0], [0], marker="D", color="w", markerfacecolor="white",
+           markeredgecolor="black", markeredgewidth=0.8,
+           markersize=8, label="2023 index anomalous (|z|>0.8)"),
 ]
 fig.legend(handles=legend_elements, loc="lower center",
            ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.01),
