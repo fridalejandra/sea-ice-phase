@@ -382,35 +382,49 @@ print(f"\nCorrelations computed: {len(corr_df)} rows")
 
 # =============================================================================
 # 7. HEATMAP — 3 panels: SIE anomaly | Phase | Amplitude
-# The SIE anomaly panel demonstrates the conflation argument
+# Trimmed to 6 indices. Colorbar below plots. 2016/2023 overlay dots.
 # =============================================================================
 
 plt.rcParams.update({"font.family": "Nimbus Sans"})
 
 HEATMAP_INDICES = [
     "SAM_annual", "SAM_SON", "SAM_DJF",
-    "AAO_annual", "AAO_SON", "AAO_DJF",
-    "ZW3R_annual", "ZW3G_PC2",
+    "ZW3R_annual",
     "ASL_SON", "ASL_DJF",
 ]
 HEATMAP_LABELS = [
     "SAM\nannual", "SAM\nSON", "SAM\nDJF",
-    "AAO\nannual", "AAO\nSON", "AAO\nDJF",
-    "ZW3\nRaphael", "ZW3\nGoyal PC2",
+    "ZW3\nRaphael",
     "ASL\nSON", "ASL\nDJF",
 ]
 
 sector_order = ["Weddell", "ABS", "Ross", "East Antarctica", "King Haakon"]
 
-# Three panels: SIE anomaly, Phase, Amplitude
 panel_vars   = ["SIE anomaly", "Phase anomaly", "Amplitude anomaly"]
 panel_titles = [
-    "Raw SIE anomaly vs atmospheric indices\n(conflates phase + amplitude)",
-    "Phase anomaly (max DOY) vs atmospheric indices",
-    "Amplitude anomaly vs atmospheric indices",
+    "Raw SIE anomaly\nvs atmospheric indices",
+    "Phase anomaly (max DOY)\nvs atmospheric indices",
+    "Amplitude anomaly\nvs atmospheric indices",
 ]
 
-fig, axes = plt.subplots(1, 3, figsize=(22, 5), sharey=True)
+# --- Compute normalised index anomalies for 2016 and 2023 overlay -----------
+# For each index, compute the z-score of 2016 and 2023 relative to full record
+# We'll overlay a marker on cells where the index was notably anomalous
+# (|z| > 1.0) in that year AND the correlation is significant
+
+overlay_years = {2016: "#D85A30", 2023: "#BA7517"}
+
+index_zscores = {}
+for idx_col in HEATMAP_INDICES:
+    if idx_col not in idx.columns:
+        continue
+    s = idx.set_index("Year")[idx_col].dropna()
+    mu, sd = s.mean(), s.std()
+    if sd > 0:
+        index_zscores[idx_col] = {yr: (s.get(yr, np.nan) - mu) / sd
+                                  for yr in overlay_years}
+
+fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
 
 for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
     sub = corr_df[
@@ -431,11 +445,12 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                    cmap="RdBu_r", vmin=-0.6, vmax=0.6, aspect="auto")
 
     ax.set_xticks(range(len(HEATMAP_LABELS)))
-    ax.set_xticklabels(HEATMAP_LABELS, fontsize=9)
+    ax.set_xticklabels(HEATMAP_LABELS, fontsize=10)
     ax.set_yticks(range(len(sector_order)))
     ax.set_yticklabels(sector_order, fontsize=11)
     ax.set_title(title, fontsize=11, fontweight="bold", pad=10)
 
+    # r values and significance
     for i in range(len(sector_order)):
         for j in range(len(HEATMAP_LABELS)):
             r_val = sub.values[i, j]
@@ -451,22 +466,56 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-# Vertical divider between SIE panel and Phase panel
-axes[0].spines["right"].set_linewidth(2.0)
-axes[0].spines["right"].set_color("#B4B2A9")
+    # 2016 / 2023 overlay — dot in corner of cell if:
+    #   (a) correlation is significant AND
+    #   (b) the index was anomalous (|z| > 0.8) in that year
+    for j, (idx_col, idx_label) in enumerate(zip(HEATMAP_INDICES, HEATMAP_LABELS)):
+        for yr, col in overlay_years.items():
+            z = index_zscores.get(idx_col, {}).get(yr, np.nan)
+            if np.isnan(z) or abs(z) < 0.8:
+                continue
+            # Check if any sector has a significant correlation for this index
+            for i, sec in enumerate(sector_order):
+                cell_sig = sig_sub.values[i, j]
+                if cell_sig in ["*", "."]:
+                    # Place small dot at top-right (2016) or bottom-right (2023)
+                    yoff = -0.32 if yr == 2016 else 0.32
+                    ax.plot(j + 0.35, i + yoff, "o",
+                            color=col, markersize=5,
+                            markeredgecolor="white", markeredgewidth=0.5,
+                            zorder=5, clip_on=False)
 
-cbar = fig.colorbar(im, ax=axes, label="Pearson r",
+# Divider between SIE and Phase panels
+axes[0].spines["right"].set_linewidth(2.0)
+axes[0].spines["right"].set_color("#888780")
+
+# Colorbar — below the plots, properly positioned
+fig.subplots_adjust(bottom=0.22, top=0.88, left=0.06,
+                    right=0.97, wspace=0.06)
+cbar = fig.colorbar(im, ax=axes,
                     orientation="horizontal",
-                    shrink=0.35, pad=0.22, aspect=30)
+                    fraction=0.03, pad=0.18, aspect=40,
+                    label="Pearson r")
 cbar.ax.tick_params(labelsize=10)
+
+# Legend for overlay dots
+from matplotlib.lines import Line2D
+legend_elements = [
+    Line2D([0], [0], marker="o", color="w", markerfacecolor="#D85A30",
+           markersize=7, label="2016 index anomalous (|z|>0.8)"),
+    Line2D([0], [0], marker="o", color="w", markerfacecolor="#BA7517",
+           markersize=7, label="2023 index anomalous (|z|>0.8)"),
+]
+fig.legend(handles=legend_elements, loc="lower center",
+           ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.01),
+           frameon=False)
 
 fig.suptitle(
     "APAC anomalies vs atmospheric indices — 1979–2022\n"
-    "* p<0.05   . p<0.10   |   all series linearly detrended",
-    fontsize=11, y=1.02
+    "* p<0.05   . p<0.10   |   all series linearly detrended   "
+    "|   dots = index anomalous in 2016 / 2023",
+    fontsize=10, y=1.0
 )
-fig.subplots_adjust(bottom=0.25, top=0.88, left=0.04,
-                    right=0.97, wspace=0.08)
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
