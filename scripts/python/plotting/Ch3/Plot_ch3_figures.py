@@ -544,37 +544,37 @@ fig.suptitle("Growth and Retreat Season Length Anomaly by Sector",
 fig.tight_layout()
 save(fig, "4_season_length_timeseries.png")
 
-# =============================================================================
-# FIG 5 — Rate of change
-# =============================================================================
-print("Fig 5: Rate of change")
-
-def compute_rates(daily_df, annual_df):
-    records = []
-    for sec in SECTORS:
-        d = daily_df[daily_df["sector"]==sec].sort_values(["Year","Date"]).copy()
-        a = annual_df[annual_df["sector"]==sec][["Year","min_doy","max_doy"]]
-        d["dSIE"] = d.groupby("Year")["fitted_amp"].diff()
-        for _, row in a.iterrows():
-            yr = int(row["Year"])
-            yd = d[d["Year"]==yr]
-            if len(yd) < 20:
-                continue
-            adv = yd[(yd["DOY"] >= row["min_doy"]) & (yd["DOY"] <= row["max_doy"])]
-            ret = yd[(yd["DOY"] > row["max_doy"]) | (yd["DOY"] < row["min_doy"])]
-            records.append({
-                "sector"      : sec,
-                "Year"        : yr,
-                "advance_rate": adv["dSIE"].mean(),
-                "retreat_rate": ret["dSIE"].mean(),
-            })
-    return pd.DataFrame(records)
-
-rate_df = compute_rates(daily, annual)
+# # =============================================================================
+# # FIG 5 — Rate of change
+# # =============================================================================
+# print("Fig 5: Rate of change")
+#
+# def compute_rates(daily_df, annual_df):
+#     records = []
+#     for sec in SECTORS:
+#         d = daily_df[daily_df["sector"]==sec].sort_values(["Year","Date"]).copy()
+#         a = annual_df[annual_df["sector"]==sec][["Year","min_doy","max_doy"]]
+#         d["dSIE"] = d.groupby("Year")["fitted_amp"].diff()
+#         for _, row in a.iterrows():
+#             yr = int(row["Year"])
+#             yd = d[d["Year"]==yr]
+#             if len(yd) < 20:
+#                 continue
+#             adv = yd[(yd["DOY"] >= row["min_doy"]) & (yd["DOY"] <= row["max_doy"])]
+#             ret = yd[(yd["DOY"] > row["max_doy"]) | (yd["DOY"] < row["min_doy"])]
+#             records.append({
+#                 "sector"      : sec,
+#                 "Year"        : yr,
+#                 "advance_rate": adv["dSIE"].mean(),
+#                 "retreat_rate": ret["dSIE"].mean(),
+#             })
+#     return pd.DataFrame(records)
+#
+# rate_df = compute_rates(daily, annual)
 
 fig, axes = plt.subplots(2, 1, figsize=(13, 8), sharex=True)
 for sec in SECTORS:
-    sub = rate_df[rate_df["sector"]==sec].sort_values("Year")
+  #  sub = rate_df[rate_df["sector"]==sec].sort_values("Year")
     c = SECTOR_COLORS[sec]
     l = SECTOR_LABELS[sec]
     axes[0].plot(sub["Year"], sub["advance_rate"], color=c, lw=1.5, label=l)
