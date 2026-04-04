@@ -119,12 +119,12 @@ print(f"  RMSE   : {len(rmse)} rows")
 
 # Fixed 1979-2010 baseline anomalies
 baselines_doy = (annual[annual["Year"].between(1979, 2010)]
-                 .groupby("sector")["max_doy"].median())
+                 .groupby("sector")["max_doy_fitted"].median())
 baselines_amp = (annual[annual["Year"].between(1979, 2010)]
-                 .groupby("sector")["amplitude"].median())
-annual["max_doy_anom_fixed"]   = (annual["max_doy"] -
+                 .groupby("sector")["amplitude_fitted"].median())
+annual["max_doy_anom_fixed"]   = (annual["max_doy_fitted"] -
                                    annual["sector"].map(baselines_doy))
-annual["amplitude_anom_fixed"] = (annual["amplitude"] -
+annual["amplitude_anom_fixed"] = (annual["amplitude_fitted"] -
                                    annual["sector"].map(baselines_amp))
 print("Fixed baseline anomalies computed")
 
