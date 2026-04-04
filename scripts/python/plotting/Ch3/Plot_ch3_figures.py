@@ -8,9 +8,9 @@ Figures:
   2.  phase_anomaly_timeseries.png         — phase anomaly, fixed baseline, decade colours
   3.  amplitude_anomaly_timeseries.png     — amplitude anomaly, fixed baseline, decade colours
   2_3. phase_amplitude_selected.png        — combined phase + amplitude, selected sectors
+  case_study_2016.png                      — 2016 anomalous decay case study
   case_study_2023.png                      — 2023 record minimum case study
   4.  season_length_timeseries.png         — growth + retreat season length anomaly
-  5.  rate_of_change.png                   — advance + retreat rates
   6.  rmse_improvement_by_sector.png       — RMSE comparison
   7.  rolling_variance_phase_amplitude.png — 10-yr rolling std dev
   8.  phase_vs_amplitude_variability.png   — std dev comparison bars
@@ -107,7 +107,7 @@ daily  = pd.read_csv(DAILY_CSV,  parse_dates=["Date"])
 rmse   = pd.read_csv(RMSE_CSV)
 
 for col in ["min_doy_anom", "max_doy_anom", "amplitude_anom",
-            "amplitude", "min_doy", "max_doy"]:
+            "amplitude_fitted", "min_doy_fitted", "max_doy_fitted"]:
     if col in annual.columns:
         annual[col] = pd.to_numeric(annual[col], errors="coerce")
 
@@ -141,14 +141,6 @@ def shade2016(ax):
 def xlim(ax):
     ax.set_xlim(yr_min - 0.5, yr_max + 0.5)
 
-def bar_labels(ax, bars, vals, fmt="{:.1f}"):
-    for bar, val in zip(bars, vals):
-        if pd.notna(val):
-            ax.text(bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() + max(v for v in vals if pd.notna(v)) * 0.02,
-                    fmt.format(val),
-                    ha="center", va="bottom", fontsize=9, fontweight="bold")
-
 def stroke():
     return [pe.withStroke(linewidth=2, foreground="white")]
 
@@ -176,14 +168,12 @@ for col in ALL_COLS:
     sie[col] = uniform_filter1d(
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
 
-# 1979-2010 baseline climatology
 clim_sie = (sie[sie["Year"].between(1979, 2010)]
             .groupby("DOY")[ALL_COLS].mean())
 
 for col in ALL_COLS:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim_sie[col])
 
-# Annual mean for pre/post mean lines
 annual_anom = (sie.groupby("Year")
                [[f"{col}_anom" for col in ALL_COLS]]
                .mean().reset_index())
@@ -202,8 +192,6 @@ fig, axes = plt.subplots(1, 6, figsize=(22, 5),
 
 for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
     anom_col = f"{sec_col}_anom"
-
-    # Daily values for fill
     dates = sie["Date"].values
     vals  = sie[anom_col].values
 
@@ -215,51 +203,41 @@ for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
                     alpha=0.8, linewidth=0, zorder=3)
 
     ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
-
-    # 2016 vertical line
     ax.axvline(pd.Timestamp("2016-01-01"), color="#2C2C2A",
                lw=1.2, ls="--", alpha=0.7, zorder=5)
 
-    # Pre/post mean lines from annual means
-    ann_vals = annual_anom[anom_col].values
-    ann_yrs  = annual_anom["Year"].values
+    ann_vals  = annual_anom[anom_col].values
+    ann_yrs   = annual_anom["Year"].values
     pre_mean  = np.nanmean(ann_vals[ann_yrs < 2016])
     post_mean = np.nanmean(ann_vals[ann_yrs >= 2016])
 
     ax.hlines(pre_mean,
               pd.Timestamp("1979-01-01"),
               pd.Timestamp("2015-12-31"),
-              colors="#888780", linewidth=1.5,
-              linestyle="-", zorder=5)
+              colors="#888780", linewidth=1.5, linestyle="-", zorder=5)
     ax.hlines(post_mean,
               pd.Timestamp("2016-01-01"),
               pd.Timestamp("2022-12-31"),
-              colors="#D4537E", linewidth=1.5,
-              linestyle="-", zorder=5)
+              colors="#D4537E", linewidth=1.5, linestyle="-", zorder=5)
 
     ax.text(0.97, 0.04,
             f"Post-2016: {post_mean:+.2f} Mkm²",
             transform=ax.transAxes, fontsize=8,
-            color="#D4537E", ha="right",
-            path_effects=stroke())
+            color="#D4537E", ha="right", path_effects=stroke())
 
     if sec_col == "SIE_circumpolar":
         ax.spines["left"].set_linewidth(2.0)
         ax.spines["left"].set_color("#B4B2A9")
-        ax.set_title(sec_label, fontsize=12,
-                     fontweight="bold", pad=8,
+        ax.set_title(sec_label, fontsize=12, fontweight="bold", pad=8,
                      color=sec_color, style="italic")
     else:
-        ax.set_title(sec_label, fontsize=12,
-                     fontweight="bold", pad=8)
+        ax.set_title(sec_label, fontsize=12, fontweight="bold", pad=8)
 
     ax.tick_params(labelsize=9)
-    ax.set_xlim(pd.Timestamp("1979-01-01"),
-                pd.Timestamp("2023-01-01"))
+    ax.set_xlim(pd.Timestamp("1979-01-01"), pd.Timestamp("2023-01-01"))
 
     if ax == axes[0]:
-        ax.set_ylabel("SIE anomaly (million km²)",
-                      fontsize=11, labelpad=8)
+        ax.set_ylabel("SIE anomaly (million km²)", fontsize=11, labelpad=8)
     ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
 fig.suptitle(
@@ -272,7 +250,6 @@ save(fig, "1_sector_sie_anomaly.png")
 # =============================================================================
 # FIG 2, 3 & COMBINED — Phase and amplitude anomaly figures
 # =============================================================================
-
 print("Fig 2: Phase anomaly timeseries")
 
 def plot_anomaly_panel(var, ylabel, title, outfile):
@@ -285,8 +262,7 @@ def plot_anomaly_panel(var, ylabel, title, outfile):
         vals = sub[var].values
 
         ax.axhline(0, color="#B4B2A9", lw=0.8, ls="--", zorder=1)
-        ax.axvline(2016, color="#D4537E", lw=1.2, ls="--",
-                   alpha=0.7, zorder=2)
+        ax.axvline(2016, color="#D4537E", lw=1.2, ls="--", alpha=0.7, zorder=2)
 
         for yr, val in zip(yrs, vals):
             ax.scatter(yr, val, color=decade_color(yr),
@@ -294,8 +270,7 @@ def plot_anomaly_panel(var, ylabel, title, outfile):
 
         if len(vals) >= 5:
             smooth = uniform_filter1d(vals, size=5, mode="nearest")
-            ax.plot(yrs, smooth, color="#2C2C2A", lw=2.0,
-                    zorder=3, alpha=0.85)
+            ax.plot(yrs, smooth, color="#2C2C2A", lw=2.0, zorder=3, alpha=0.85)
 
         post_mean = sub[sub["Year"] >= 2016][var].mean()
         ax.text(0.97, 0.04,
@@ -343,7 +318,6 @@ plot_anomaly_panel(
 
 # =============================================================================
 # FIG 2+3 COMBINED — Phase and amplitude, selected sectors
-# 2 rows x 3 columns: Weddell, Ross, King Haakon
 # =============================================================================
 print("Fig 2+3 combined: selected sectors")
 
@@ -359,8 +333,7 @@ SELECTED_COLORS = {
     "SIE_King_Haakon": "#9C27B0",
 }
 
-fig, axes = plt.subplots(2, 3, figsize=(16, 8),
-                         sharex=True, sharey="row")
+fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharex=True, sharey="row")
 
 row_vars    = ["max_doy_anom_fixed", "amplitude_anom_fixed"]
 row_ylabels = [
@@ -378,8 +351,7 @@ for row, (var, ylabel) in enumerate(zip(row_vars, row_ylabels)):
         color = SELECTED_COLORS[sec_col]
 
         ax.axhline(0, color="#B4B2A9", lw=0.8, ls="--", zorder=1)
-        ax.axvline(2016, color="#D4537E", lw=1.2, ls="--",
-                   alpha=0.7, zorder=2)
+        ax.axvline(2016, color="#D4537E", lw=1.2, ls="--", alpha=0.7, zorder=2)
 
         for yr, val in zip(yrs, vals):
             ax.scatter(yr, val, color=decade_color(yr),
@@ -387,8 +359,7 @@ for row, (var, ylabel) in enumerate(zip(row_vars, row_ylabels)):
 
         if len(vals) >= 5:
             smooth = uniform_filter1d(vals, size=5, mode="nearest")
-            ax.plot(yrs, smooth, color=color, lw=2.5,
-                    zorder=3, alpha=0.9)
+            ax.plot(yrs, smooth, color=color, lw=2.5, zorder=3, alpha=0.9)
 
         post_mean = sub[sub["Year"] >= 2016][var].mean()
         ax.text(0.97, 0.04,
@@ -398,18 +369,14 @@ for row, (var, ylabel) in enumerate(zip(row_vars, row_ylabels)):
                 color="#D4537E", ha="right", path_effects=stroke())
 
         if row == 0:
-            ax.set_title(sec_label, fontsize=13,
-                         fontweight="bold", pad=10, color=color)
-
+            ax.set_title(sec_label, fontsize=13, fontweight="bold",
+                         pad=10, color=color)
         if col == 0:
             ax.set_ylabel(ylabel, fontsize=10, labelpad=8)
-
         if col == 2:
             ax.text(1.03, 0.5, row_titles[row],
-                    transform=ax.transAxes,
-                    fontsize=11, fontweight="bold",
+                    transform=ax.transAxes, fontsize=11, fontweight="bold",
                     color="#2C2C2A", va="center", rotation=270)
-
         if row == 1:
             ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
@@ -432,70 +399,84 @@ fig.suptitle(
 )
 fig.tight_layout(rect=[0, 0.04, 0.97, 1])
 save(fig, "2_3_phase_amplitude_selected.png")
+
 # =============================================================================
-# CASE STUDY — 2023 record minimum
+# CASE STUDY — helper function (used for both 2016 and 2023)
 # =============================================================================
-print("Case study: 2023")
 
-case_year = 2023
-case_data = annual[annual["Year"] == case_year].copy()
-case_data = case_data.set_index("sector")
+def plot_case_study(case_year, suptitle, outfile):
+    print(f"Case study: {case_year}")
 
-sector_order_case = ["SIE_Weddell", "SIE_Amundsen_Bellingshausen",
-                     "SIE_Ross", "SIE_East_Antarctica", "SIE_King_Haakon"]
-labels_case = [SECTOR_LABELS[s] for s in sector_order_case]
-colors_case = [SECTOR_COLORS[s] for s in sector_order_case]
+    case_data = annual[annual["Year"] == case_year].copy()
+    case_data = case_data.set_index("sector")
 
-phase_vals = [float(case_data.loc[s, "max_doy_anom"]) for s in sector_order_case]
-amp_vals   = [float(case_data.loc[s, "amplitude_anom"]) for s in sector_order_case]
+    sector_order_case = ["SIE_Weddell", "SIE_Amundsen_Bellingshausen",
+                         "SIE_Ross", "SIE_East_Antarctica", "SIE_King_Haakon"]
+    labels_case = [SECTOR_LABELS[s] for s in sector_order_case]
+    colors_case = [SECTOR_COLORS[s] for s in sector_order_case]
 
-fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    phase_vals = [float(case_data.loc[s, "max_doy_anom"]) for s in sector_order_case]
+    amp_vals   = [float(case_data.loc[s, "amplitude_anom"]) for s in sector_order_case]
 
-for ax, vals, title, ylabel, fmt in zip(
-    axes,
-    [phase_vals, amp_vals],
-    ["Phase anomaly — 2023",
-     "Amplitude anomaly — 2023"],
-    ["Days (negative = ahead of phase)",
-     "Million km² (negative = smaller cycle)"],
-    ["{:+.0f}d", "{:+.2f}"]
-):
-    bars = ax.bar(labels_case, vals,
-                  color=colors_case,
-                  width=0.6, edgecolor="white", zorder=3)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
-    ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
+    for ax, vals, title, ylabel, fmt in zip(
+        axes,
+        [phase_vals, amp_vals],
+        [f"Phase anomaly — {case_year}",
+         f"Amplitude anomaly — {case_year}"],
+        ["Days (negative = ahead of phase)",
+         "Million km² (negative = smaller cycle)"],
+        ["{:+.0f}d", "{:+.2f}"]
+    ):
+        bars = ax.bar(labels_case, vals,
+                      color=colors_case,
+                      width=0.6, edgecolor="white", zorder=3)
 
-    for bar, val in zip(bars, vals):
-        ypos = (bar.get_height() + max(abs(v) for v in vals) * 0.03
-                if val >= 0
-                else bar.get_height() - max(abs(v) for v in vals) * 0.06)
-        ax.text(bar.get_x() + bar.get_width() / 2, ypos,
-                fmt.format(val),
-                ha="center", va="bottom",
-                fontsize=11, fontweight="bold",
-                color="#2C2C2A", path_effects=stroke())
+        ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
 
-    ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
-    ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
-    ax.tick_params(axis="x", rotation=20, labelsize=11)
-    ax.tick_params(axis="y", labelsize=10)
-    for lbl in ax.get_xticklabels():
-        lbl.set_ha("right")
+        for bar, val in zip(bars, vals):
+            yabs = max(abs(v) for v in vals)
+            ypos = (bar.get_height() + yabs * 0.03
+                    if val >= 0
+                    else bar.get_height() - yabs * 0.06)
+            ax.text(bar.get_x() + bar.get_width() / 2, ypos,
+                    fmt.format(val),
+                    ha="center", va="bottom",
+                    fontsize=11, fontweight="bold",
+                    color="#2C2C2A", path_effects=stroke())
 
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+        ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
+        ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
+        ax.tick_params(axis="x", rotation=20, labelsize=11)
+        ax.tick_params(axis="y", labelsize=10)
+        for lbl in ax.get_xticklabels():
+            lbl.set_ha("right")
 
-    yabs = max(abs(v) for v in vals)
-    ax.set_ylim(-yabs * 1.4, yabs * 1.4)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
 
-fig.suptitle(
-    "2023 — Record Minimum: Same Signal, Different Mechanisms\n"
-    "APAC phase and amplitude anomalies by sector",
-    fontsize=13, fontweight="bold", y=1.02
+        yabs = max(abs(v) for v in vals)
+        ax.set_ylim(-yabs * 1.4, yabs * 1.4)
+
+    fig.suptitle(suptitle, fontsize=13, fontweight="bold", y=1.02)
+    fig.tight_layout()
+    save(fig, outfile)
+
+
+plot_case_study(
+    case_year = 2016,
+    suptitle  = ("2016 — Anomalous Decay: Phase or Amplitude?\n"
+                 "APAC phase and amplitude anomalies by sector"),
+    outfile   = "case_study_2016.png"
 )
-fig.tight_layout()
-save(fig, "case_study_2023.png")
+
+plot_case_study(
+    case_year = 2023,
+    suptitle  = ("2023 — Record Minimum: Same Signal, Different Mechanisms\n"
+                 "APAC phase and amplitude anomalies by sector"),
+    outfile   = "case_study_2023.png"
+)
 
 # =============================================================================
 # FIG 4 — Season length timeseries
@@ -505,7 +486,7 @@ print("Fig 4: Season length")
 fig, axes = plt.subplots(2, 5, figsize=(18, 7), sharey="row")
 
 for col, sec in enumerate(SECTORS):
-    sub = annual[annual["sector"]==sec].sort_values("Year").copy()
+    sub = annual[annual["sector"] == sec].sort_values("Year").copy()
     sub["growth_days"]  = (sub["max_date"] - sub["min_date"]).dt.days
     sub["next_min"]     = sub["min_date"].shift(-1)
     sub["retreat_days"] = (sub["next_min"] - sub["max_date"]).dt.days
@@ -543,58 +524,6 @@ fig.suptitle("Growth and Retreat Season Length Anomaly by Sector",
              fontsize=13, fontweight="bold", y=1.01)
 fig.tight_layout()
 save(fig, "4_season_length_timeseries.png")
-
-# # =============================================================================
-# # FIG 5 — Rate of change
-# # =============================================================================
-# print("Fig 5: Rate of change")
-#
-# def compute_rates(daily_df, annual_df):
-#     records = []
-#     for sec in SECTORS:
-#         d = daily_df[daily_df["sector"]==sec].sort_values(["Year","Date"]).copy()
-#         a = annual_df[annual_df["sector"]==sec][["Year","min_doy","max_doy"]]
-#         d["dSIE"] = d.groupby("Year")["fitted_amp"].diff()
-#         for _, row in a.iterrows():
-#             yr = int(row["Year"])
-#             yd = d[d["Year"]==yr]
-#             if len(yd) < 20:
-#                 continue
-#             adv = yd[(yd["DOY"] >= row["min_doy"]) & (yd["DOY"] <= row["max_doy"])]
-#             ret = yd[(yd["DOY"] > row["max_doy"]) | (yd["DOY"] < row["min_doy"])]
-#             records.append({
-#                 "sector"      : sec,
-#                 "Year"        : yr,
-#                 "advance_rate": adv["dSIE"].mean(),
-#                 "retreat_rate": ret["dSIE"].mean(),
-#             })
-#     return pd.DataFrame(records)
-#
-# rate_df = compute_rates(daily, annual)
-
-fig, axes = plt.subplots(2, 1, figsize=(13, 8), sharex=True)
-for sec in SECTORS:
-  #  sub = rate_df[rate_df["sector"]==sec].sort_values("Year")
-    c = SECTOR_COLORS[sec]
-    l = SECTOR_LABELS[sec]
-    axes[0].plot(sub["Year"], sub["advance_rate"], color=c, lw=1.5, label=l)
-    axes[1].plot(sub["Year"], sub["retreat_rate"], color=c, lw=1.5, label=l)
-
-for ax, title in zip(axes,
-    ["Mean Daily Advance Rate (million km²/day)",
-     "Mean Daily Retreat Rate (million km²/day)"]):
-    zero_line(ax)
-    shade2016(ax)
-    ax.set_ylabel("million km²/day")
-    ax.set_title(title, fontweight="bold")
-    ax.legend(ncol=3, loc="upper left", fontsize=9)
-
-axes[1].set_xlabel("Year")
-xlim(axes[0])
-fig.suptitle("Rate of Sea Ice Advance and Retreat by Sector",
-             fontsize=14, fontweight="bold")
-fig.tight_layout()
-save(fig, "5_rate_of_change.png")
 
 # =============================================================================
 # FIG 6 — RMSE improvement
@@ -705,8 +634,8 @@ amp_post   = [post[post["sector"]==s]["amplitude_anom"].dropna().std() for s in 
 labels = [SECTOR_LABELS[s] for s in SECTORS]
 colors = [SECTOR_COLORS[s] for s in SECTORS]
 
-x      = np.arange(len(SECTORS))
-width  = 0.35
+x     = np.arange(len(SECTORS))
+width = 0.35
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
@@ -728,21 +657,18 @@ for ax, pre_vals, post_vals, ylabel, title, fmt in zip(
                        edgecolor="white", label="2016–2022",
                        hatch="///", zorder=3)
 
-    # Value labels
     for bar, val in zip(bars_pre, pre_vals):
         ax.text(bar.get_x() + bar.get_width() / 2,
                 bar.get_height() + max(pre_vals) * 0.02,
                 fmt.format(val),
-                ha="center", va="bottom",
-                fontsize=9, fontweight="bold",
+                ha="center", va="bottom", fontsize=9, fontweight="bold",
                 path_effects=stroke())
 
     for bar, val in zip(bars_post, post_vals):
         ax.text(bar.get_x() + bar.get_width() / 2,
                 bar.get_height() + max(pre_vals) * 0.02,
                 fmt.format(val),
-                ha="center", va="bottom",
-                fontsize=9, color="#5F5E5A",
+                ha="center", va="bottom", fontsize=9, color="#5F5E5A",
                 path_effects=stroke())
 
     ax.set_xticks(x)
@@ -754,12 +680,10 @@ for ax, pre_vals, post_vals, ylabel, title, fmt in zip(
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
-# Note about post-2016 sample size
 fig.text(0.5, -0.02,
          "Note: post-2016 period spans only 7 years (2016–2022) — "
          "std dev estimates are less stable",
-         ha="center", fontsize=9, color="#5F5E5A",
-         style="italic")
+         ha="center", fontsize=9, color="#5F5E5A", style="italic")
 
 fig.suptitle("Has Variability Changed? Pre vs Post 2016",
              fontsize=14, fontweight="bold")
