@@ -448,7 +448,7 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
     ax.set_xticklabels(HEATMAP_LABELS, fontsize=10)
     ax.set_yticks(range(len(sector_order)))
     ax.set_yticklabels(sector_order, fontsize=11)
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=10)
+    ax.set_title("")  # titles added in Keynote
 
     # r values and significance
     for i in range(len(sector_order)):
@@ -466,23 +466,19 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-    # 2016 / 2023 overlay — dot in corner of cell if:
-    #   (a) correlation is significant AND
-    #   (b) the index was anomalous (|z| > 0.8) in that year
+    # 2016 / 2023 overlay dots
     for j, (idx_col, idx_label) in enumerate(zip(HEATMAP_INDICES, HEATMAP_LABELS)):
         for yr, col in overlay_years.items():
             z = index_zscores.get(idx_col, {}).get(yr, np.nan)
             if np.isnan(z) or abs(z) < 0.8:
                 continue
-            # Check if any sector has a significant correlation for this index
             for i, sec in enumerate(sector_order):
                 cell_sig = sig_sub.values[i, j]
                 if cell_sig in ["*", "."]:
-                    # Place small dot at top-right (2016) or bottom-right (2023)
                     yoff = -0.32 if yr == 2016 else 0.32
                     ax.plot(j + 0.35, i + yoff, "o",
-                            color=col, markersize=5,
-                            markeredgecolor="white", markeredgewidth=0.5,
+                            color=col, markersize=8,
+                            markeredgecolor="white", markeredgewidth=0.8,
                             zorder=5, clip_on=False)
 
 # Divider between SIE and Phase panels
@@ -510,12 +506,6 @@ fig.legend(handles=legend_elements, loc="lower center",
            ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.01),
            frameon=False)
 
-fig.suptitle(
-    "APAC anomalies vs atmospheric indices — 1979–2022\n"
-    "* p<0.05   . p<0.10   |   all series linearly detrended   "
-    "|   dots = index anomalous in 2016 / 2023",
-    fontsize=10, y=1.0
-)
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
