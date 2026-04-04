@@ -236,10 +236,14 @@ INDEX_COLS_ALL = [
 ] + [f"SIE_anom_{SECTORS[s].replace(' ','_')}" for s in SECTORS.keys()]
 
 idx_dt = idx.copy()
+# Cast all index columns to float64 to avoid dtype mismatch FutureWarning
+for col in INDEX_COLS_ALL:
+    if col in idx_dt.columns:
+        idx_dt[col] = idx_dt[col].astype("float64")
 for col in INDEX_COLS_ALL:
     if col in idx_dt.columns:
         tmp = detrend_series(idx_dt[["Year", col]].dropna(), "Year", col)
-        idx_dt.loc[tmp.index, col] = tmp[col].values
+        idx_dt.loc[tmp.index, col] = tmp[col].values.astype("float64")
 
 print("Detrending complete")
 
@@ -324,13 +328,13 @@ plt.rcParams.update({"font.family": "Nimbus Sans"})
 HEATMAP_INDICES = [
     "SAM_annual", "SAM_SON", "SAM_DJF",
     "AAO_annual", "AAO_SON", "AAO_DJF",
-    "ZW3R_annual", "ZW3G_PC2", "ZW3G_magnitude",
+    "ZW3R_annual", "ZW3G_PC2",
     "ASL_SON", "ASL_DJF",
 ]
 HEATMAP_LABELS = [
     "SAM\nannual", "SAM\nSON", "SAM\nDJF",
     "AAO\nannual", "AAO\nSON", "AAO\nDJF",
-    "ZW3\nRaphael", "ZW3\nGoyal PC2", "ZW3\nGoyal mag",
+    "ZW3\nRaphael", "ZW3\nGoyal PC2",
     "ASL\nSON", "ASL\nDJF",
 ]
 
