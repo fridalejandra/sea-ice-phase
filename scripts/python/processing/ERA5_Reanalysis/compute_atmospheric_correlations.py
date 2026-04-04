@@ -470,7 +470,8 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
     for j, (idx_col, idx_label) in enumerate(zip(HEATMAP_INDICES, HEATMAP_LABELS)):
         for yr, col in overlay_years.items():
             z = index_zscores.get(idx_col, {}).get(yr, np.nan)
-            if np.isnan(z) or abs(z) < 0.8:
+            threshold = 0.8 if yr == 2016 else 0.5
+            if np.isnan(z) or abs(z) < threshold:
                 continue
             for i, sec in enumerate(sector_order):
                 cell_sig = sig_sub.values[i, j]
@@ -635,14 +636,12 @@ print("\nSupplementary 1: Full heatmap (all components, all indices)...")
 
 SUPP_INDICES = [
     "SAM_annual", "SAM_SON", "SAM_DJF",
-    "AAO_annual", "AAO_SON", "AAO_DJF",
     "ZW3R_annual", "ZW3R_SON", "ZW3R_DJF",
     "ZW3G_PC2", "ZW3G_magnitude",
     "ASL_SON", "ASL_DJF",
 ]
 SUPP_LABELS = [
     "SAM\nannual", "SAM\nSON", "SAM\nDJF",
-    "AAO\nannual", "AAO\nSON", "AAO\nDJF",
     "ZW3R\nannual", "ZW3R\nSON", "ZW3R\nDJF",
     "ZW3G\nPC2", "ZW3G\nmag",
     "ASL\nSON", "ASL\nDJF",
@@ -772,18 +771,17 @@ for ax, idx_col, idx_label in zip(axes, SUPP2_INDICES, SUPP2_LABELS):
     ax.axhspan(mu - sd, mu + sd, color="#B4B2A9", alpha=0.2, zorder=1,
                label="±1 std dev")
 
-    # 2016 and 2023 dots
+    # 2016 and 2023 dots — always shown regardless of z-score
     for yr, col, marker in [(2016, "#D85A30", "o"), (2023, "#BA7517", "D")]:
         if yr in s.index:
-            ax.scatter(yr, s[yr], color=col, s=80, zorder=5,
+            ax.scatter(yr, s[yr], color=col, s=100, zorder=5,
                        marker=marker, edgecolors="white", linewidth=0.8,
                        label=str(yr))
-            # Annotate z-score
             z = (s[yr] - mu) / sd
             ax.annotate(f"z={z:+.1f}",
                         xy=(yr, s[yr]),
                         xytext=(6, 6), textcoords="offset points",
-                        fontsize=8, color=col, fontweight="bold",
+                        fontsize=9, color=col, fontweight="bold",
                         path_effects=[pe.withStroke(linewidth=2,
                                                      foreground="white")])
 
