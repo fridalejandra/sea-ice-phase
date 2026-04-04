@@ -476,12 +476,9 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                 cell_sig = sig_sub.values[i, j]
                 if cell_sig in ["*", "."]:
                     yoff = -0.32 if yr == 2016 else 0.32
-                    marker = "o" if yr == 2016 else "D"
-                    mfc = "black" if yr == 2016 else "white"
-                    mec = "white" if yr == 2016 else "black"
-                    ax.plot(j + 0.35, i + yoff, marker,
-                            color=mfc, markersize=8,
-                            markeredgecolor=mec, markeredgewidth=0.8,
+                    ax.plot(j + 0.35, i + yoff, "o",
+                            color=col, markersize=8,
+                            markeredgecolor="white", markeredgewidth=0.8,
                             zorder=5, clip_on=False)
 
 # Divider between SIE and Phase panels
@@ -500,12 +497,10 @@ cbar.ax.tick_params(labelsize=10)
 # Legend for overlay dots
 from matplotlib.lines import Line2D
 legend_elements = [
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="black",
-           markeredgecolor="white", markeredgewidth=0.8,
-           markersize=8, label="2016 index anomalous (|z|>0.8)"),
-    Line2D([0], [0], marker="D", color="w", markerfacecolor="white",
-           markeredgecolor="black", markeredgewidth=0.8,
-           markersize=8, label="2023 index anomalous (|z|>0.8)"),
+    Line2D([0], [0], marker="o", color="w", markerfacecolor="#D85A30",
+           markersize=7, label="2016 index anomalous (|z|>0.8)"),
+    Line2D([0], [0], marker="o", color="w", markerfacecolor="#BA7517",
+           markersize=7, label="2023 index anomalous (|z|>0.8)"),
 ]
 fig.legend(handles=legend_elements, loc="lower center",
            ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.01),
@@ -632,3 +627,185 @@ res_sig = corr_df[
 print(res_sig[["sector","index","r","p","n"]].head(10).to_string(index=False))
 
 print(f"\n=== Done — outputs in {OUTPUT_DIR} ===")
+
+# =============================================================================
+# SUPPLEMENTARY 1 — Full heatmap: all 5 decomposition components, all indices
+# =============================================================================
+print("\nSupplementary 1: Full heatmap (all components, all indices)...")
+
+SUPP_INDICES = [
+    "SAM_annual", "SAM_SON", "SAM_DJF",
+    "AAO_annual", "AAO_SON", "AAO_DJF",
+    "ZW3R_annual", "ZW3R_SON", "ZW3R_DJF",
+    "ZW3G_PC2", "ZW3G_magnitude",
+    "ASL_SON", "ASL_DJF",
+]
+SUPP_LABELS = [
+    "SAM\nannual", "SAM\nSON", "SAM\nDJF",
+    "AAO\nannual", "AAO\nSON", "AAO\nDJF",
+    "ZW3R\nannual", "ZW3R\nSON", "ZW3R\nDJF",
+    "ZW3G\nPC2", "ZW3G\nmag",
+    "ASL\nSON", "ASL\nDJF",
+]
+
+supp_vars = [
+    "SIE anomaly",
+    "Phase anomaly",
+    "Amplitude anomaly",
+    "Trend (annual mean)",
+    "Residual (annual mean)",
+]
+supp_titles = [
+    "Raw SIE anomaly",
+    "Phase anomaly",
+    "Amplitude anomaly",
+    "Trend component",
+    "Residual (mean)",
+]
+
+fig, axes = plt.subplots(1, 5, figsize=(32, 5), sharey=True)
+
+for ax, apac_var, title in zip(axes, supp_vars, supp_titles):
+    sub = corr_df[
+        (corr_df["apac_var"] == apac_var) &
+        (corr_df["index"].isin(SUPP_INDICES))
+    ].pivot(index="sector", columns="index", values="r")
+
+    if sub.empty:
+        ax.set_title(title + "\n(no data)", fontsize=9)
+        continue
+
+    sub = sub.reindex(sector_order)[SUPP_INDICES]
+    sub.columns = SUPP_LABELS
+
+    sig_sub = corr_df[
+        (corr_df["apac_var"] == apac_var) &
+        (corr_df["index"].isin(SUPP_INDICES))
+    ].pivot(index="sector", columns="index", values="sig")
+    sig_sub = sig_sub.reindex(sector_order)[SUPP_INDICES]
+    sig_sub.columns = SUPP_LABELS
+
+    im_s = ax.imshow(sub.values.astype(float),
+                     cmap="RdBu_r", vmin=-0.6, vmax=0.6, aspect="auto")
+
+    ax.set_xticks(range(len(SUPP_LABELS)))
+    ax.set_xticklabels(SUPP_LABELS, fontsize=7)
+    ax.set_yticks(range(len(sector_order)))
+    ax.set_yticklabels(sector_order, fontsize=9)
+    ax.set_title(title, fontsize=10, fontweight="bold", pad=8)
+
+    for i in range(len(sector_order)):
+        for j in range(len(SUPP_LABELS)):
+            r_val = sub.values[i, j]
+            sig   = sig_sub.values[i, j]
+            if not np.isnan(float(r_val)):
+                ax.text(j, i, f"{float(r_val):.2f}{sig}",
+                        ha="center", va="center",
+                        fontsize=6.5, fontweight="bold",
+                        color="white" if abs(float(r_val)) > 0.35
+                              else "#2C2C2A",
+                        path_effects=[pe.withStroke(
+                            linewidth=1.5,
+                            foreground="black" if abs(float(r_val)) > 0.35
+                                       else "white")])
+
+fig.subplots_adjust(bottom=0.22, top=0.88, left=0.04,
+                    right=0.97, wspace=0.08)
+cbar_s = fig.colorbar(im_s, ax=axes,
+                      orientation="horizontal",
+                      fraction=0.03, pad=0.18, aspect=50,
+                      label="Pearson r")
+cbar_s.ax.tick_params(labelsize=9)
+
+fig.suptitle(
+    "All decomposition components vs atmospheric indices — 1979–2022  "
+    "|  * p<0.05   . p<0.10   |  all series linearly detrended  "
+    "|  SUPPLEMENTARY",
+    fontsize=9, y=1.0
+)
+fig.savefig(os.path.join(OUTPUT_DIR, "supp_heatmap_full.png"),
+            dpi=200, bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("  -> supp_heatmap_full.png")
+
+# =============================================================================
+# SUPPLEMENTARY 2 — Atmospheric index anomalies in 2016 and 2023
+# Time series per index with 1979-2015 mean ± 1 std dev band
+# 2016 and 2023 highlighted as coloured dots
+# =============================================================================
+print("Supplementary 2: Atmospheric index anomalies in 2016 and 2023...")
+
+SUPP2_INDICES = [
+    "SAM_annual", "SAM_SON",
+    "ZW3R_annual", "ZW3R_SON",
+    "ASL_SON",     "ASL_DJF",
+]
+SUPP2_LABELS = [
+    "SAM annual", "SAM SON",
+    "ZW3 Raphael annual", "ZW3 Raphael SON",
+    "ASL SON", "ASL DJF",
+]
+
+n_idx = len(SUPP2_INDICES)
+fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharey=False)
+axes = axes.flatten()
+
+for ax, idx_col, idx_label in zip(axes, SUPP2_INDICES, SUPP2_LABELS):
+    if idx_col not in idx.columns:
+        ax.set_visible(False)
+        continue
+
+    s = idx.set_index("Year")[idx_col].dropna().sort_index()
+    yrs = s.index.values
+
+    # Baseline: 1979-2015
+    base = s[s.index <= 2015]
+    mu   = base.mean()
+    sd   = base.std()
+
+    # Time series
+    ax.plot(yrs, s.values, color="#888780", lw=1.0, zorder=2)
+
+    # Mean and ±1 std band
+    ax.axhline(mu, color="#2C2C2A", lw=1.0, ls="--", zorder=3,
+               label="1979–2015 mean")
+    ax.axhspan(mu - sd, mu + sd, color="#B4B2A9", alpha=0.2, zorder=1,
+               label="±1 std dev")
+
+    # 2016 and 2023 dots
+    for yr, col, marker in [(2016, "#D85A30", "o"), (2023, "#BA7517", "D")]:
+        if yr in s.index:
+            ax.scatter(yr, s[yr], color=col, s=80, zorder=5,
+                       marker=marker, edgecolors="white", linewidth=0.8,
+                       label=str(yr))
+            # Annotate z-score
+            z = (s[yr] - mu) / sd
+            ax.annotate(f"z={z:+.1f}",
+                        xy=(yr, s[yr]),
+                        xytext=(6, 6), textcoords="offset points",
+                        fontsize=8, color=col, fontweight="bold",
+                        path_effects=[pe.withStroke(linewidth=2,
+                                                     foreground="white")])
+
+    ax.set_title(idx_label, fontsize=11, fontweight="bold")
+    ax.set_xlim(1978, 2024)
+    ax.tick_params(labelsize=9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    if ax == axes[0]:
+        ax.legend(fontsize=8, loc="upper right", frameon=False)
+
+fig.suptitle(
+    "Atmospheric index values — 2016 and 2023 in context\n"
+    "Dashed line = 1979–2015 mean   |   shading = ±1 std dev   "
+    "|   z-scores relative to 1979–2015 baseline   |   SUPPLEMENTARY",
+    fontsize=10, y=1.01
+)
+fig.tight_layout()
+fig.savefig(os.path.join(OUTPUT_DIR, "supp_index_anomalies_2016_2023.png"),
+            dpi=200, bbox_inches="tight", facecolor="white")
+plt.close(fig)
+print("  -> supp_index_anomalies_2016_2023.png")
+
+print(f"\n=== All supplementary figures saved to {OUTPUT_DIR} ===")
