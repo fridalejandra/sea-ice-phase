@@ -360,12 +360,12 @@ HEATMAP_INDICES = [
 ]
 HEATMAP_LABELS = [
     "SAM\nannual", "SAM\nSON", "SAM\nDJF",
-    "ZW3\nRaphael",
+    "ZW3\nannual",
     "ASL\nSON", "ASL\nDJF",
 ]
 HEATMAP_LABELS_SHORT = [
     "SAM annual", "SAM SON", "SAM DJF",
-    "ZW3 Raphael",
+    "ZW3 annual",
     "ASL SON", "ASL DJF",
 ]
 
