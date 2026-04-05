@@ -363,36 +363,52 @@ HEATMAP_LABELS = [
     "ZW3\nRaphael",
     "ASL\nSON", "ASL\nDJF",
 ]
+HEATMAP_LABELS_SHORT = [
+    "SAM annual", "SAM SON", "SAM DJF",
+    "ZW3 Raphael",
+    "ASL SON", "ASL DJF",
+]
 
 sector_order = ["Weddell", "ABS", "Ross", "East Antarctica", "King Haakon"]
 
 panel_vars   = ["Phase anomaly", "Amplitude anomaly"]
 panel_titles = [
-    "Phase anomaly (timing of maximum)\nvs atmospheric indices",
-    "Amplitude anomaly (size of seasonal cycle)\nvs atmospheric indices",
+    "Phase anomaly\nvs atmospheric indices",
+    "Amplitude anomaly\nvs atmospheric indices",
 ]
 
-# Overlay style — dots only on p<0.05 significant cells
+# Compute z-scores for 2016 and 2023 relative to 1979-2015 baseline
 OVERLAY_YEARS = [2016, 2023]
-OVERLAY_STYLE = {
-    2016: {"marker": "o",  "mfc": "black",   "mec": "white",   "yoff": -0.32},
-    2023: {"marker": "D",  "mfc": "#FFD700", "mec": "#2C2C2A", "yoff":  0.32},
-}
-
-# z-scores from raw (non-detrended) index values
 index_zscores = {}
 for idx_col in HEATMAP_INDICES:
     if idx_col not in idx.columns:
         continue
-    s = idx.set_index("Year")[idx_col].dropna()
-    mu, sd = s.mean(), s.std()
+    s    = idx.set_index("Year")[idx_col].dropna()
+    base = s[s.index <= 2015]
+    mu, sd = base.mean(), base.std()
     if sd > 0:
         index_zscores[idx_col] = {yr: (s.get(yr, np.nan) - mu) / sd
                                   for yr in OVERLAY_YEARS}
 
-fig, axes = plt.subplots(2, 1, figsize=(12, 9), sharex=True)
+# =============================================================================
+# FIGURE — 3 columns: Phase heatmap | Amplitude heatmap | Z-score bar chart
+# =============================================================================
 
-for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
+fig = plt.figure(figsize=(18, 7))
+
+# Left two panels: heatmaps (each takes 2 units wide)
+# Right panel: z-score bars (takes 1.5 units wide)
+gs = fig.add_gridspec(1, 3, width_ratios=[2, 2, 1.5],
+                      left=0.07, right=0.97,
+                      bottom=0.18, top=0.88,
+                      wspace=0.35)
+
+ax_phase = fig.add_subplot(gs[0])
+ax_amp   = fig.add_subplot(gs[1], sharey=ax_phase)
+ax_bar   = fig.add_subplot(gs[2])
+
+# --- Draw heatmaps ---
+for ax, apac_var, title in zip([ax_phase, ax_amp], panel_vars, panel_titles):
     sub = corr_df[
         (corr_df["apac_var"] == apac_var) &
         (corr_df["index"].isin(HEATMAP_INDICES))
@@ -411,10 +427,10 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                    cmap="RdBu_r", vmin=-0.6, vmax=0.6, aspect="auto")
 
     ax.set_xticks(range(len(HEATMAP_LABELS)))
-    ax.set_xticklabels(HEATMAP_LABELS, fontsize=12)
+    ax.set_xticklabels(HEATMAP_LABELS, fontsize=10)
     ax.set_yticks(range(len(sector_order)))
-    ax.set_yticklabels(sector_order, fontsize=12)
-    ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
+    ax.set_yticklabels(sector_order if ax == ax_phase else [], fontsize=11)
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=10)
 
     for i in range(len(sector_order)):
         for j in range(len(HEATMAP_LABELS)):
@@ -423,7 +439,7 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
             if not np.isnan(float(r_val)):
                 ax.text(j, i, f"{float(r_val):.2f}{sig}",
                         ha="center", va="center",
-                        fontsize=10, fontweight="bold",
+                        fontsize=9, fontweight="bold",
                         color="white" if abs(float(r_val)) > 0.35
                               else "#2C2C2A",
                         path_effects=[pe.withStroke(
@@ -431,44 +447,60 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-    # Overlay dots — ONLY on p<0.05 cells AND |z|>0.8
-    for j, idx_col in enumerate(HEATMAP_INDICES):
-        for yr in OVERLAY_YEARS:
-            z = index_zscores.get(idx_col, {}).get(yr, np.nan)
-            if np.isnan(z) or abs(z) < 0.8:
-                continue
-            for i in range(len(sector_order)):
-                if sig_sub.values[i, j] == "*":   # p<0.05 only
-                    sty = OVERLAY_STYLE[yr]
-                    ax.plot(j + 0.35, i + sty["yoff"],
-                            sty["marker"],
-                            color=sty["mfc"],
-                            markersize=10,
-                            markeredgecolor=sty["mec"],
-                            markeredgewidth=1.0,
-                            zorder=5, clip_on=False)
-
-fig.subplots_adjust(bottom=0.14, top=0.95, left=0.14,
-                    right=0.97, hspace=0.35)
-cbar = fig.colorbar(im, ax=axes,
+# Colorbar below the two heatmap panels
+cbar = fig.colorbar(im, ax=[ax_phase, ax_amp],
                     orientation="horizontal",
-                    fraction=0.025, pad=0.12, aspect=40)
-cbar.ax.tick_params(labelsize=11)
-cbar.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=11)
+                    fraction=0.04, pad=0.18, aspect=35)
+cbar.ax.tick_params(labelsize=10)
+cbar.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=10)
 
-legend_elements = [
-    Line2D([0], [0], marker="o", color="w",
-           markerfacecolor="black", markeredgecolor="white",
-           markeredgewidth=1.0, markersize=12,
-           label="2016 — index anomalous (|z|>0.8)"),
-    Line2D([0], [0], marker="D", color="w",
-           markerfacecolor="#FFD700", markeredgecolor="#2C2C2A",
-           markeredgewidth=1.0, markersize=12,
-           label="2023 — index anomalous (|z|>0.8)"),
-]
-fig.legend(handles=legend_elements, loc="lower center",
-           ncol=2, fontsize=12, bbox_to_anchor=(0.5, 0.0),
-           frameon=True, framealpha=0.95, edgecolor="#B4B2A9")
+# --- Z-score bar chart ---
+z_2016 = [index_zscores.get(c, {}).get(2016, np.nan) for c in HEATMAP_INDICES]
+z_2023 = [index_zscores.get(c, {}).get(2023, np.nan) for c in HEATMAP_INDICES]
+
+n      = len(HEATMAP_INDICES)
+y_pos  = np.arange(n)
+height = 0.35
+
+bars_2016 = ax_bar.barh(y_pos + height/2, z_2016, height,
+                         color="#D85A30", alpha=0.9,
+                         label="2016", zorder=3)
+bars_2023 = ax_bar.barh(y_pos - height/2, z_2023, height,
+                         color="#FFD700", alpha=0.9,
+                         edgecolor="#2C2C2A", linewidth=0.5,
+                         label="2023", zorder=3)
+
+# Threshold lines
+ax_bar.axvline( 1.0, color="#2C2C2A", lw=1.0, ls="--", alpha=0.5, zorder=2)
+ax_bar.axvline(-1.0, color="#2C2C2A", lw=1.0, ls="--", alpha=0.5, zorder=2)
+ax_bar.axvline( 0.0, color="#2C2C2A", lw=0.6, ls="-",  alpha=0.3, zorder=2)
+
+ax_bar.set_yticks(y_pos)
+ax_bar.set_yticklabels(HEATMAP_LABELS_SHORT, fontsize=10)
+ax_bar.set_xlabel("z-score\n(relative to 1979–2015 mean)", fontsize=10)
+ax_bar.set_title("Index anomaly\nin 2016 vs 2023", fontsize=12,
+                 fontweight="bold", pad=10)
+ax_bar.set_xlim(-3, 3)
+ax_bar.spines["top"].set_visible(False)
+ax_bar.spines["right"].set_visible(False)
+ax_bar.legend(fontsize=10, loc="lower right", frameon=False)
+
+# Annotate z values on bars
+for bar, z in zip(bars_2016, z_2016):
+    if not np.isnan(z):
+        xpos = z + (0.08 if z >= 0 else -0.08)
+        ha   = "left" if z >= 0 else "right"
+        ax_bar.text(xpos, bar.get_y() + bar.get_height()/2,
+                    f"{z:+.1f}", va="center", ha=ha,
+                    fontsize=8, color="#D85A30", fontweight="bold")
+
+for bar, z in zip(bars_2023, z_2023):
+    if not np.isnan(z):
+        xpos = z + (0.08 if z >= 0 else -0.08)
+        ha   = "left" if z >= 0 else "right"
+        ax_bar.text(xpos, bar.get_y() + bar.get_height()/2,
+                    f"{z:+.1f}", va="center", ha=ha,
+                    fontsize=8, color="#8B7000", fontweight="bold")
 
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
