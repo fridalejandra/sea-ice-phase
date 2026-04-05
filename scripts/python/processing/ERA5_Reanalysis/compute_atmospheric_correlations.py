@@ -14,15 +14,19 @@ detrended before correlation to remove spurious trend-driven signals.
 
 Outputs:
   - correlations_all.csv            — Pearson r and p-value, all indices
-  - correlation_heatmap_annual.png  — summary heatmap
+  - correlation_heatmap_annual.png  — summary heatmap (Phase + Amplitude only)
+  - correlation_heatmap_exploratory.png — trend + residual exploratory
+  - supp_heatmap_full.png           — all 5 components, all indices
+  - supp_index_anomalies_2016_2023.png — index time series with 2016/2023 context
 
-Reference period: 1979-2022
+Reference period: 1979-2023
 """
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
+from matplotlib.lines import Line2D
 from scipy import stats
 from scipy.ndimage import uniform_filter1d
 import netCDF4 as nc
@@ -60,17 +64,6 @@ annual = annual[annual["Year"].between(YEAR_MIN, YEAR_MAX)]
 # =============================================================================
 # 1b. DERIVE TREND AND RESIDUAL ANNUAL INDICES FROM DAILY FITTED CSV
 # =============================================================================
-# From the sequential decomposition:
-#   trend_component  — s(tdate) partial from gam_apac, in SIE units
-#   est_anomaly      — smoothed residual after trend+amp+phase removed (GARCH)
-#
-# Annual indices derived:
-#   trend_annual     — mean of trend_component for that year
-#                      (captures where in the multi-decadal trend that year sits)
-#   residual_std     — std dev of est_anomaly for that year
-#                      (captures how much unexplained day-to-day noise there was)
-#   residual_mean    — mean of est_anomaly for that year
-#                      (signed: was the unexplained anomaly systematically + or -)
 
 print("Loading daily fitted CSV for trend/residual indices...")
 daily = pd.read_csv(DAILY_CSV, parse_dates=["Date"])
@@ -79,7 +72,6 @@ daily = daily[daily["Year"].between(YEAR_MIN, YEAR_MAX)]
 daily_indices = []
 for sec_col, sec_label in SECTORS.items():
     d = daily[daily["sector"] == sec_col].copy()
-
     ann = (d.groupby("Year")
             .agg(
                 trend_annual  = ("trend_component", "mean"),
@@ -93,9 +85,10 @@ for sec_col, sec_label in SECTORS.items():
 
 daily_idx = pd.concat(daily_indices)
 print(f"  Daily indices computed: {daily_idx.shape}")
-print(f"  Columns: {list(daily_idx.columns)}")
 
-
+# =============================================================================
+# 2. LOAD ATMOSPHERIC INDICES
+# =============================================================================
 
 month_map = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
              "Jul":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12}
@@ -141,8 +134,6 @@ aao_son     = seasonal_mean(aao_long, "AAO", [9,10,11], "AAO_SON")
 # --- ZW3 Raphael NEW — monthly netCDF ---
 print("Loading new ZW3 Raphael netCDF...")
 zw3_nc = nc.Dataset(os.path.join(INDICES_DIR, "zw3_monthly_index_ERA5_1979-2025.nc"))
-
-# time is stored as days/hours since epoch — decode to dates
 time_var  = zw3_nc.variables["time"]
 time_vals = nc.num2date(time_var[:], units=time_var.units,
                         calendar=getattr(time_var, "calendar", "standard"))
@@ -162,7 +153,6 @@ zw3r_annual = zw3r_long.groupby("Year")["ZW3R"].mean().reset_index()
 zw3r_annual.columns = ["Year","ZW3R_annual"]
 zw3r_son    = seasonal_mean(zw3r_long, "ZW3R", [9,10,11], "ZW3R_SON")
 zw3r_djf    = seasonal_mean(zw3r_long, "ZW3R", [12,1,2],  "ZW3R_DJF")
-
 print(f"  ZW3R loaded: {len(zw3r_annual)} years, "
       f"{zw3r_annual['Year'].min()}–{zw3r_annual['Year'].max()}")
 
@@ -171,7 +161,7 @@ zw3g = pd.read_csv(os.path.join(INDICES_DIR, "ZW3_goyal_annual.csv"))
 zw3g = zw3g[zw3g["year"].between(YEAR_MIN, YEAR_MAX)]
 zw3g.columns = ["Year","ZW3G_PC1","ZW3G_PC2","ZW3G_magnitude","ZW3G_phase"]
 
-# --- ASL Hosking v3 — RelCenPres, SON and DJF ---
+# --- ASL Hosking v3 ---
 print("Loading ASL index...")
 asl = pd.read_csv(os.path.join(INDICES_DIR, "asli_era5_v3-latest.csv"),
                   comment="#", parse_dates=["time"])
@@ -183,12 +173,10 @@ asl_long.columns = ["Year","month","ASL"]
 
 asl_son = seasonal_mean(asl_long, "ASL", [9,10,11], "ASL_SON")
 asl_djf = seasonal_mean(asl_long, "ASL", [12,1,2],  "ASL_DJF")
-
 print(f"  ASL loaded: {asl_son['Year'].min()}–{asl_son['Year'].max()}")
 
 # =============================================================================
 # 3. COMPUTE ANNUAL MEAN SIE ANOMALY (1979-2010 baseline)
-# Used to demonstrate conflation effect in heatmap
 # =============================================================================
 print("Computing annual mean SIE anomaly...")
 
@@ -198,7 +186,6 @@ sie["Year"] = sie["Date"].dt.year
 sie["DOY"]  = sie["Date"].dt.dayofyear
 sie = sie[sie["Year"].between(YEAR_MIN, YEAR_MAX)].sort_values("Date")
 
-# 5-day smoothing then 1979-2010 climatology
 for col in list(SECTORS.keys()) + ["SIE_circumpolar"]:
     sie[col] = uniform_filter1d(
         sie[col].fillna(method="ffill").values, size=5, mode="nearest")
@@ -209,17 +196,13 @@ clim = (sie[sie["Year"].between(1979, 2010)]
 for col in list(SECTORS.keys()) + ["SIE_circumpolar"]:
     sie[f"{col}_anom"] = sie[col] - sie["DOY"].map(clim[col])
 
-# Annual mean anomaly per sector
 sie_annual_anom = (sie.groupby("Year")
                    [[f"{s}_anom" for s in SECTORS.keys()]]
                    .mean().reset_index())
-
-# Rename to something clean
 sie_annual_anom = sie_annual_anom.rename(columns={
     f"{s}_anom": f"SIE_anom_{SECTORS[s].replace(' ','_')}"
     for s in SECTORS.keys()
 })
-
 print(f"  SIE anomaly computed: {sie_annual_anom.shape}")
 
 # =============================================================================
@@ -273,7 +256,6 @@ INDEX_COLS_ALL = [
 ] + [f"SIE_anom_{SECTORS[s].replace(' ','_')}" for s in SECTORS.keys()]
 
 idx_dt = idx.copy()
-# Cast all index columns to float64 to avoid dtype mismatch FutureWarning
 for col in INDEX_COLS_ALL:
     if col in idx_dt.columns:
         idx_dt[col] = idx_dt[col].astype("float64")
@@ -294,18 +276,16 @@ APAC_LABELS = {
     "amplitude_anom": "Amplitude anomaly",
 }
 
-# Also correlate SIE anomaly with indices (to show conflation)
 results = []
 
 for sec_col, sec_label in SECTORS.items():
     sec_data = annual_dt[annual_dt["sector"] == sec_col].copy()
     sie_col  = f"SIE_anom_{sec_label.replace(' ','_')}"
 
-    # Merge SIE anomaly
     sie_sec = idx_dt[["Year", sie_col]].copy()
     sie_sec = detrend_series(sie_sec, "Year", sie_col)
 
-    # --- Phase and amplitude anomaly correlations ---
+    # Phase and amplitude correlations
     for apac_var in APAC_VARS:
         for idx_col in INDEX_COLS_ALL:
             if "SIE_anom" in idx_col:
@@ -326,7 +306,7 @@ for sec_col, sec_label in SECTORS.items():
                 "sig":      "*" if p < 0.05 else ("." if p < 0.10 else ""),
             })
 
-    # --- SIE anomaly correlations ---
+    # SIE anomaly correlations
     for idx_col in INDEX_COLS_ALL:
         if "SIE_anom" in idx_col:
             continue
@@ -346,7 +326,7 @@ for sec_col, sec_label in SECTORS.items():
             "sig":      "*" if p < 0.05 else ("." if p < 0.10 else ""),
         })
 
-    # --- Trend and residual correlations (from daily_fitted) ---
+    # Trend and residual correlations
     sec_daily = daily_idx[daily_idx["sector"] == sec_col].copy()
 
     for daily_var, daily_label in [
@@ -354,7 +334,6 @@ for sec_col, sec_label in SECTORS.items():
         ("residual_mean", "Residual (annual mean)"),
         ("residual_std",  "Residual (annual std dev)"),
     ]:
-        # Detrend the daily-derived variable
         sec_daily_dt = detrend_series(sec_daily[["Year", daily_var]].dropna(),
                                       "Year", daily_var)
         for idx_col in INDEX_COLS_ALL:
@@ -381,9 +360,8 @@ corr_df.to_csv(os.path.join(OUTPUT_DIR, "correlations_all.csv"), index=False)
 print(f"\nCorrelations computed: {len(corr_df)} rows")
 
 # =============================================================================
-# 7. HEATMAP — 2 panels: Phase | Amplitude
-# SIE panel dropped for talk version — kept in supplementary
-# Titles added in figure, bigger legend, bigger dots
+# 7. HEATMAP — 2 panels: Phase | Amplitude (stacked vertically)
+# SIE panel dropped for talk — kept in supplementary
 # =============================================================================
 
 plt.rcParams.update({"font.family": "Nimbus Sans"})
@@ -401,15 +379,18 @@ HEATMAP_LABELS = [
 
 sector_order = ["Weddell", "ABS", "Ross", "East Antarctica", "King Haakon"]
 
-# Two panels only — Phase and Amplitude
 panel_vars   = ["Phase anomaly", "Amplitude anomaly"]
 panel_titles = [
     "Phase anomaly (timing of maximum)\nvs atmospheric indices",
     "Amplitude anomaly (size of seasonal cycle)\nvs atmospheric indices",
 ]
 
-# --- Compute normalised index anomalies for 2016 and 2023 overlay -----------
-overlay_years = {2016: "#D85A30", 2023: "#BA7517"}
+# z-scores for overlay — use raw (non-detrended) index values
+overlay_years = [2016, 2023]
+OVERLAY_STYLE = {
+    2016: {"marker": "o",  "mfc": "black",   "mec": "white",   "yoff": -0.32},
+    2023: {"marker": "D",  "mfc": "#FFD700", "mec": "#2C2C2A", "yoff":  0.32},
+}
 
 index_zscores = {}
 for idx_col in HEATMAP_INDICES:
@@ -463,37 +444,33 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-    # 2016 / 2023 overlay dots
-    for j, (idx_col, idx_label) in enumerate(zip(HEATMAP_INDICES, HEATMAP_LABELS)):
+    # 2016 / 2023 overlay dots — threshold |z| > 0.8 for both years
+    for j, idx_col in enumerate(HEATMAP_INDICES):
         for yr in overlay_years:
             z = index_zscores.get(idx_col, {}).get(yr, np.nan)
-            threshold = 0.8
-            if np.isnan(z) or abs(z) < threshold:
+            if np.isnan(z) or abs(z) < 0.8:
                 continue
             for i, sec in enumerate(sector_order):
-                cell_sig = sig_sub.values[i, j]
-                if cell_sig in ["*", "."]:
-                    yoff   = -0.32 if yr == 2016 else 0.32
-                    marker = "o"   if yr == 2016 else "D"
-                    mfc    = "black" if yr == 2016 else "#FFD700"
-                    mec    = "white" if yr == 2016 else "#2C2C2A"
-                    ax.plot(j + 0.35, i + yoff, marker,
-                            color=mfc, markersize=10,
-                            markeredgecolor=mec, markeredgewidth=1.0,
+                if sig_sub.values[i, j] in ["*", "."]:
+                    sty = OVERLAY_STYLE[yr]
+                    ax.plot(j + 0.35, i + sty["yoff"],
+                            sty["marker"],
+                            color=sty["mfc"],
+                            markersize=10,
+                            markeredgecolor=sty["mec"],
+                            markeredgewidth=1.0,
                             zorder=5, clip_on=False)
 
-# Colorbar — below the plots
+# Colorbar
 fig.subplots_adjust(bottom=0.14, top=0.95, left=0.14,
                     right=0.97, hspace=0.35)
 cbar = fig.colorbar(im, ax=axes,
                     orientation="horizontal",
-                    fraction=0.025, pad=0.12, aspect=40,
-                    label="Pearson r  |  * p<0.05   . p<0.10")
+                    fraction=0.025, pad=0.12, aspect=40)
 cbar.ax.tick_params(labelsize=11)
 cbar.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=11)
 
 # Legend
-from matplotlib.lines import Line2D
 legend_elements = [
     Line2D([0], [0], marker="o", color="w",
            markerfacecolor="black", markeredgecolor="white",
@@ -515,7 +492,6 @@ print("Heatmap saved")
 
 # =============================================================================
 # 7b. EXPLORATORY HEATMAP — trend and residual components
-# For your own peace of mind — not for the talk
 # =============================================================================
 print("Saving exploratory heatmap (trend + residual)...")
 
@@ -578,7 +554,7 @@ cbar2 = fig.colorbar(im2, ax=axes, label="Pearson r",
 cbar2.ax.tick_params(labelsize=10)
 
 fig.suptitle(
-    "Trend and residual components vs atmospheric indices — 1979–2022\n"
+    "Trend and residual components vs atmospheric indices — 1979–2023\n"
     "* p<0.05   . p<0.10   |   exploratory — not for talk",
     fontsize=11, y=1.02
 )
@@ -592,6 +568,10 @@ print("Exploratory heatmap saved")
 # =============================================================================
 # 8. TERMINAL PREVIEW
 # =============================================================================
+
+print("\nAll significant correlations in the full table:")
+all_sig = corr_df[corr_df["sig"] == "*"].sort_values("r", key=abs, ascending=False)
+print(all_sig[["sector","apac_var","index","r","p"]].to_string(index=False))
 
 print("\nTop 10 significant correlations — phase anomaly:")
 phase_sig = corr_df[
@@ -714,11 +694,11 @@ fig.subplots_adjust(bottom=0.22, top=0.88, left=0.04,
 cbar_s = fig.colorbar(im_s, ax=axes,
                       orientation="horizontal",
                       fraction=0.03, pad=0.18, aspect=50,
-                      label="Pearson r")
+                      label="Pearson r  |  * p<0.05   . p<0.10")
 cbar_s.ax.tick_params(labelsize=9)
 
 fig.suptitle(
-    "All decomposition components vs atmospheric indices — 1979–2022  "
+    "All decomposition components vs atmospheric indices — 1979–2023  "
     "|  * p<0.05   . p<0.10   |  all series linearly detrended  "
     "|  SUPPLEMENTARY",
     fontsize=9, y=1.0
@@ -730,8 +710,6 @@ print("  -> supp_heatmap_full.png")
 
 # =============================================================================
 # SUPPLEMENTARY 2 — Atmospheric index anomalies in 2016 and 2023
-# Time series per index with 1979-2015 mean ± 1 std dev band
-# 2016 and 2023 highlighted as coloured dots
 # =============================================================================
 print("Supplementary 2: Atmospheric index anomalies in 2016 and 2023...")
 
@@ -746,7 +724,6 @@ SUPP2_LABELS = [
     "ASL SON", "ASL DJF",
 ]
 
-n_idx = len(SUPP2_INDICES)
 fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharey=False)
 axes = axes.flatten()
 
@@ -758,25 +735,20 @@ for ax, idx_col, idx_label in zip(axes, SUPP2_INDICES, SUPP2_LABELS):
     s = idx.set_index("Year")[idx_col].dropna().sort_index()
     yrs = s.index.values
 
-    # Baseline: 1979-2015
     base = s[s.index <= 2015]
     mu   = base.mean()
     sd   = base.std()
 
-    # Time series
     ax.plot(yrs, s.values, color="#888780", lw=1.0, zorder=2)
-
-    # Mean and ±1 std band
     ax.axhline(mu, color="#2C2C2A", lw=1.0, ls="--", zorder=3,
                label="1979–2015 mean")
     ax.axhspan(mu - sd, mu + sd, color="#B4B2A9", alpha=0.2, zorder=1,
                label="±1 std dev")
 
-    # 2016 and 2023 dots — always shown regardless of z-score
-    for yr, col, marker in [(2016, "#D85A30", "o"), (2023, "#BA7517", "D")]:
+    for yr, col, marker in [(2016, "#D85A30", "o"), (2023, "#FFD700", "D")]:
         if yr in s.index:
             ax.scatter(yr, s[yr], color=col, s=100, zorder=5,
-                       marker=marker, edgecolors="white", linewidth=0.8,
+                       marker=marker, edgecolors="#2C2C2A", linewidth=0.8,
                        label=str(yr))
             z = (s[yr] - mu) / sd
             ax.annotate(f"z={z:+.1f}",
@@ -787,7 +759,7 @@ for ax, idx_col, idx_label in zip(axes, SUPP2_INDICES, SUPP2_LABELS):
                                                      foreground="white")])
 
     ax.set_title(idx_label, fontsize=11, fontweight="bold")
-    ax.set_xlim(1978, 2024)
+    ax.set_xlim(1978, 2025)
     ax.tick_params(labelsize=9)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -807,4 +779,4 @@ fig.savefig(os.path.join(OUTPUT_DIR, "supp_index_anomalies_2016_2023.png"),
 plt.close(fig)
 print("  -> supp_index_anomalies_2016_2023.png")
 
-print(f"\n=== All supplementary figures saved to {OUTPUT_DIR} ===")
+print(f"\n=== All figures saved to {OUTPUT_DIR} ===")
