@@ -4,20 +4,19 @@ compute_atmospheric_correlations.py
 Correlates APAC phase and amplitude anomalies with atmospheric indices:
   - Marshall SAM (monthly)
   - AAO (monthly)
-  - ZW3 Raphael NEW (monthly netCDF, ERA5 1979-2025) — replaces old annual CSV
+  - ZW3 Raphael NEW (monthly netCDF, ERA5 1979-2025)
   - ZW3 Goyal (annual: PC1, PC2, magnitude, phase)
   - ASL Hosking v3 (monthly ERA5) — RelCenPres, SON and DJF
-  - Annual mean SIE anomaly (1979-2010 baseline) — shows conflation effect
+  - Annual mean SIE anomaly (1979-2010 baseline)
 
-Both APAC variables, SIE anomaly, and atmospheric indices are linearly
-detrended before correlation to remove spurious trend-driven signals.
+All series linearly detrended before correlation.
 
 Outputs:
-  - correlations_all.csv            — Pearson r and p-value, all indices
-  - correlation_heatmap_annual.png  — summary heatmap (Phase + Amplitude only)
-  - correlation_heatmap_exploratory.png — trend + residual exploratory
-  - supp_heatmap_full.png           — all 5 components, all indices
-  - supp_index_anomalies_2016_2023.png — index time series with 2016/2023 context
+  - correlations_all.csv
+  - correlation_heatmap_annual.png       — Phase + Amplitude, 2 panels stacked
+  - correlation_heatmap_exploratory.png  — Trend + Residual exploratory
+  - supp_heatmap_full.png                — All 5 components, grid layout
+  - supp_index_anomalies_2016_2023.png   — Index time series context
 
 Reference period: 1979-2023
 """
@@ -62,10 +61,10 @@ annual = pd.read_csv(ANNUAL_CSV)
 annual = annual[annual["Year"].between(YEAR_MIN, YEAR_MAX)]
 
 # =============================================================================
-# 1b. DERIVE TREND AND RESIDUAL ANNUAL INDICES FROM DAILY FITTED CSV
+# 1b. TREND AND RESIDUAL INDICES FROM DAILY FITTED CSV
 # =============================================================================
 
-print("Loading daily fitted CSV for trend/residual indices...")
+print("Loading daily fitted CSV...")
 daily = pd.read_csv(DAILY_CSV, parse_dates=["Date"])
 daily = daily[daily["Year"].between(YEAR_MIN, YEAR_MAX)]
 
@@ -84,7 +83,7 @@ for sec_col, sec_label in SECTORS.items():
     daily_indices.append(ann)
 
 daily_idx = pd.concat(daily_indices)
-print(f"  Daily indices computed: {daily_idx.shape}")
+print(f"  Daily indices: {daily_idx.shape}")
 
 # =============================================================================
 # 2. LOAD ATMOSPHERIC INDICES
@@ -94,7 +93,6 @@ month_map = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
              "Jul":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12}
 
 def load_wide_index(filepath, val_col):
-    """Load a year x month wide-format index file."""
     df = pd.read_csv(
         filepath, sep=r"\s+", header=0,
         names=["Year","Jan","Feb","Mar","Apr","May","Jun",
@@ -107,7 +105,6 @@ def load_wide_index(filepath, val_col):
 
 
 def seasonal_mean(df, val_col, season_months, new_col):
-    """Compute seasonal mean, handling DJF year alignment."""
     df = df.copy()
     if set(season_months) == {12, 1, 2}:
         df.loc[df["month"] == 12, "Year"] = df.loc[df["month"] == 12, "Year"] + 1
@@ -117,23 +114,23 @@ def seasonal_mean(df, val_col, season_months, new_col):
     return sub
 
 
-# --- Marshall SAM ---
-sam_long    = load_wide_index(os.path.join(INDICES_DIR, "marshall_sam_monthly.txt"), "SAM")
-sam_annual  = sam_long.groupby("Year")["SAM"].mean().reset_index()
+# SAM
+sam_long   = load_wide_index(os.path.join(INDICES_DIR, "marshall_sam_monthly.txt"), "SAM")
+sam_annual = sam_long.groupby("Year")["SAM"].mean().reset_index()
 sam_annual.columns = ["Year","SAM_annual"]
-sam_djf     = seasonal_mean(sam_long, "SAM", [12,1,2],  "SAM_DJF")
-sam_son     = seasonal_mean(sam_long, "SAM", [9,10,11], "SAM_SON")
+sam_djf    = seasonal_mean(sam_long, "SAM", [12,1,2],  "SAM_DJF")
+sam_son    = seasonal_mean(sam_long, "SAM", [9,10,11], "SAM_SON")
 
-# --- AAO ---
-aao_long    = load_wide_index(os.path.join(INDICES_DIR, "daily_aao_sam.txt"), "AAO")
-aao_annual  = aao_long.groupby("Year")["AAO"].mean().reset_index()
+# AAO
+aao_long   = load_wide_index(os.path.join(INDICES_DIR, "daily_aao_sam.txt"), "AAO")
+aao_annual = aao_long.groupby("Year")["AAO"].mean().reset_index()
 aao_annual.columns = ["Year","AAO_annual"]
-aao_djf     = seasonal_mean(aao_long, "AAO", [12,1,2],  "AAO_DJF")
-aao_son     = seasonal_mean(aao_long, "AAO", [9,10,11], "AAO_SON")
+aao_djf    = seasonal_mean(aao_long, "AAO", [12,1,2],  "AAO_DJF")
+aao_son    = seasonal_mean(aao_long, "AAO", [9,10,11], "AAO_SON")
 
-# --- ZW3 Raphael NEW — monthly netCDF ---
-print("Loading new ZW3 Raphael netCDF...")
-zw3_nc = nc.Dataset(os.path.join(INDICES_DIR, "zw3_monthly_index_ERA5_1979-2025.nc"))
+# ZW3 Raphael
+print("Loading ZW3 Raphael netCDF...")
+zw3_nc    = nc.Dataset(os.path.join(INDICES_DIR, "zw3_monthly_index_ERA5_1979-2025.nc"))
 time_var  = zw3_nc.variables["time"]
 time_vals = nc.num2date(time_var[:], units=time_var.units,
                         calendar=getattr(time_var, "calendar", "standard"))
@@ -153,15 +150,14 @@ zw3r_annual = zw3r_long.groupby("Year")["ZW3R"].mean().reset_index()
 zw3r_annual.columns = ["Year","ZW3R_annual"]
 zw3r_son    = seasonal_mean(zw3r_long, "ZW3R", [9,10,11], "ZW3R_SON")
 zw3r_djf    = seasonal_mean(zw3r_long, "ZW3R", [12,1,2],  "ZW3R_DJF")
-print(f"  ZW3R loaded: {len(zw3r_annual)} years, "
-      f"{zw3r_annual['Year'].min()}–{zw3r_annual['Year'].max()}")
+print(f"  ZW3R: {zw3r_annual['Year'].min()}–{zw3r_annual['Year'].max()}")
 
-# --- ZW3 Goyal ---
+# ZW3 Goyal
 zw3g = pd.read_csv(os.path.join(INDICES_DIR, "ZW3_goyal_annual.csv"))
 zw3g = zw3g[zw3g["year"].between(YEAR_MIN, YEAR_MAX)]
 zw3g.columns = ["Year","ZW3G_PC1","ZW3G_PC2","ZW3G_magnitude","ZW3G_phase"]
 
-# --- ASL Hosking v3 ---
+# ASL
 print("Loading ASL index...")
 asl = pd.read_csv(os.path.join(INDICES_DIR, "asli_era5_v3-latest.csv"),
                   comment="#", parse_dates=["time"])
@@ -173,12 +169,12 @@ asl_long.columns = ["Year","month","ASL"]
 
 asl_son = seasonal_mean(asl_long, "ASL", [9,10,11], "ASL_SON")
 asl_djf = seasonal_mean(asl_long, "ASL", [12,1,2],  "ASL_DJF")
-print(f"  ASL loaded: {asl_son['Year'].min()}–{asl_son['Year'].max()}")
+print(f"  ASL: {asl_son['Year'].min()}–{asl_son['Year'].max()}")
 
 # =============================================================================
-# 3. COMPUTE ANNUAL MEAN SIE ANOMALY (1979-2010 baseline)
+# 3. SIE ANOMALY (1979-2010 baseline)
 # =============================================================================
-print("Computing annual mean SIE anomaly...")
+print("Computing SIE anomaly...")
 
 sie = pd.read_csv(SIE_CSV)
 sie["Date"] = pd.to_datetime(sie["Date"], format="%m/%d/%y")
@@ -203,10 +199,9 @@ sie_annual_anom = sie_annual_anom.rename(columns={
     f"{s}_anom": f"SIE_anom_{SECTORS[s].replace(' ','_')}"
     for s in SECTORS.keys()
 })
-print(f"  SIE anomaly computed: {sie_annual_anom.shape}")
 
 # =============================================================================
-# 4. BUILD MASTER INDEX TABLE
+# 4. MASTER INDEX TABLE
 # =============================================================================
 
 idx = sam_annual.copy()
@@ -220,10 +215,9 @@ for df in [aao_annual,
     idx = idx.merge(df, on="Year", how="left")
 
 print(f"\nMaster index table: {idx.shape}")
-print(f"  Columns: {list(idx.columns)}")
 
 # =============================================================================
-# 5. DETREND ALL SERIES
+# 5. DETREND
 # =============================================================================
 
 def detrend_series(df, year_col, val_col):
@@ -237,7 +231,6 @@ def detrend_series(df, year_col, val_col):
     return df
 
 
-# Detrend APAC variables per sector
 annual_dt = []
 for sec_col in SECTORS.keys():
     sec = annual[annual["sector"] == sec_col].copy()
@@ -246,7 +239,6 @@ for sec_col in SECTORS.keys():
     annual_dt.append(sec)
 annual_dt = pd.concat(annual_dt)
 
-# All index columns to detrend
 INDEX_COLS_ALL = [
     "SAM_annual", "SAM_SON", "SAM_DJF",
     "AAO_annual", "AAO_SON", "AAO_DJF",
@@ -270,7 +262,6 @@ print("Detrending complete")
 # 6. CORRELATIONS
 # =============================================================================
 
-APAC_VARS = ["max_doy_anom", "amplitude_anom"]
 APAC_LABELS = {
     "max_doy_anom":   "Phase anomaly",
     "amplitude_anom": "Amplitude anomaly",
@@ -281,12 +272,10 @@ results = []
 for sec_col, sec_label in SECTORS.items():
     sec_data = annual_dt[annual_dt["sector"] == sec_col].copy()
     sie_col  = f"SIE_anom_{sec_label.replace(' ','_')}"
+    sie_sec  = detrend_series(idx_dt[["Year", sie_col]].copy(), "Year", sie_col)
 
-    sie_sec = idx_dt[["Year", sie_col]].copy()
-    sie_sec = detrend_series(sie_sec, "Year", sie_col)
-
-    # Phase and amplitude correlations
-    for apac_var in APAC_VARS:
+    # Phase + amplitude
+    for apac_var, apac_label in APAC_LABELS.items():
         for idx_col in INDEX_COLS_ALL:
             if "SIE_anom" in idx_col:
                 continue
@@ -298,7 +287,7 @@ for sec_col, sec_label in SECTORS.items():
             r, p = stats.pearsonr(merged[idx_col], merged[apac_var])
             results.append({
                 "sector":   sec_label,
-                "apac_var": APAC_LABELS[apac_var],
+                "apac_var": apac_label,
                 "index":    idx_col,
                 "r":        round(r, 3),
                 "p":        round(p, 4),
@@ -306,7 +295,7 @@ for sec_col, sec_label in SECTORS.items():
                 "sig":      "*" if p < 0.05 else ("." if p < 0.10 else ""),
             })
 
-    # SIE anomaly correlations
+    # SIE anomaly
     for idx_col in INDEX_COLS_ALL:
         if "SIE_anom" in idx_col:
             continue
@@ -326,20 +315,19 @@ for sec_col, sec_label in SECTORS.items():
             "sig":      "*" if p < 0.05 else ("." if p < 0.10 else ""),
         })
 
-    # Trend and residual correlations
+    # Trend + residual
     sec_daily = daily_idx[daily_idx["sector"] == sec_col].copy()
-
     for daily_var, daily_label in [
         ("trend_annual",  "Trend (annual mean)"),
         ("residual_mean", "Residual (annual mean)"),
         ("residual_std",  "Residual (annual std dev)"),
     ]:
-        sec_daily_dt = detrend_series(sec_daily[["Year", daily_var]].dropna(),
-                                      "Year", daily_var)
+        sec_dt = detrend_series(sec_daily[["Year", daily_var]].dropna(),
+                                "Year", daily_var)
         for idx_col in INDEX_COLS_ALL:
             if "SIE_anom" in idx_col:
                 continue
-            merged = sec_daily_dt[["Year", daily_var]].merge(
+            merged = sec_dt[["Year", daily_var]].merge(
                 idx_dt[["Year", idx_col]], on="Year", how="inner"
             ).dropna()
             if len(merged) < 10:
@@ -360,8 +348,7 @@ corr_df.to_csv(os.path.join(OUTPUT_DIR, "correlations_all.csv"), index=False)
 print(f"\nCorrelations computed: {len(corr_df)} rows")
 
 # =============================================================================
-# 7. HEATMAP — 2 panels: Phase | Amplitude (stacked vertically)
-# SIE panel dropped for talk — kept in supplementary
+# 7. MAIN HEATMAP — Phase + Amplitude stacked, p<0.05 only for overlay dots
 # =============================================================================
 
 plt.rcParams.update({"font.family": "Nimbus Sans"})
@@ -385,13 +372,14 @@ panel_titles = [
     "Amplitude anomaly (size of seasonal cycle)\nvs atmospheric indices",
 ]
 
-# z-scores for overlay — use raw (non-detrended) index values
-overlay_years = [2016, 2023]
+# Overlay style — dots only on p<0.05 significant cells
+OVERLAY_YEARS = [2016, 2023]
 OVERLAY_STYLE = {
     2016: {"marker": "o",  "mfc": "black",   "mec": "white",   "yoff": -0.32},
     2023: {"marker": "D",  "mfc": "#FFD700", "mec": "#2C2C2A", "yoff":  0.32},
 }
 
+# z-scores from raw (non-detrended) index values
 index_zscores = {}
 for idx_col in HEATMAP_INDICES:
     if idx_col not in idx.columns:
@@ -400,7 +388,7 @@ for idx_col in HEATMAP_INDICES:
     mu, sd = s.mean(), s.std()
     if sd > 0:
         index_zscores[idx_col] = {yr: (s.get(yr, np.nan) - mu) / sd
-                                  for yr in overlay_years}
+                                  for yr in OVERLAY_YEARS}
 
 fig, axes = plt.subplots(2, 1, figsize=(12, 9), sharex=True)
 
@@ -428,7 +416,6 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
     ax.set_yticklabels(sector_order, fontsize=12)
     ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
 
-    # r values and significance
     for i in range(len(sector_order)):
         for j in range(len(HEATMAP_LABELS)):
             r_val = sub.values[i, j]
@@ -444,14 +431,14 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-    # 2016 / 2023 overlay dots — threshold |z| > 0.8 for both years
+    # Overlay dots — ONLY on p<0.05 cells AND |z|>0.8
     for j, idx_col in enumerate(HEATMAP_INDICES):
-        for yr in overlay_years:
+        for yr in OVERLAY_YEARS:
             z = index_zscores.get(idx_col, {}).get(yr, np.nan)
             if np.isnan(z) or abs(z) < 0.8:
                 continue
-            for i, sec in enumerate(sector_order):
-                if sig_sub.values[i, j] in ["*", "."]:
+            for i in range(len(sector_order)):
+                if sig_sub.values[i, j] == "*":   # p<0.05 only
                     sty = OVERLAY_STYLE[yr]
                     ax.plot(j + 0.35, i + sty["yoff"],
                             sty["marker"],
@@ -461,7 +448,6 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                             markeredgewidth=1.0,
                             zorder=5, clip_on=False)
 
-# Colorbar
 fig.subplots_adjust(bottom=0.14, top=0.95, left=0.14,
                     right=0.97, hspace=0.35)
 cbar = fig.colorbar(im, ax=axes,
@@ -470,7 +456,6 @@ cbar = fig.colorbar(im, ax=axes,
 cbar.ax.tick_params(labelsize=11)
 cbar.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=11)
 
-# Legend
 legend_elements = [
     Line2D([0], [0], marker="o", color="w",
            markerfacecolor="black", markeredgecolor="white",
@@ -488,12 +473,12 @@ fig.legend(handles=legend_elements, loc="lower center",
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
-print("Heatmap saved")
+print("Main heatmap saved")
 
 # =============================================================================
-# 7b. EXPLORATORY HEATMAP — trend and residual components
+# 7b. EXPLORATORY HEATMAP — Trend + Residual
 # =============================================================================
-print("Saving exploratory heatmap (trend + residual)...")
+print("Saving exploratory heatmap...")
 
 EXPLORE_VARS   = ["Trend (annual mean)", "Residual (annual mean)", "Residual (annual std dev)"]
 EXPLORE_TITLES = [
@@ -552,14 +537,12 @@ cbar2 = fig.colorbar(im2, ax=axes, label="Pearson r",
                      orientation="horizontal",
                      shrink=0.35, pad=0.22, aspect=30)
 cbar2.ax.tick_params(labelsize=10)
-
 fig.suptitle(
     "Trend and residual components vs atmospheric indices — 1979–2023\n"
     "* p<0.05   . p<0.10   |   exploratory — not for talk",
     fontsize=11, y=1.02
 )
-fig.subplots_adjust(bottom=0.25, top=0.88, left=0.04,
-                    right=0.97, wspace=0.08)
+fig.subplots_adjust(bottom=0.25, top=0.88, left=0.04, right=0.97, wspace=0.08)
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_exploratory.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
@@ -569,51 +552,23 @@ print("Exploratory heatmap saved")
 # 8. TERMINAL PREVIEW
 # =============================================================================
 
-print("\nAll significant correlations in the full table:")
+print("\nAll significant correlations (p<0.05):")
 all_sig = corr_df[corr_df["sig"] == "*"].sort_values("r", key=abs, ascending=False)
 print(all_sig[["sector","apac_var","index","r","p"]].to_string(index=False))
 
-print("\nTop 10 significant correlations — phase anomaly:")
-phase_sig = corr_df[
-    (corr_df["apac_var"] == "Phase anomaly") &
-    (corr_df["sig"] == "*")
-].sort_values("r", key=abs, ascending=False)
-print(phase_sig[["sector","index","r","p","n"]].head(10).to_string(index=False))
-
-print("\nTop 10 significant correlations — amplitude anomaly:")
-amp_sig = corr_df[
-    (corr_df["apac_var"] == "Amplitude anomaly") &
-    (corr_df["sig"] == "*")
-].sort_values("r", key=abs, ascending=False)
-print(amp_sig[["sector","index","r","p","n"]].head(10).to_string(index=False))
-
-print("\nTop 10 significant correlations — SIE anomaly (conflated):")
-sie_sig = corr_df[
-    (corr_df["apac_var"] == "SIE anomaly") &
-    (corr_df["sig"] == "*")
-].sort_values("r", key=abs, ascending=False)
-print(sie_sig[["sector","index","r","p","n"]].head(10).to_string(index=False))
-
-print("\nTop significant correlations — trend component:")
-trend_sig = corr_df[
-    (corr_df["apac_var"] == "Trend (annual mean)") &
-    (corr_df["sig"] == "*")
-].sort_values("r", key=abs, ascending=False)
-print(trend_sig[["sector","index","r","p","n"]].head(10).to_string(index=False))
-
-print("\nTop significant correlations — residual mean:")
-res_sig = corr_df[
-    (corr_df["apac_var"] == "Residual (annual mean)") &
-    (corr_df["sig"] == "*")
-].sort_values("r", key=abs, ascending=False)
-print(res_sig[["sector","index","r","p","n"]].head(10).to_string(index=False))
+for label in ["Phase anomaly", "Amplitude anomaly", "SIE anomaly",
+              "Trend (annual mean)", "Residual (annual mean)"]:
+    sub = corr_df[(corr_df["apac_var"] == label) & (corr_df["sig"] == "*")]
+    sub = sub.sort_values("r", key=abs, ascending=False)
+    print(f"\nTop significant — {label}:")
+    print(sub[["sector","index","r","p","n"]].head(10).to_string(index=False))
 
 print(f"\n=== Done — outputs in {OUTPUT_DIR} ===")
 
 # =============================================================================
-# SUPPLEMENTARY 1 — Full heatmap: all 5 decomposition components, all indices
+# SUPPLEMENTARY 1 — Full heatmap: all 5 components, grid layout (3 top, 2 bottom)
 # =============================================================================
-print("\nSupplementary 1: Full heatmap (all components, all indices)...")
+print("\nSupplementary 1: Full heatmap...")
 
 SUPP_INDICES = [
     "SAM_annual", "SAM_SON", "SAM_DJF",
@@ -643,9 +598,21 @@ supp_titles = [
     "Residual (mean)",
 ]
 
-fig, axes = plt.subplots(1, 5, figsize=(32, 5), sharey=True)
+# Grid layout: 3 panels top row, 2 panels bottom row
+fig = plt.figure(figsize=(28, 10))
 
-for ax, apac_var, title in zip(axes, supp_vars, supp_titles):
+# Top row — 3 panels
+ax_top = [fig.add_subplot(2, 3, i+1) for i in range(3)]
+# Bottom row — 2 panels centred
+ax_bot = [fig.add_subplot(2, 3, i+5) for i in range(2)]
+# Blank centre bottom
+ax_blank = fig.add_subplot(2, 3, 6)
+ax_blank.set_visible(False)
+
+all_axes = ax_top + ax_bot
+
+im_s = None
+for ax, apac_var, title in zip(all_axes, supp_vars, supp_titles):
     sub = corr_df[
         (corr_df["apac_var"] == apac_var) &
         (corr_df["index"].isin(SUPP_INDICES))
@@ -653,6 +620,7 @@ for ax, apac_var, title in zip(axes, supp_vars, supp_titles):
 
     if sub.empty:
         ax.set_title(title + "\n(no data)", fontsize=9)
+        ax.set_visible(False)
         continue
 
     sub = sub.reindex(sector_order)[SUPP_INDICES]
@@ -669,10 +637,10 @@ for ax, apac_var, title in zip(axes, supp_vars, supp_titles):
                      cmap="RdBu_r", vmin=-0.6, vmax=0.6, aspect="auto")
 
     ax.set_xticks(range(len(SUPP_LABELS)))
-    ax.set_xticklabels(SUPP_LABELS, fontsize=7)
+    ax.set_xticklabels(SUPP_LABELS, fontsize=8)
     ax.set_yticks(range(len(sector_order)))
     ax.set_yticklabels(sector_order, fontsize=9)
-    ax.set_title(title, fontsize=10, fontweight="bold", pad=8)
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=8)
 
     for i in range(len(sector_order)):
         for j in range(len(SUPP_LABELS)):
@@ -681,7 +649,7 @@ for ax, apac_var, title in zip(axes, supp_vars, supp_titles):
             if not np.isnan(float(r_val)):
                 ax.text(j, i, f"{float(r_val):.2f}{sig}",
                         ha="center", va="center",
-                        fontsize=6.5, fontweight="bold",
+                        fontsize=7, fontweight="bold",
                         color="white" if abs(float(r_val)) > 0.35
                               else "#2C2C2A",
                         path_effects=[pe.withStroke(
@@ -689,29 +657,27 @@ for ax, apac_var, title in zip(axes, supp_vars, supp_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-fig.subplots_adjust(bottom=0.22, top=0.88, left=0.04,
-                    right=0.97, wspace=0.08)
-cbar_s = fig.colorbar(im_s, ax=axes,
-                      orientation="horizontal",
-                      fraction=0.03, pad=0.18, aspect=50,
-                      label="Pearson r  |  * p<0.05   . p<0.10")
-cbar_s.ax.tick_params(labelsize=9)
+if im_s is not None:
+    cbar_s = fig.colorbar(im_s, ax=all_axes,
+                          orientation="horizontal",
+                          fraction=0.02, pad=0.12, aspect=50)
+    cbar_s.ax.tick_params(labelsize=9)
+    cbar_s.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=10)
 
 fig.suptitle(
-    "All decomposition components vs atmospheric indices — 1979–2023  "
-    "|  * p<0.05   . p<0.10   |  all series linearly detrended  "
-    "|  SUPPLEMENTARY",
-    fontsize=9, y=1.0
+    "All decomposition components vs atmospheric indices — 1979–2023  |  SUPPLEMENTARY",
+    fontsize=11, y=1.01
 )
+fig.tight_layout()
 fig.savefig(os.path.join(OUTPUT_DIR, "supp_heatmap_full.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
 print("  -> supp_heatmap_full.png")
 
 # =============================================================================
-# SUPPLEMENTARY 2 — Atmospheric index anomalies in 2016 and 2023
+# SUPPLEMENTARY 2 — Index anomalies 2016 and 2023
 # =============================================================================
-print("Supplementary 2: Atmospheric index anomalies in 2016 and 2023...")
+print("Supplementary 2: Index anomalies...")
 
 SUPP2_INDICES = [
     "SAM_annual", "SAM_SON",
@@ -732,9 +698,8 @@ for ax, idx_col, idx_label in zip(axes, SUPP2_INDICES, SUPP2_LABELS):
         ax.set_visible(False)
         continue
 
-    s = idx.set_index("Year")[idx_col].dropna().sort_index()
-    yrs = s.index.values
-
+    s    = idx.set_index("Year")[idx_col].dropna().sort_index()
+    yrs  = s.index.values
     base = s[s.index <= 2015]
     mu   = base.mean()
     sd   = base.std()
@@ -756,7 +721,7 @@ for ax, idx_col, idx_label in zip(axes, SUPP2_INDICES, SUPP2_LABELS):
                         xytext=(6, 6), textcoords="offset points",
                         fontsize=9, color=col, fontweight="bold",
                         path_effects=[pe.withStroke(linewidth=2,
-                                                     foreground="white")])
+                                                    foreground="white")])
 
     ax.set_title(idx_label, fontsize=11, fontweight="bold")
     ax.set_xlim(1978, 2025)
