@@ -13,7 +13,7 @@ All series linearly detrended before correlation.
 
 Outputs:
   - correlations_all.csv
-  - correlation_heatmap_annual.png       — Phase + Amplitude, 2 panels stacked
+  - correlation_heatmap_annual.png       — Phase + Amplitude stacked, z-score bar chart
   - correlation_heatmap_exploratory.png  — Trend + Residual exploratory
   - supp_heatmap_full.png                — All 5 components, grid layout
   - supp_index_anomalies_2016_2023.png   — Index time series context
@@ -348,7 +348,7 @@ corr_df.to_csv(os.path.join(OUTPUT_DIR, "correlations_all.csv"), index=False)
 print(f"\nCorrelations computed: {len(corr_df)} rows")
 
 # =============================================================================
-# 7. MAIN HEATMAP — Phase + Amplitude stacked, p<0.05 only for overlay dots
+# 7. MAIN HEATMAP — Phase (top) + Amplitude (bottom) stacked | Z-score bar (right)
 # =============================================================================
 
 plt.rcParams.update({"font.family": "Nimbus Sans"})
@@ -377,7 +377,7 @@ panel_titles = [
     "Amplitude anomaly\nvs atmospheric indices",
 ]
 
-# Compute z-scores for 2016 and 2023 relative to 1979-2015 baseline
+# Z-scores for 2016 and 2023 relative to 1979-2015 baseline
 OVERLAY_YEARS = [2016, 2023]
 index_zscores = {}
 for idx_col in HEATMAP_INDICES:
@@ -390,24 +390,25 @@ for idx_col in HEATMAP_INDICES:
         index_zscores[idx_col] = {yr: (s.get(yr, np.nan) - mu) / sd
                                   for yr in OVERLAY_YEARS}
 
-# =============================================================================
-# FIGURE — 3 columns: Phase heatmap | Amplitude heatmap | Z-score bar chart
-# =============================================================================
+# --- Figure: 2-row left column (heatmaps) + 1-row right column (bar chart) ---
+fig = plt.figure(figsize=(16, 9))
 
-fig = plt.figure(figsize=(18, 7))
+# Outer gridspec: 2 columns — left heatmaps, right bar chart
+gs_outer = fig.add_gridspec(1, 2, width_ratios=[2.8, 1.4],
+                             left=0.08, right=0.97,
+                             bottom=0.12, top=0.93,
+                             wspace=0.30)
 
-# Left two panels: heatmaps (each takes 2 units wide)
-# Right panel: z-score bars (takes 1.5 units wide)
-gs = fig.add_gridspec(1, 3, width_ratios=[2, 2, 1.5],
-                      left=0.07, right=0.97,
-                      bottom=0.18, top=0.88,
-                      wspace=0.35)
+# Inner gridspec for the two stacked heatmaps
+gs_left = gs_outer[0].subgridspec(2, 1, hspace=0.55)
+ax_phase = fig.add_subplot(gs_left[0])
+ax_amp   = fig.add_subplot(gs_left[1])
 
-ax_phase = fig.add_subplot(gs[0])
-ax_amp   = fig.add_subplot(gs[1], sharey=ax_phase)
-ax_bar   = fig.add_subplot(gs[2])
+# Right: z-score bar chart
+ax_bar = fig.add_subplot(gs_outer[1])
 
 # --- Draw heatmaps ---
+im = None
 for ax, apac_var, title in zip([ax_phase, ax_amp], panel_vars, panel_titles):
     sub = corr_df[
         (corr_df["apac_var"] == apac_var) &
@@ -429,8 +430,8 @@ for ax, apac_var, title in zip([ax_phase, ax_amp], panel_vars, panel_titles):
     ax.set_xticks(range(len(HEATMAP_LABELS)))
     ax.set_xticklabels(HEATMAP_LABELS, fontsize=10)
     ax.set_yticks(range(len(sector_order)))
-    ax.set_yticklabels(sector_order if ax == ax_phase else [], fontsize=11)
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=10)
+    ax.set_yticklabels(sector_order, fontsize=11)   # always show on both panels
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
 
     for i in range(len(sector_order)):
         for j in range(len(HEATMAP_LABELS)):
@@ -447,10 +448,15 @@ for ax, apac_var, title in zip([ax_phase, ax_amp], panel_vars, panel_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-# Colorbar below the two heatmap panels
+# Force y-tick labels visible on both panels regardless of gridspec sharing
+for ax in [ax_phase, ax_amp]:
+    plt.setp(ax.get_yticklabels(), visible=True)
+
+# Shared colorbar below both heatmaps
 cbar = fig.colorbar(im, ax=[ax_phase, ax_amp],
                     orientation="horizontal",
-                    fraction=0.04, pad=0.18, aspect=35)
+                    fraction=0.03, pad=0.08, aspect=40,
+                    shrink=0.85)
 cbar.ax.tick_params(labelsize=10)
 cbar.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=10)
 
@@ -470,7 +476,6 @@ bars_2023 = ax_bar.barh(y_pos - height/2, z_2023, height,
                          edgecolor="#2C2C2A", linewidth=0.5,
                          label="2023", zorder=3)
 
-# Threshold lines
 ax_bar.axvline( 1.0, color="#2C2C2A", lw=1.0, ls="--", alpha=0.5, zorder=2)
 ax_bar.axvline(-1.0, color="#2C2C2A", lw=1.0, ls="--", alpha=0.5, zorder=2)
 ax_bar.axvline( 0.0, color="#2C2C2A", lw=0.6, ls="-",  alpha=0.3, zorder=2)
@@ -485,7 +490,6 @@ ax_bar.spines["top"].set_visible(False)
 ax_bar.spines["right"].set_visible(False)
 ax_bar.legend(fontsize=10, loc="lower right", frameon=False)
 
-# Annotate z values on bars
 for bar, z in zip(bars_2016, z_2016):
     if not np.isnan(z):
         xpos = z + (0.08 if z >= 0 else -0.08)
@@ -506,6 +510,19 @@ fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
 print("Main heatmap saved")
+
+# --- Goyal ZW3 correlation summary (terminal only) ---
+print("\n=== Goyal ZW3 correlations (Phase + Amplitude) ===")
+goyal_cols = ["ZW3G_PC1", "ZW3G_PC2", "ZW3G_magnitude", "ZW3G_phase"]
+goyal_corrs = corr_df[
+    (corr_df["index"].isin(goyal_cols)) &
+    (corr_df["apac_var"].isin(["Phase anomaly", "Amplitude anomaly"]))
+].sort_values("p")
+print(goyal_corrs[["sector","apac_var","index","r","p","sig","n"]].to_string(index=False))
+sig_goyal = goyal_corrs[goyal_corrs["sig"] != ""]
+print(f"\n  Significant (p<0.10): {len(sig_goyal)} correlations")
+if len(sig_goyal) == 0:
+    print("  -> No Goyal ZW3 correlations reached p<0.10 for phase or amplitude")
 
 # =============================================================================
 # 7b. EXPLORATORY HEATMAP — Trend + Residual
@@ -631,17 +648,23 @@ supp_titles = [
 ]
 
 # Grid layout: 3 panels top row, 2 panels bottom row
-fig = plt.figure(figsize=(28, 10))
+# Use constrained_layout=False and manage spacing manually for reliable colorbar
+fig = plt.figure(figsize=(28, 12))
 
-# Top row — 3 panels
-ax_top = [fig.add_subplot(2, 3, i+1) for i in range(3)]
-# Bottom row — 2 panels centred
-ax_bot = [fig.add_subplot(2, 3, i+5) for i in range(2)]
-# Blank centre bottom
-ax_blank = fig.add_subplot(2, 3, 6)
-ax_blank.set_visible(False)
+# Build a 2-row x 3-col gridspec with extra bottom space for the colorbar
+gs_supp = fig.add_gridspec(
+    2, 3,
+    left=0.05, right=0.97,
+    top=0.91, bottom=0.14,     # generous bottom margin for colorbar
+    hspace=0.45, wspace=0.12
+)
 
-all_axes = ax_top + ax_bot
+ax_top  = [fig.add_subplot(gs_supp[0, i]) for i in range(3)]
+ax_bot0 = fig.add_subplot(gs_supp[1, 0])
+ax_bot1 = fig.add_subplot(gs_supp[1, 1])
+# Leave gs_supp[1, 2] empty (no axis created)
+
+all_axes = ax_top + [ax_bot0, ax_bot1]
 
 im_s = None
 for ax, apac_var, title in zip(all_axes, supp_vars, supp_titles):
@@ -689,18 +712,18 @@ for ax, apac_var, title in zip(all_axes, supp_vars, supp_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
+# Colorbar: placed explicitly in figure coordinates so it sits
+# cleanly below all panels regardless of gridspec quirks
 if im_s is not None:
-    cbar_s = fig.colorbar(im_s, ax=all_axes,
-                          orientation="horizontal",
-                          fraction=0.02, pad=0.12, aspect=50)
-    cbar_s.ax.tick_params(labelsize=9)
+    cbar_ax = fig.add_axes([0.20, 0.05, 0.60, 0.025])  # [left, bottom, width, height]
+    cbar_s  = fig.colorbar(im_s, cax=cbar_ax, orientation="horizontal")
+    cbar_s.ax.tick_params(labelsize=10)
     cbar_s.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=10)
 
 fig.suptitle(
     "All decomposition components vs atmospheric indices — 1979–2023  |  SUPPLEMENTARY",
-    fontsize=11, y=1.01
+    fontsize=12, y=0.97
 )
-fig.tight_layout()
 fig.savefig(os.path.join(OUTPUT_DIR, "supp_heatmap_full.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
 plt.close(fig)
