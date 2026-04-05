@@ -48,7 +48,7 @@ SECTORS = {
 }
 
 YEAR_MIN = 1979
-YEAR_MAX = 2023
+YEAR_MAX = 2022
 
 # =============================================================================
 # 1. LOAD APAC ANNUAL PARAMETERS
@@ -381,8 +381,9 @@ corr_df.to_csv(os.path.join(OUTPUT_DIR, "correlations_all.csv"), index=False)
 print(f"\nCorrelations computed: {len(corr_df)} rows")
 
 # =============================================================================
-# 7. HEATMAP — 3 panels: SIE anomaly | Phase | Amplitude
-# Trimmed to 6 indices. Colorbar below plots. 2016/2023 overlay dots.
+# 7. HEATMAP — 2 panels: Phase | Amplitude
+# SIE panel dropped for talk version — kept in supplementary
+# Titles added in figure, bigger legend, bigger dots
 # =============================================================================
 
 plt.rcParams.update({"font.family": "Nimbus Sans"})
@@ -400,18 +401,14 @@ HEATMAP_LABELS = [
 
 sector_order = ["Weddell", "ABS", "Ross", "East Antarctica", "King Haakon"]
 
-panel_vars   = ["SIE anomaly", "Phase anomaly", "Amplitude anomaly"]
+# Two panels only — Phase and Amplitude
+panel_vars   = ["Phase anomaly", "Amplitude anomaly"]
 panel_titles = [
-    "Raw SIE anomaly\nvs atmospheric indices",
-    "Phase anomaly (max DOY)\nvs atmospheric indices",
-    "Amplitude anomaly\nvs atmospheric indices",
+    "Phase anomaly (timing of maximum)\nvs atmospheric indices",
+    "Amplitude anomaly (size of seasonal cycle)\nvs atmospheric indices",
 ]
 
 # --- Compute normalised index anomalies for 2016 and 2023 overlay -----------
-# For each index, compute the z-score of 2016 and 2023 relative to full record
-# We'll overlay a marker on cells where the index was notably anomalous
-# (|z| > 1.0) in that year AND the correlation is significant
-
 overlay_years = {2016: "#D85A30", 2023: "#BA7517"}
 
 index_zscores = {}
@@ -424,7 +421,7 @@ for idx_col in HEATMAP_INDICES:
         index_zscores[idx_col] = {yr: (s.get(yr, np.nan) - mu) / sd
                                   for yr in overlay_years}
 
-fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+fig, axes = plt.subplots(1, 2, figsize=(14, 5.5), sharey=True)
 
 for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
     sub = corr_df[
@@ -445,10 +442,10 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
                    cmap="RdBu_r", vmin=-0.6, vmax=0.6, aspect="auto")
 
     ax.set_xticks(range(len(HEATMAP_LABELS)))
-    ax.set_xticklabels(HEATMAP_LABELS, fontsize=10)
+    ax.set_xticklabels(HEATMAP_LABELS, fontsize=11)
     ax.set_yticks(range(len(sector_order)))
-    ax.set_yticklabels(sector_order, fontsize=11)
-    ax.set_title("")  # titles added in Keynote
+    ax.set_yticklabels(sector_order, fontsize=12)
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
 
     # r values and significance
     for i in range(len(sector_order)):
@@ -458,7 +455,7 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
             if not np.isnan(float(r_val)):
                 ax.text(j, i, f"{float(r_val):.2f}{sig}",
                         ha="center", va="center",
-                        fontsize=8, fontweight="bold",
+                        fontsize=9, fontweight="bold",
                         color="white" if abs(float(r_val)) > 0.35
                               else "#2C2C2A",
                         path_effects=[pe.withStroke(
@@ -476,36 +473,41 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
             for i, sec in enumerate(sector_order):
                 cell_sig = sig_sub.values[i, j]
                 if cell_sig in ["*", "."]:
-                    yoff = -0.32 if yr == 2016 else 0.32
-                    ax.plot(j + 0.35, i + yoff, "o",
-                            color=col, markersize=8,
-                            markeredgecolor="white", markeredgewidth=0.8,
+                    yoff   = -0.32 if yr == 2016 else 0.32
+                    marker = "o"   if yr == 2016 else "D"
+                    mfc    = "black" if yr == 2016 else "white"
+                    mec    = "white" if yr == 2016 else "black"
+                    ax.plot(j + 0.35, i + yoff, marker,
+                            color=mfc, markersize=10,
+                            markeredgecolor=mec, markeredgewidth=0.9,
                             zorder=5, clip_on=False)
 
-# Divider between SIE and Phase panels
-axes[0].spines["right"].set_linewidth(2.0)
-axes[0].spines["right"].set_color("#888780")
-
-# Colorbar — below the plots, properly positioned
-fig.subplots_adjust(bottom=0.22, top=0.88, left=0.06,
-                    right=0.97, wspace=0.06)
+# Colorbar — below the plots
+fig.subplots_adjust(bottom=0.28, top=0.85, left=0.10,
+                    right=0.97, wspace=0.08)
 cbar = fig.colorbar(im, ax=axes,
                     orientation="horizontal",
-                    fraction=0.03, pad=0.18, aspect=40,
-                    label="Pearson r")
-cbar.ax.tick_params(labelsize=10)
+                    fraction=0.04, pad=0.22, aspect=35,
+                    label="Pearson r  (all series linearly detrended  |  * p<0.05  . p<0.10)")
+cbar.ax.tick_params(labelsize=11)
+cbar.set_label("Pearson r  (all series linearly detrended  |  * p<0.05  . p<0.10)",
+               fontsize=10)
 
-# Legend for overlay dots
+# Legend — bigger, clearly positioned
 from matplotlib.lines import Line2D
 legend_elements = [
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="#D85A30",
-           markersize=7, label="2016 index anomalous (|z|>0.8)"),
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="#BA7517",
-           markersize=7, label="2023 index anomalous (|z|>0.8)"),
+    Line2D([0], [0], marker="o", color="w",
+           markerfacecolor="black", markeredgecolor="white",
+           markeredgewidth=0.9, markersize=11,
+           label="2016 — index anomalous (|z|>0.8)"),
+    Line2D([0], [0], marker="D", color="w",
+           markerfacecolor="white", markeredgecolor="black",
+           markeredgewidth=0.9, markersize=11,
+           label="2023 — index anomalous (|z|>0.5)"),
 ]
 fig.legend(handles=legend_elements, loc="lower center",
-           ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.01),
-           frameon=False)
+           ncol=2, fontsize=11, bbox_to_anchor=(0.5, 0.01),
+           frameon=True, framealpha=0.9, edgecolor="#B4B2A9")
 
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
