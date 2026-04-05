@@ -502,7 +502,7 @@ legend_elements = [
     Line2D([0], [0], marker="D", color="w",
            markerfacecolor="#FFD700", markeredgecolor="#2C2C2A",
            markeredgewidth=1.0, markersize=12,
-           label="2023 — index anomalous (|z|>0.5)"),
+           label="2023 — index anomalous (|z|>0.8)"),
 ]
 fig.legend(handles=legend_elements, loc="lower center",
            ncol=2, fontsize=12, bbox_to_anchor=(0.5, 0.0),
