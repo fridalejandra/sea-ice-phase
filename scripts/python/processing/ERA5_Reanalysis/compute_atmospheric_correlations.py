@@ -48,7 +48,7 @@ SECTORS = {
 }
 
 YEAR_MIN = 1979
-YEAR_MAX = 2022
+YEAR_MAX = 2023
 
 # =============================================================================
 # 1. LOAD APAC ANNUAL PARAMETERS
