@@ -467,7 +467,7 @@ for ax, apac_var, title in zip(axes, panel_vars, panel_titles):
     for j, (idx_col, idx_label) in enumerate(zip(HEATMAP_INDICES, HEATMAP_LABELS)):
         for yr in overlay_years:
             z = index_zscores.get(idx_col, {}).get(yr, np.nan)
-            threshold = 0.8 if yr == 2016 else 0.5
+            threshold = 0.8
             if np.isnan(z) or abs(z) < threshold:
                 continue
             for i, sec in enumerate(sector_order):
