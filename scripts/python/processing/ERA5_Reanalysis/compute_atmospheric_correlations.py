@@ -171,6 +171,36 @@ asl_son = seasonal_mean(asl_long, "ASL", [9,10,11], "ASL_SON")
 asl_djf = seasonal_mean(asl_long, "ASL", [12,1,2],  "ASL_DJF")
 print(f"  ASL: {asl_son['Year'].min()}–{asl_son['Year'].max()}")
 
+# Niño3.4 (ENSO)
+# Download from: https://psl.noaa.gov/data/correlation/nina34.data
+# Format: year | jan feb mar apr may jun jul aug sep oct nov dec
+import urllib.request
+
+nino_path = os.path.join(INDICES_DIR, "nina34.data")
+if not os.path.exists(nino_path):
+    print("Downloading Niño3.4 data...")
+    urllib.request.urlretrieve(
+        "https://psl.noaa.gov/data/correlation/nina34.data",
+        nino_path
+    )
+    print(f"  Saved to {nino_path}")
+else:
+    print(f"  Niño3.4 file already exists: {nino_path}")
+
+print("Loading Niño3.4...")
+nino_path = os.path.join(INDICES_DIR, "nina34.data")
+nino_long = load_wide_index(nino_path, "NINO34")
+# Replace missing values (often -99.99 or -9.99)
+nino_long = nino_long[nino_long["NINO34"] > -9]
+nino_long = nino_long[nino_long["Year"].between(YEAR_MIN, YEAR_MAX)]
+
+nino_annual = nino_long.groupby("Year")["NINO34"].mean().reset_index()
+nino_annual.columns = ["Year", "NINO34_annual"]
+nino_djf    = seasonal_mean(nino_long, "NINO34", [12,1,2],  "NINO34_DJF")
+nino_mam    = seasonal_mean(nino_long, "NINO34", [3,4,5],   "NINO34_MAM")
+nino_son    = seasonal_mean(nino_long, "NINO34", [9,10,11], "NINO34_SON")
+print(f"  Niño3.4: {nino_annual['Year'].min()}–{nino_annual['Year'].max()}")
+
 # =============================================================================
 # 3. SIE ANOMALY (1979-2010 baseline)
 # =============================================================================
@@ -211,6 +241,7 @@ for df in [aao_annual,
            zw3r_annual, zw3r_son, zw3r_djf,
            zw3g,
            asl_son, asl_djf,
+           nino_annual, nino_djf, nino_mam, nino_son,
            sie_annual_anom]:
     idx = idx.merge(df, on="Year", how="left")
 
@@ -245,6 +276,7 @@ INDEX_COLS_ALL = [
     "ZW3R_annual", "ZW3R_SON", "ZW3R_DJF",
     "ZW3G_PC1", "ZW3G_PC2", "ZW3G_magnitude", "ZW3G_phase",
     "ASL_SON", "ASL_DJF",
+    "NINO34_annual", "NINO34_DJF", "NINO34_MAM", "NINO34_SON",
 ] + [f"SIE_anom_{SECTORS[s].replace(' ','_')}" for s in SECTORS.keys()]
 
 idx_dt = idx.copy()
@@ -344,8 +376,77 @@ for sec_col, sec_label in SECTORS.items():
             })
 
 corr_df = pd.DataFrame(results)
+
+# =============================================================================
+# FDR CORRECTION (Benjamini-Hochberg)
+# =============================================================================
+from statsmodels.stats.multitest import multipletests
+
+pvals = corr_df["p"].values
+rejected, pvals_fdr, _, _ = multipletests(pvals, method="fdr_bh")
+corr_df["p_fdr"]   = pvals_fdr.round(4)
+corr_df["sig_fdr"] = corr_df["p_fdr"].apply(
+    lambda p: "*" if p < 0.05 else ("." if p < 0.10 else ""))
+
 corr_df.to_csv(os.path.join(OUTPUT_DIR, "correlations_all.csv"), index=False)
 print(f"\nCorrelations computed: {len(corr_df)} rows")
+print(f"Significant uncorrected (p<0.05): {(corr_df['sig']=='*').sum()}")
+print(f"Significant FDR-corrected (p_fdr<0.05): {(corr_df['sig_fdr']=='*').sum()}")
+
+# =============================================================================
+# NIÑO3.4 SUMMARY — correlations with phase and amplitude, plus 2016/2023 z-scores
+# =============================================================================
+
+print("\n=== Niño3.4 correlations (Phase + Amplitude, uncorrected) ===")
+nino_cols = ["NINO34_annual", "NINO34_DJF", "NINO34_MAM", "NINO34_SON"]
+nino_corrs = corr_df[
+    (corr_df["index"].isin(nino_cols)) &
+    (corr_df["apac_var"].isin(["Phase anomaly", "Amplitude anomaly"]))
+].sort_values("p")
+print(nino_corrs[["sector","apac_var","index","r","p","sig","p_fdr","sig_fdr","n"]].to_string(index=False))
+
+sig_nino_raw = nino_corrs[nino_corrs["sig"] == "*"]
+sig_nino_fdr = nino_corrs[nino_corrs["sig_fdr"] == "*"]
+print(f"\n  Significant uncorrected (p<0.05): {len(sig_nino_raw)}")
+print(f"  Significant FDR-corrected (p_fdr<0.05): {len(sig_nino_fdr)}")
+if len(sig_nino_fdr) == 0:
+    print("  → No Niño3.4 correlations survive FDR correction")
+
+print("\n=== Niño3.4 z-scores: 2016 and 2023 (relative to 1979–2015) ===")
+for col in nino_cols:
+    if col not in idx.columns:
+        continue
+    s    = idx.set_index("Year")[col].dropna()
+    base = s[s.index <= 2015]
+    mu, sd = base.mean(), base.std()
+    z2016 = (s.get(2016, float("nan")) - mu) / sd
+    z2023 = (s.get(2023, float("nan")) - mu) / sd
+    print(f"  {col:<20} 2016: {z2016:+.2f}σ   2023: {z2023:+.2f}σ")
+
+# =============================================================================
+# FULL SIGNIFICANT RESULTS TABLE
+# =============================================================================
+
+print("\n=== All significant correlations — uncorrected p<0.05 ===")
+sig_all = corr_df[corr_df["sig"] == "*"].sort_values("p")
+print(sig_all[["sector","apac_var","index","r","p","sig","p_fdr","sig_fdr","n"]].to_string(index=False))
+
+print("\n=== All significant correlations — FDR corrected p_fdr<0.05 ===")
+sig_fdr_all = corr_df[corr_df["sig_fdr"] == "*"].sort_values("p_fdr")
+print(sig_fdr_all[["sector","apac_var","index","r","p","sig","p_fdr","sig_fdr","n"]].to_string(index=False))
+
+print("\n=== Summary by index group ===")
+for grp, cols in [
+    ("SAM",    ["SAM_annual","SAM_SON","SAM_DJF"]),
+    ("ZW3",    ["ZW3R_annual","ZW3R_SON","ZW3R_DJF"]),
+    ("ASL",    ["ASL_SON","ASL_DJF"]),
+    ("NINO34", ["NINO34_annual","NINO34_DJF","NINO34_MAM","NINO34_SON"]),
+    ("ZW3G",   ["ZW3G_PC1","ZW3G_PC2","ZW3G_magnitude","ZW3G_phase"]),
+]:
+    sub = corr_df[corr_df["index"].isin(cols)]
+    n_raw = (sub["sig"] == "*").sum()
+    n_fdr = (sub["sig_fdr"] == "*").sum()
+    print(f"  {grp:<10} uncorrected: {n_raw:2d}   FDR: {n_fdr:2d}")
 
 # =============================================================================
 # 7. MAIN HEATMAP — Phase (top) + Amplitude (bottom) stacked | Z-score bar (right)
