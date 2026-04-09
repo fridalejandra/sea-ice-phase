@@ -189,11 +189,22 @@ else:
 
 print("Loading Niño3.4...")
 nino_path = os.path.join(INDICES_DIR, "nina34.data")
-nino_long = load_wide_index(nino_path, "NINO34")
-# Coerce to numeric and drop missing values (flagged as -99.99 or -9.99)
-nino_long["NINO34"] = pd.to_numeric(nino_long["NINO34"], errors="coerce")
-nino_long["Year"]   = pd.to_numeric(nino_long["Year"],   errors="coerce")
-nino_long = nino_long.dropna(subset=["NINO34", "Year"])
+print("Loading Niño3.4...")
+nino_rows = []
+with open(nino_path, "r") as f:
+    for line in f:
+        parts = line.split()
+        # skip header line (only 2 elements) and short lines
+        if len(parts) != 13:
+            continue
+        try:
+            year = int(parts[0])
+        except ValueError:
+            continue
+        for month, val in enumerate(parts[1:], start=1):
+            nino_rows.append({"Year": year, "month": month, "NINO34": float(val)})
+
+nino_long = pd.DataFrame(nino_rows)
 nino_long = nino_long[nino_long["NINO34"] > -9]
 nino_long = nino_long[nino_long["Year"].between(YEAR_MIN, YEAR_MAX)]
 
