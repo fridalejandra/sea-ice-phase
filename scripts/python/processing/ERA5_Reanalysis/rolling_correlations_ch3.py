@@ -226,7 +226,7 @@ PAIRS = [
     },
 ]
 
-WINDOW = 15  # years — wide enough for stability, narrow enough to detect change
+WINDOW = 12  # years — smaller window gives more post-2016 data points
 
 # =============================================================================
 # 5. COMPUTE ROLLING CORRELATIONS
@@ -369,13 +369,19 @@ print(f"Figure saved: {outpath}")
 # This gives a quantitative summary of how much each relationship has changed
 
 print("\n=== Rolling window summary: pre vs post 2016 ===")
+print(f"  Using window end year (centre + {WINDOW//2}) to define pre/post 2016")
 print(f"{'Pair':<45} {'Pre-2016 mean r':>15} {'Post-2016 mean r':>16} {'Change':>8}")
 print("-" * 90)
 
 for pair in PAIRS:
-    df = pair["rolling"]
-    pre  = df[df["centre_year"] <= REGIME_SHIFT_YEAR]["r"].mean()
-    post = df[df["centre_year"] >  REGIME_SHIFT_YEAR]["r"].mean()
+    df = pair["rolling"].copy()
+    # Use window end year = centre + half window
+    df["end_year"] = df["centre_year"] + WINDOW // 2
+    pre  = df[df["end_year"] <= REGIME_SHIFT_YEAR]["r"].mean()
+    post = df[df["end_year"] >  REGIME_SHIFT_YEAR]["r"].mean()
     label = (f"{pair['sector_label']} {pair['apac_label'].lower()[:3]} "
              f"~ {pair['idx_label']}")
-    print(f"  {label:<43} {pre:>+15.3f} {post:>+16.3f} {post-pre:>+8.3f}")
+    change_str = f"{post-pre:+.3f}" if not np.isnan(post) else "  n/a"
+    pre_str  = f"{pre:+.3f}"  if not np.isnan(pre)  else "   n/a"
+    post_str = f"{post:+.3f}" if not np.isnan(post) else "    n/a"
+    print(f"  {label:<43} {pre_str:>15} {post_str:>16} {change_str:>8}")
