@@ -289,7 +289,7 @@ for ax, pair in zip(axes, PAIRS):
                color="#E24B4A", zorder=0, label="Post-2016")
 
     # --- Zero reference line ---
-    ax.axhline(0, color="var(--color-text-tertiary)", linewidth=0.5,
+    ax.axhline(0, color="#888780", linewidth=0.5,
                linestyle="-", alpha=0.4, zorder=1)
 
     # --- Full-record r (horizontal dashed line) ---
