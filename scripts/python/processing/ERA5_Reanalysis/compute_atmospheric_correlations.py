@@ -264,6 +264,22 @@ print(f"\nMaster index table: {idx.shape}")
 # =============================================================================
 # 5. DETREND
 # =============================================================================
+# WHY DETREND?
+# Many climate indices share a common long-term linear trend — SAM has trended
+# positive, Antarctic SIE trended positive then negative. If we don't remove
+# these trends, we would find spurious correlations that simply reflect the
+# shared long-term drift rather than genuine year-to-year variability.
+# Detrending isolates the interannual variability we actually want to explain.
+#
+# HOW IT WORKS:
+# For each series we fit a straight line (y = slope * year + intercept) using
+# ordinary least squares (stats.linregress). We then subtract that line from
+# the data. What remains is the residual variability around the trend — the
+# interannual signal.
+#
+# ASSUMPTION: the trend is linear. If the trend is non-linear (e.g. a sudden
+# shift in 2016) linear detrending may not fully remove it. This is a known
+# limitation given the post-2016 regime shift.
 
 def detrend_series(df, year_col, val_col):
     df = df.copy().dropna(subset=[val_col]).sort_values(year_col)
@@ -271,11 +287,14 @@ def detrend_series(df, year_col, val_col):
         return df
     x = df[year_col].values.astype(float)
     y = df[val_col].values.astype(float)
+    # Fit a linear trend: y = slope * x + intercept
     slope, intercept, _, _, _ = stats.linregress(x, y)
+    # Subtract the fitted trend from the data
     df[val_col] = y - (slope * x + intercept)
     return df
 
 
+# Detrend APAC phase and amplitude anomalies for each sector
 annual_dt = []
 for sec_col in SECTORS.keys():
     sec = annual[annual["sector"] == sec_col].copy()
@@ -284,15 +303,17 @@ for sec_col in SECTORS.keys():
     annual_dt.append(sec)
 annual_dt = pd.concat(annual_dt)
 
+# List of all atmospheric index columns to detrend
 INDEX_COLS_ALL = [
-    "SAM_annual", "SAM_SON", "SAM_DJF",
-    "AAO_annual", "AAO_SON", "AAO_DJF",
-    "ZW3R_annual", "ZW3R_SON", "ZW3R_DJF",
-    "ZW3G_PC1", "ZW3G_PC2", "ZW3G_magnitude", "ZW3G_phase",
-    "ASL_SON", "ASL_DJF",
-    "NINO34_annual", "NINO34_DJF", "NINO34_MAM", "NINO34_SON",
+    "SAM_annual", "SAM_SON", "SAM_DJF",        # Southern Annular Mode seasonal means
+    "AAO_annual", "AAO_SON", "AAO_DJF",         # Antarctic Oscillation (closely related to SAM)
+    "ZW3R_annual", "ZW3R_SON", "ZW3R_DJF",      # Zonal Wave 3 — Raphael index
+    "ZW3G_PC1", "ZW3G_PC2", "ZW3G_magnitude", "ZW3G_phase",  # ZW3 — Goyal EOF decomposition
+    "ASL_SON", "ASL_DJF",                        # Amundsen Sea Low relative central pressure
+    "NINO34_annual", "NINO34_DJF", "NINO34_MAM", "NINO34_SON",  # ENSO Niño3.4 SST
 ] + [f"SIE_anom_{SECTORS[s].replace(' ','_')}" for s in SECTORS.keys()]
 
+# Detrend each index column in the master index table
 idx_dt = idx.copy()
 for col in INDEX_COLS_ALL:
     if col in idx_dt.columns:
@@ -302,11 +323,117 @@ for col in INDEX_COLS_ALL:
         tmp = detrend_series(idx_dt[["Year", col]].dropna(), "Year", col)
         idx_dt.loc[tmp.index, col] = tmp[col].values.astype("float64")
 
+# Save the detrended master index table so it can be loaded by other scripts
+idx_dt.to_csv(os.path.join(OUTPUT_DIR, "master_index_detrended.csv"), index=False)
 print("Detrending complete")
+print(f"  Detrended index table saved to {OUTPUT_DIR}master_index_detrended.csv")
+
+# =============================================================================
+# EFFECTIVE DEGREES OF FREEDOM
+# =============================================================================
+# WHY THIS MATTERS:
+# Pearson r significance is tested assuming each year is an independent
+# observation. With n=44 years, the standard formula gives ~42 degrees of
+# freedom (df = n - 2). However, climate variables often show serial
+# autocorrelation — the value in year t is correlated with year t+1 because
+# the ocean and atmosphere have memory. This means consecutive years are not
+# fully independent, and the true effective degrees of freedom (n_eff) is
+# lower than 44. Using n instead of n_eff produces p-values that are too
+# small (overconfident significance).
+#
+# HOW WE ESTIMATE n_eff:
+# We use the Chelton (1983) formula, which accounts for autocorrelation
+# at all lags:
+#   1/n_eff = (1/n) * sum_{k=-(n-1)}^{n-1} rho_x(k) * rho_y(k)
+# where rho_x(k) and rho_y(k) are the autocorrelation functions of x and y
+# at lag k. In practice we truncate at a reasonable number of lags (here 5
+# years given annual data).
+#
+# The adjusted p-value uses a t-distribution with n_eff - 2 degrees of
+# freedom instead of n - 2. This gives a more honest (conservative)
+# significance estimate.
+
+def effective_n(x, y, max_lag=5):
+    """
+    Estimate effective sample size accounting for serial autocorrelation
+    in both x and y using the Chelton (1983) approach.
+
+    Parameters:
+        x, y    : 1D numpy arrays of the same length (detrended, no NaNs)
+        max_lag : maximum lag to include in the autocorrelation sum
+
+    Returns:
+        n_eff   : effective sample size (float, minimum 3)
+    """
+    n = len(x)
+    # Normalise both series to zero mean unit variance
+    x = (x - x.mean()) / x.std()
+    y = (y - y.mean()) / y.std()
+
+    # Compute autocorrelation at each lag k for both series
+    # np.correlate gives the full cross-correlation; we normalise by n
+    acf_x = np.correlate(x, x, mode="full") / n
+    acf_y = np.correlate(y, y, mode="full") / n
+
+    # The zero-lag is at index n-1 in the full output
+    mid = n - 1
+
+    # Sum autocorrelation products from lag 1 to max_lag
+    # (lag 0 contributes 1.0 * 1.0 = 1.0, already in the 1/n term)
+    acf_sum = 1.0  # lag 0 contribution
+    for k in range(1, min(max_lag + 1, n)):
+        acf_sum += 2.0 * acf_x[mid + k] * acf_y[mid + k]
+
+    # n_eff = n / acf_sum, clipped to a minimum of 3
+    n_eff = n / acf_sum
+    return max(3.0, float(n_eff))
+
+
+def pearsonr_adjusted(x, y, max_lag=5):
+    """
+    Pearson correlation with p-value adjusted for serial autocorrelation.
+
+    Returns:
+        r       : Pearson correlation coefficient
+        p_adj   : p-value using effective degrees of freedom
+        n_eff   : effective sample size used for the test
+    """
+    r, _ = stats.pearsonr(x, y)
+    n_eff = effective_n(x, y, max_lag=max_lag)
+    # t-statistic using effective df
+    # Formula: t = r * sqrt(n_eff - 2) / sqrt(1 - r^2)
+    df_eff = n_eff - 2
+    t_stat = r * np.sqrt(df_eff) / np.sqrt(1 - r**2 + 1e-12)
+    # Two-tailed p-value from t-distribution with df_eff degrees of freedom
+    p_adj = 2 * stats.t.sf(abs(t_stat), df=df_eff)
+    return r, round(p_adj, 4), round(n_eff, 1)
+
 
 # =============================================================================
 # 6. CORRELATIONS
 # =============================================================================
+# WHAT WE ARE DOING:
+# For each combination of (sector, APAC variable, atmospheric index) we compute
+# the Pearson correlation coefficient r and its p-value over 1979-2023.
+#
+# Pearson r measures the strength and direction of a LINEAR relationship
+# between two variables. It ranges from -1 (perfect negative) to +1 (perfect
+# positive). r=0 means no linear relationship.
+#
+# The p-value answers: if there were truly NO relationship between these two
+# variables, what is the probability of observing an r this large just by
+# chance? p < 0.05 means less than 5% chance of a false positive.
+#
+# We report TWO p-values for each correlation:
+#   p        : standard p-value assuming n independent observations
+#   p_adj    : adjusted p-value using effective degrees of freedom
+#              (more conservative, accounts for serial autocorrelation)
+#
+# STRUCTURE OF THE LOOP:
+# Outer loop  → each of 5 sectors
+# Middle loop → each APAC variable (phase anomaly, amplitude anomaly)
+# Inner loop  → each atmospheric index
+# For each combination: merge on Year, drop NaNs, compute r and p
 
 APAC_LABELS = {
     "max_doy_anom":   "Phase anomaly",
@@ -320,28 +447,41 @@ for sec_col, sec_label in SECTORS.items():
     sie_col  = f"SIE_anom_{sec_label.replace(' ','_')}"
     sie_sec  = detrend_series(idx_dt[["Year", sie_col]].copy(), "Year", sie_col)
 
-    # Phase + amplitude
+    # --- Phase and amplitude anomaly correlations ---
+    # For each APAC variable (phase, amplitude) correlate with each index
     for apac_var, apac_label in APAC_LABELS.items():
         for idx_col in INDEX_COLS_ALL:
             if "SIE_anom" in idx_col:
-                continue
+                continue  # SIE anomaly handled separately below
+            # Merge APAC data with index data on Year — inner join keeps
+            # only years where both variables have valid data
             merged = sec_data[["Year", apac_var]].merge(
                 idx_dt[["Year", idx_col]], on="Year", how="inner"
             ).dropna()
             if len(merged) < 10:
-                continue
-            r, p = stats.pearsonr(merged[idx_col], merged[apac_var])
+                continue  # skip if too few data points for a meaningful test
+            x = merged[idx_col].values
+            y = merged[apac_var].values
+            # Standard Pearson r and p-value (assumes independence)
+            r, p = stats.pearsonr(x, y)
+            # Adjusted p-value accounting for serial autocorrelation
+            _, p_adj, n_eff = pearsonr_adjusted(x, y)
             results.append({
                 "sector":   sec_label,
                 "apac_var": apac_label,
                 "index":    idx_col,
                 "r":        round(r, 3),
                 "p":        round(p, 4),
-                "n":        len(merged),
+                "p_adj":    p_adj,       # adjusted for autocorrelation
+                "n_eff":    n_eff,        # effective sample size
+                "n":        len(merged),  # actual sample size
                 "sig":      "*" if p < 0.05 else ("." if p < 0.10 else ""),
+                "sig_adj":  "*" if p_adj < 0.05 else ("." if p_adj < 0.10 else ""),
             })
 
-    # SIE anomaly
+    # --- SIE anomaly correlations ---
+    # Raw annual mean SIE anomaly vs each index — comparable to Raphael & Hobbs (2014)
+    # Note: SIE anomaly contains both phase and amplitude signals mixed together
     for idx_col in INDEX_COLS_ALL:
         if "SIE_anom" in idx_col:
             continue
@@ -350,18 +490,27 @@ for sec_col, sec_label in SECTORS.items():
         ).dropna()
         if len(merged) < 10:
             continue
-        r, p = stats.pearsonr(merged[idx_col], merged[sie_col])
+        x = merged[idx_col].values
+        y = merged[sie_col].values
+        r, p = stats.pearsonr(x, y)
+        _, p_adj, n_eff = pearsonr_adjusted(x, y)
         results.append({
             "sector":   sec_label,
             "apac_var": "SIE anomaly",
             "index":    idx_col,
             "r":        round(r, 3),
             "p":        round(p, 4),
+            "p_adj":    p_adj,
+            "n_eff":    n_eff,
             "n":        len(merged),
             "sig":      "*" if p < 0.05 else ("." if p < 0.10 else ""),
+            "sig_adj":  "*" if p_adj < 0.05 else ("." if p_adj < 0.10 else ""),
         })
 
-    # Trend + residual
+    # --- Trend and residual correlations ---
+    # These correlate the annual mean and std dev of the APAC daily residuals
+    # with each index — exploratory analysis of what drives longer-term
+    # variability and short-term scatter around the seasonal cycle
     sec_daily = daily_idx[daily_idx["sector"] == sec_col].copy()
     for daily_var, daily_label in [
         ("trend_annual",  "Trend (annual mean)"),
@@ -378,15 +527,21 @@ for sec_col, sec_label in SECTORS.items():
             ).dropna()
             if len(merged) < 10:
                 continue
-            r, p = stats.pearsonr(merged[idx_col], merged[daily_var])
+            x = merged[idx_col].values
+            y = merged[daily_var].values
+            r, p = stats.pearsonr(x, y)
+            _, p_adj, n_eff = pearsonr_adjusted(x, y)
             results.append({
                 "sector":   sec_label,
                 "apac_var": daily_label,
                 "index":    idx_col,
                 "r":        round(r, 3),
                 "p":        round(p, 4),
+                "p_adj":    p_adj,
+                "n_eff":    n_eff,
                 "n":        len(merged),
                 "sig":      "*" if p < 0.05 else ("." if p < 0.10 else ""),
+                "sig_adj":  "*" if p_adj < 0.05 else ("." if p_adj < 0.10 else ""),
             })
 
 corr_df = pd.DataFrame(results)
@@ -394,18 +549,59 @@ corr_df = pd.DataFrame(results)
 # =============================================================================
 # FDR CORRECTION (Benjamini-Hochberg)
 # =============================================================================
+# WHY WE NEED THIS:
+# When running many hypothesis tests simultaneously, we expect some to appear
+# significant purely by chance. With 570 tests at p < 0.05, we'd expect
+# ~28 false positives even if there were no real relationships.
+#
+# The False Discovery Rate (FDR) method controls the expected proportion of
+# false positives among all significant results. The Benjamini-Hochberg (BH)
+# procedure is the standard approach:
+#   1. Sort all p-values from smallest to largest
+#   2. Find the largest k such that p(k) <= (k/m) * alpha
+#      where m = total number of tests and alpha = 0.05
+#   3. Declare all tests up to rank k as significant
+#
+# We apply FDR correction to BOTH the standard p-values and the
+# autocorrelation-adjusted p-values (p_adj).
+#
+# INTERPRETATION:
+# If nothing survives FDR correction it does NOT mean there are no real
+# relationships — it means the signal-to-noise ratio across the full test
+# set is low. The physically consistent results (SAM-EA amplitude r=0.47,
+# ZW3-Ross amplitude r=-0.41) are still meaningful; FDR correction tells
+# us to be cautious about marginal results.
+
 from statsmodels.stats.multitest import multipletests
 
+# FDR on standard p-values
 pvals = corr_df["p"].values
-rejected, pvals_fdr, _, _ = multipletests(pvals, method="fdr_bh")
+_, pvals_fdr, _, _ = multipletests(pvals, method="fdr_bh")
 corr_df["p_fdr"]   = pvals_fdr.round(4)
 corr_df["sig_fdr"] = corr_df["p_fdr"].apply(
     lambda p: "*" if p < 0.05 else ("." if p < 0.10 else ""))
 
+# FDR on autocorrelation-adjusted p-values
+pvals_adj = corr_df["p_adj"].values
+_, pvals_adj_fdr, _, _ = multipletests(pvals_adj, method="fdr_bh")
+corr_df["p_adj_fdr"]   = pvals_adj_fdr.round(4)
+corr_df["sig_adj_fdr"] = corr_df["p_adj_fdr"].apply(
+    lambda p: "*" if p < 0.05 else ("." if p < 0.10 else ""))
+
 corr_df.to_csv(os.path.join(OUTPUT_DIR, "correlations_all.csv"), index=False)
 print(f"\nCorrelations computed: {len(corr_df)} rows")
-print(f"Significant uncorrected (p<0.05): {(corr_df['sig']=='*').sum()}")
-print(f"Significant FDR-corrected (p_fdr<0.05): {(corr_df['sig_fdr']=='*').sum()}")
+print(f"Significant uncorrected (p<0.05):              {(corr_df['sig']=='*').sum()}")
+print(f"Significant adjusted for autocorr (p_adj<0.05): {(corr_df['sig_adj']=='*').sum()}")
+print(f"Significant FDR corrected (p_fdr<0.05):         {(corr_df['sig_fdr']=='*').sum()}")
+print(f"Significant FDR + autocorr (p_adj_fdr<0.05):    {(corr_df['sig_adj_fdr']=='*').sum()}")
+
+# Print effective n summary for key results
+print("\n=== Effective sample size for key correlations ===")
+key_results = corr_df[
+    (corr_df["apac_var"].isin(["Phase anomaly","Amplitude anomaly"])) &
+    (corr_df["sig"] == "*")
+].sort_values("p")[["sector","apac_var","index","r","p","p_adj","n","n_eff","sig","sig_adj"]].head(15)
+print(key_results.to_string(index=False))
 
 # =============================================================================
 # NIÑO3.4 SUMMARY — correlations with phase and amplitude, plus 2016/2023 z-scores
