@@ -664,18 +664,32 @@ for grp, cols in [
 
 plt.rcParams.update({"font.family": "Nimbus Sans"})
 
+# =============================================================================
+# HEATMAP INDEX SELECTION — intentional, following Raphael & Hobbs (2014)
+# =============================================================================
+# We show only the indices that are physically motivated for each sector
+# based on Raphael & Hobbs (2014) sector-specific drivers:
+#
+# SAM annual + SON  → East Antarctica amplitude (westerly-Ekman mechanism)
+# ZW3 annual        → Ross amplitude + Weddell advance (cold air export)
+# ASL DJF           → ABS + Ross phase (longitudinal wind control)
+# ASL SON           → Weddell retreat (non-annular SAM proxy)
+#
+# This keeps the heatmap readable and anchored to the literature
+# rather than showing all possible combinations
+
 HEATMAP_INDICES = [
-    "SAM_annual", "SAM_SON", "SAM_DJF",
+    "SAM_annual", "SAM_SON",
     "ZW3R_annual",
     "ASL_SON", "ASL_DJF",
 ]
 HEATMAP_LABELS = [
-    "SAM\nannual", "SAM\nSON", "SAM\nDJF",
+    "SAM\nannual", "SAM\nSON",
     "ZW3\nannual",
     "ASL\nSON", "ASL\nDJF",
 ]
 HEATMAP_LABELS_SHORT = [
-    "SAM annual", "SAM SON", "SAM DJF",
+    "SAM annual", "SAM SON",
     "ZW3 annual",
     "ASL SON", "ASL DJF",
 ]
@@ -701,22 +715,20 @@ for idx_col in HEATMAP_INDICES:
         index_zscores[idx_col] = {yr: (s.get(yr, np.nan) - mu) / sd
                                   for yr in OVERLAY_YEARS}
 
-# --- Figure: 2-row left column (heatmaps) + 1-row right column (bar chart) ---
-fig = plt.figure(figsize=(16, 9))
+# --- Figure layout ---
+# Wider figure to give z-score bar chart more room
+# Heatmaps on left, bar chart on right with more padding
+fig = plt.figure(figsize=(14, 9))
 
-# Outer gridspec: 2 columns — left heatmaps, right bar chart
-gs_outer = fig.add_gridspec(1, 2, width_ratios=[2.8, 1.4],
-                             left=0.08, right=0.97,
-                             bottom=0.12, top=0.93,
-                             wspace=0.30)
+gs_outer = fig.add_gridspec(1, 2, width_ratios=[2.4, 1.6],
+                             left=0.08, right=0.96,
+                             bottom=0.14, top=0.93,
+                             wspace=0.35)
 
-# Inner gridspec for the two stacked heatmaps
-gs_left = gs_outer[0].subgridspec(2, 1, hspace=0.55)
+gs_left  = gs_outer[0].subgridspec(2, 1, hspace=0.60)
 ax_phase = fig.add_subplot(gs_left[0])
 ax_amp   = fig.add_subplot(gs_left[1])
-
-# Right: z-score bar chart
-ax_bar = fig.add_subplot(gs_outer[1])
+ax_bar   = fig.add_subplot(gs_outer[1])
 
 # --- Draw heatmaps ---
 im = None
@@ -741,7 +753,7 @@ for ax, apac_var, title in zip([ax_phase, ax_amp], panel_vars, panel_titles):
     ax.set_xticks(range(len(HEATMAP_LABELS)))
     ax.set_xticklabels(HEATMAP_LABELS, fontsize=10)
     ax.set_yticks(range(len(sector_order)))
-    ax.set_yticklabels(sector_order, fontsize=11)   # always show on both panels
+    ax.set_yticklabels(sector_order, fontsize=11)
     ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
 
     for i in range(len(sector_order)):
@@ -759,14 +771,13 @@ for ax, apac_var, title in zip([ax_phase, ax_amp], panel_vars, panel_titles):
                             foreground="black" if abs(float(r_val)) > 0.35
                                        else "white")])
 
-# Force y-tick labels visible on both panels regardless of gridspec sharing
 for ax in [ax_phase, ax_amp]:
     plt.setp(ax.get_yticklabels(), visible=True)
 
 # Shared colorbar below both heatmaps
 cbar = fig.colorbar(im, ax=[ax_phase, ax_amp],
                     orientation="horizontal",
-                    fraction=0.03, pad=0.08, aspect=40,
+                    fraction=0.03, pad=0.10, aspect=40,
                     shrink=0.85)
 cbar.ax.tick_params(labelsize=10)
 cbar.set_label("Pearson r  |  * p<0.05   . p<0.10", fontsize=10)
@@ -796,26 +807,37 @@ ax_bar.set_yticklabels(HEATMAP_LABELS_SHORT, fontsize=10)
 ax_bar.set_xlabel("z-score\n(relative to 1979–2015 mean)", fontsize=10)
 ax_bar.set_title("Index anomaly\nin 2016 vs 2023", fontsize=12,
                  fontweight="bold", pad=10)
-ax_bar.set_xlim(-3, 3)
+
+# Extend xlim to prevent labels clipping at extremes
+max_z = max([abs(z) for z in z_2016 + z_2023 if not np.isnan(z)], default=3)
+ax_bar.set_xlim(-(max_z + 0.8), (max_z + 0.8))
+
 ax_bar.spines["top"].set_visible(False)
 ax_bar.spines["right"].set_visible(False)
-ax_bar.legend(fontsize=10, loc="lower right", frameon=False)
 
+# Legend placed OUTSIDE the plot area below the bar chart
+ax_bar.legend(fontsize=10, loc="upper center",
+              bbox_to_anchor=(0.5, -0.18),
+              ncol=2, frameon=False)
+
+# Bar value labels — clipped to stay within axes
 for bar, z in zip(bars_2016, z_2016):
     if not np.isnan(z):
-        xpos = z + (0.08 if z >= 0 else -0.08)
+        xpos = z + (0.12 if z >= 0 else -0.12)
         ha   = "left" if z >= 0 else "right"
         ax_bar.text(xpos, bar.get_y() + bar.get_height()/2,
                     f"{z:+.1f}", va="center", ha=ha,
-                    fontsize=8, color="#D85A30", fontweight="bold")
+                    fontsize=8, color="#D85A30", fontweight="bold",
+                    clip_on=True)
 
 for bar, z in zip(bars_2023, z_2023):
     if not np.isnan(z):
-        xpos = z + (0.08 if z >= 0 else -0.08)
+        xpos = z + (0.12 if z >= 0 else -0.12)
         ha   = "left" if z >= 0 else "right"
         ax_bar.text(xpos, bar.get_y() + bar.get_height()/2,
                     f"{z:+.1f}", va="center", ha=ha,
-                    fontsize=8, color="#8B7000", fontweight="bold")
+                    fontsize=8, color="#8B7000", fontweight="bold",
+                    clip_on=True)
 
 fig.savefig(os.path.join(OUTPUT_DIR, "correlation_heatmap_annual.png"),
             dpi=200, bbox_inches="tight", facecolor="white")
