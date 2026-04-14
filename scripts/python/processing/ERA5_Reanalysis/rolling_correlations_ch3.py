@@ -1,4 +1,4 @@
-"""""
+"""
 rolling_window_correlations.py
 
 Computes rolling window Pearson correlations between APAC phase/amplitude
@@ -226,7 +226,8 @@ PAIRS = [
     },
 ]
 
-WINDOW = 12  # years — smaller window gives more post-2016 data points
+WINDOW = 15  # 15 years gives tighter CI bands (SE=1/sqrt(12)) while still
+             # producing 2-3 post-2016 window centres
 
 # =============================================================================
 # 5. COMPUTE ROLLING CORRELATIONS
@@ -279,8 +280,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 n_panels = len(PAIRS)
-fig, axes = plt.subplots(n_panels, 1, figsize=(10, 3.2 * n_panels), sharex=True)
-fig.subplots_adjust(hspace=0.12, top=0.94, bottom=0.08)
+fig, axes = plt.subplots(n_panels, 1, figsize=(11, 3.2 * n_panels), sharex=True)
+fig.subplots_adjust(hspace=0.12, top=0.94, bottom=0.08, left=0.08, right=0.97)
 
 for ax, pair in zip(axes, PAIRS):
     df     = pair["rolling"]
@@ -339,12 +340,12 @@ for ax, pair in zip(axes, PAIRS):
     ax.tick_params(labelsize=9)
     ax.spines[["top", "right"]].set_visible(False)
 
-    # --- Panel label — placed bottom left to avoid data ---
+    # --- Panel label — bottom left, clear of data in most panels ---
     panel_title = (f"{pair['sector_label']} {pair['apac_label'].lower()} "
                    f"~ {pair['idx_label']}")
-    ax.text(0.02, 0.08, panel_title, transform=ax.transAxes,
-            fontsize=9.5, fontweight="bold", va="bottom",
-            color=color)
+    ax.text(0.01, 0.05, panel_title, transform=ax.transAxes,
+            fontsize=9, fontweight="bold", va="bottom",
+            color=color, clip_on=False)
 
 # --- Legend on last panel, outside axes at bottom ---
 legend_elements = [
