@@ -1,4 +1,4 @@
-"""
+"""""
 rolling_window_correlations.py
 
 Computes rolling window Pearson correlations between APAC phase/amplitude
@@ -275,75 +275,94 @@ print(f"\nRolling window results saved: {len(all_df)} rows")
 
 print("\nGenerating figure...")
 
-fig, axes = plt.subplots(3, 1, figsize=(9, 10), sharex=True)
-fig.subplots_adjust(hspace=0.08)
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+
+n_panels = len(PAIRS)
+fig, axes = plt.subplots(n_panels, 1, figsize=(10, 3.2 * n_panels), sharex=True)
+fig.subplots_adjust(hspace=0.12, top=0.94, bottom=0.08)
 
 for ax, pair in zip(axes, PAIRS):
-    df = pair["rolling"]
+    df     = pair["rolling"]
     r_full = pair["r_full"]
     color  = pair["color"]
+    n_win  = df["n"].values  # number of data points in each window
 
     # --- Post-2016 shaded region ---
-    # Shade from 2016 to end of record to highlight the new regime
     ax.axvspan(REGIME_SHIFT_YEAR, YEAR_MAX + 1, alpha=0.08,
-               color="#E24B4A", zorder=0, label="Post-2016")
+               color="#E24B4A", zorder=0)
 
     # --- Zero reference line ---
     ax.axhline(0, color="#888780", linewidth=0.5,
                linestyle="-", alpha=0.4, zorder=1)
 
     # --- Full-record r (horizontal dashed line) ---
-    # This is the correlation computed over all 44 years — the reference value
     ax.axhline(r_full, color=color, linewidth=1.2, linestyle="--",
-               alpha=0.6, zorder=2,
-               label=f"Full record r = {r_full}")
+               alpha=0.55, zorder=2)
+
+    # --- Confidence interval band around rolling r ---
+    # Formula: 95% CI for r = tanh(arctanh(r) ± 1.96 / sqrt(n-3))
+    # This uses the Fisher z-transformation which stabilises the variance of r
+    # and makes the CI approximately normal.
+    # n here is the effective window size — we use actual n per window.
+    r_vals = df["r"].values
+    ci_lower = np.full_like(r_vals, np.nan)
+    ci_upper = np.full_like(r_vals, np.nan)
+    for i, (r_i, n_i) in enumerate(zip(r_vals, n_win)):
+        if n_i > 4 and not np.isnan(r_i):
+            # Fisher z-transform
+            z_i = np.arctanh(np.clip(r_i, -0.9999, 0.9999))
+            se  = 1.0 / np.sqrt(n_i - 3)
+            ci_lower[i] = np.tanh(z_i - 1.96 * se)
+            ci_upper[i] = np.tanh(z_i + 1.96 * se)
+
+    ax.fill_between(df["centre_year"], ci_lower, ci_upper,
+                    color=color, alpha=0.12, zorder=2, label="95% CI")
 
     # --- Rolling r line ---
     ax.plot(df["centre_year"], df["r"], color=color, linewidth=2.0,
-            zorder=3, label=f"{WINDOW}-yr rolling r")
+            zorder=3)
 
-    # --- Mark windows where p < 0.05 with filled circles ---
-    sig = df[df["sig"] == "*"]
-    ax.scatter(sig["centre_year"], sig["r"], color=color, s=30,
-               zorder=4, alpha=0.8)
-
-    # --- Mark windows where p >= 0.05 with open circles ---
+    # --- Significance markers ---
+    sig    = df[df["sig"] == "*"]
     nonsig = df[df["sig"] != "*"]
+    ax.scatter(sig["centre_year"], sig["r"], color=color, s=30,
+               zorder=4, alpha=0.85)
     ax.scatter(nonsig["centre_year"], nonsig["r"], color=color, s=20,
                zorder=4, alpha=0.4, facecolors="none",
                edgecolors=color, linewidths=0.8)
 
     # --- Axis formatting ---
-    ax.set_ylim(-0.85, 0.85)
+    ax.set_ylim(-0.90, 0.90)
     ax.set_yticks([-0.6, -0.3, 0, 0.3, 0.6])
     ax.set_ylabel("Pearson r", fontsize=10)
     ax.tick_params(labelsize=9)
     ax.spines[["top", "right"]].set_visible(False)
 
-    # --- Panel label ---
-    # e.g. "East Antarctica amplitude ~ SAM annual"
+    # --- Panel label — placed bottom left to avoid data ---
     panel_title = (f"{pair['sector_label']} {pair['apac_label'].lower()} "
                    f"~ {pair['idx_label']}")
-    ax.text(0.02, 0.93, panel_title, transform=ax.transAxes,
-            fontsize=10, fontweight="bold", va="top",
+    ax.text(0.02, 0.08, panel_title, transform=ax.transAxes,
+            fontsize=9.5, fontweight="bold", va="bottom",
             color=color)
 
-    # --- Legend (first panel only) ---
-    if ax == axes[0]:
-        from matplotlib.lines import Line2D
-        from matplotlib.patches import Patch
-        legend_elements = [
-            Line2D([0], [0], color="gray", linewidth=2, label=f"{WINDOW}-yr rolling r"),
-            Line2D([0], [0], color="gray", linewidth=1.2, linestyle="--",
-                   label="Full-record r"),
-            Line2D([0], [0], marker="o", color="gray", markersize=5,
-                   linewidth=0, label="p < 0.05"),
-            Line2D([0], [0], marker="o", color="gray", markersize=5,
-                   linewidth=0, markerfacecolor="none", label="p ≥ 0.05"),
-            Patch(facecolor="#E24B4A", alpha=0.15, label="Post-2016"),
-        ]
-        ax.legend(handles=legend_elements, loc="upper right",
-                  fontsize=8, framealpha=0.9)
+# --- Legend on last panel, outside axes at bottom ---
+legend_elements = [
+    Line2D([0], [0], color="gray", linewidth=2,
+           label=f"{WINDOW}-yr rolling r"),
+    Line2D([0], [0], color="gray", linewidth=1.2, linestyle="--",
+           label="Full-record r"),
+    Patch(facecolor="gray", alpha=0.2, label="95% CI"),
+    Line2D([0], [0], marker="o", color="gray", markersize=5,
+           linewidth=0, label="p < 0.05"),
+    Line2D([0], [0], marker="o", color="gray", markersize=5,
+           linewidth=0, markerfacecolor="none", label="p ≥ 0.05"),
+    Patch(facecolor="#E24B4A", alpha=0.15, label="Post-2016"),
+]
+axes[-1].legend(handles=legend_elements,
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.22),
+                ncol=3, fontsize=8.5, frameon=False)
 
 # --- X axis ---
 axes[-1].set_xlabel("Window centre year", fontsize=10)
@@ -353,12 +372,13 @@ axes[-1].set_xticks(range(1990, 2020, 5))
 # --- Overall title ---
 fig.suptitle(
     "Rolling window correlations: atmospheric sensitivity of the seasonal cycle\n"
-    f"(window = {WINDOW} years, filled circles = p < 0.05)",
-    fontsize=11, y=0.98
+    f"(window = {WINDOW} years, shaded = 95% CI, filled circles = p < 0.05)",
+    fontsize=11
 )
 
+# Output to chapter3/figures same as heatmap
 outpath = os.path.join(OUTPUT_DIR, "rolling_window_correlations.png")
-fig.savefig(outpath, dpi=150, bbox_inches="tight")
+fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
 print(f"Figure saved: {outpath}")
 
