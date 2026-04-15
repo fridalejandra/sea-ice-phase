@@ -154,3 +154,17 @@ print(f"\nKey values:")
 print(f"  Full record r = {r_full:+.3f}")
 print(f"  Pre-2016 r    = {r_pre:+.3f}")
 print(f"  Post-2016 r   = {r_post:+.3f} (n={len(post)})")
+
+# =============================================================================
+# SYNC TO GOOGLE DRIVE
+# =============================================================================
+import subprocess
+
+result = subprocess.run([
+    "rclone", "copy", outpath,
+    "gdrive:sea-ice-phase/chapter3/figures/"
+], capture_output=True, text=True)
+if result.returncode == 0:
+    print("Synced to Google Drive")
+else:
+    print(f"rclone error: {result.stderr}")
