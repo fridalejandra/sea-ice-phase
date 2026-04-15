@@ -162,9 +162,9 @@ print(f"\nFigure saved: {outpath}")
 import subprocess
 result = subprocess.run([
     "rclone", "copy", outpath,
-    "gdrive:results/Ch3_Figures/"
+    "gdrive:sea-ice-phase/chapter3/figures/"
 ], capture_output=True, text=True)
 if result.returncode == 0:
-    print("Synced to gdrive:results/Ch3_Figures/")
+    print("Synced to Google Drive")
 else:
     print(f"rclone error: {result.stderr}")
