@@ -289,7 +289,7 @@ for ax, pair in zip(axes, PAIRS):
     n_win  = df["n"].values  # number of data points in each window
 
     # --- Post-2016 shaded region ---
-    ax.axvspan(REGIME_SHIFT_YEAR, 2024, alpha=0.08,
+    ax.axvspan(REGIME_SHIFT_YEAR, YEAR_MAX + 1, alpha=0.08,
                color="#E24B4A", zorder=0)
 
     # --- Zero reference line ---
@@ -366,15 +366,8 @@ axes[-1].legend(handles=legend_elements,
 
 # --- X axis ---
 axes[-1].set_xlabel("Window centre year", fontsize=10)
-axes[-1].set_xlim(YEAR_MIN + WINDOW // 2 - 1, 2024)
-axes[-1].set_xticks(range(1990, 2025, 5))
-
-# Annotate why line stops before post-2016 zone
-axes[0].annotate(
-    f"Line ends at 2016\n(last {WINDOW}-yr window centre)",
-    xy=(2016.2, 0.22), fontsize=7.5, color="#888780",
-    ha="left", va="center"
-)
+axes[-1].set_xlim(YEAR_MIN + WINDOW // 2 - 1, YEAR_MAX - WINDOW // 2 + 1)
+axes[-1].set_xticks(range(1990, 2020, 5))
 
 # --- Overall title ---
 fig.suptitle("", fontsize=11)
