@@ -95,7 +95,7 @@ def outlier_report(x_vals, y_vals, years, x_label, y_label, title):
     print(f"Full-record r = {r:+.3f}, p = {p:.4f}, n = {n}")
     print(f"{'='*65}")
     print(f"{'Year':>6} {'x':>8} {'y':>8} {'Resid':>8} "
-          f"{'Leverage':>9} {'StudRes':>8} {'Cook\\'s D':>9}")
+          f"{'Leverage':>9} {'StudRes':>8} {'Cooks D':>9}")
     print("-" * 65)
     for _, row in df.head(10).iterrows():
         flag = " <<<" if abs(row["stud_resid"]) > 2 else ""
