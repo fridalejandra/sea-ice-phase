@@ -45,7 +45,7 @@ OUTPUT_DIR  = FIGURES_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 YEAR_MIN = 1979
-YEAR_MAX = 2023
+YEAR_MAX = 2024
 REGIME_SHIFT_YEAR = 2016  # vertical line marking the post-2016 period
 
 # =============================================================================
