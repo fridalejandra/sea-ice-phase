@@ -45,7 +45,7 @@ OUTPUT_DIR  = FIGURES_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 YEAR_MIN = 1979
-YEAR_MAX = 2024
+YEAR_MAX = 2023
 REGIME_SHIFT_YEAR = 2016  # vertical line marking the post-2016 period
 
 # =============================================================================
@@ -226,8 +226,8 @@ PAIRS = [
     },
 ]
 
-WINDOW = 15  # 15 years gives tighter CI bands (SE=1/sqrt(12)) while still
-             # producing 2-3 post-2016 window centres
+WINDOW = 10  # 10 years gives window centres up to 2018, showing post-2016 period
+             # CI bands are wider but post-2016 behaviour is visible
 
 # =============================================================================
 # 5. COMPUTE ROLLING CORRELATIONS
