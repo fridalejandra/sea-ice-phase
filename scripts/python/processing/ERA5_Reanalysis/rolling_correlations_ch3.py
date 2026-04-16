@@ -136,9 +136,9 @@ def rolling_corr(apac_df, sector_col, apac_var, idx_df, idx_col,
     sec_data = apac_df[apac_df["sector"] == sector_col][["Year", apac_var]].dropna()
 
     results = []
-    for centre in range(year_min + half, year_max - half + 1):
-        yr_start = centre - half
-        yr_end   = centre + half
+    for centre in range(year_min + half, year_max + 1):
+        yr_start = max(year_min, centre - half)
+        yr_end   = min(year_max, centre + half)
 
         # Slice the window
         sec_win = sec_data[sec_data["Year"].between(yr_start, yr_end)]
