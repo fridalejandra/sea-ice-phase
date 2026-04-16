@@ -136,9 +136,9 @@ def rolling_corr(apac_df, sector_col, apac_var, idx_df, idx_col,
     sec_data = apac_df[apac_df["sector"] == sector_col][["Year", apac_var]].dropna()
 
     results = []
-    for centre in range(year_min + half, year_max + 1):
-        yr_start = max(year_min, centre - half)
-        yr_end   = min(year_max, centre + half)
+    for centre in range(year_min + half, year_max - half + 1):
+        yr_start = centre - half
+        yr_end   = centre + half
 
         # Slice the window
         sec_win = sec_data[sec_data["Year"].between(yr_start, yr_end)]
@@ -226,8 +226,7 @@ PAIRS = [
     },
 ]
 
-WINDOW = 10  # 10 years gives window centres up to 2018, showing post-2016 period
-             # CI bands are wider but post-2016 behaviour is visible
+WINDOW = 15  # 15 years — tighter CI bands, last window centre at 2016
 
 # =============================================================================
 # 5. COMPUTE ROLLING CORRELATIONS
@@ -367,8 +366,15 @@ axes[-1].legend(handles=legend_elements,
 
 # --- X axis ---
 axes[-1].set_xlabel("Window centre year", fontsize=10)
-axes[-1].set_xlim(YEAR_MIN + WINDOW // 2 - 1, YEAR_MAX + 1)
+axes[-1].set_xlim(YEAR_MIN + WINDOW // 2 - 1, 2024)
 axes[-1].set_xticks(range(1990, 2025, 5))
+
+# Annotate why line stops before post-2016 zone
+axes[0].annotate(
+    f"Line ends at 2016\n(last {WINDOW}-yr window centre)",
+    xy=(2016.2, 0.22), fontsize=7.5, color="#888780",
+    ha="left", va="center"
+)
 
 # --- Overall title ---
 fig.suptitle("", fontsize=11)
