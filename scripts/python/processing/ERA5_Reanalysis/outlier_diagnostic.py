@@ -199,12 +199,12 @@ for ax, merged, x_col, y_col, y_label, title, color in [
     ax.set_ylabel(y_label, fontsize=10)
     ax.set_title(f"{title}\nr = {r:+.3f}  ρ = {rho:+.3f}  p = {p:.4f}",
                  fontsize=10, fontweight="bold")
-    ax.spines[["top","right"]].set_visible(False)
-    ax.text(0.98, 0.04, "Bubble size ∝ Cook's distance\nRed = post-2016",
+    ax.text(0.98, 0.04, "Red = post-2016",
             transform=ax.transAxes, fontsize=7.5, ha="right",
             color="#888780")
+    ax.spines[["top","right"]].set_visible(False)
 
-fig.suptitle("Outlier diagnostics for key correlations", fontsize=11)
+fig.suptitle("", fontsize=11)
 
 outpath = os.path.join(OUTPUT_DIR, "outlier_diagnostic.png")
 fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")

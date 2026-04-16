@@ -147,11 +147,7 @@ axes[5].legend(handles=legend_elements, loc="center",
                fontsize=9, frameon=False, title="Decade",
                title_fontsize=9)
 
-fig.suptitle(
-    "Phase anomaly vs Amplitude anomaly by sector (detrended, 1979–2023)\n"
-    "Tests empirical independence of APAC parameters",
-    fontsize=11
-)
+fig.suptitle("Phase anomaly vs Amplitude anomaly", fontsize=11)
 
 outpath = os.path.join(OUTPUT_DIR, "phase_amplitude_scatter.png")
 fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")
@@ -162,9 +158,9 @@ print(f"\nFigure saved: {outpath}")
 import subprocess
 result = subprocess.run([
     "rclone", "copy", outpath,
-    "gdrive:sea-ice-phase/chapter3/figures/"
+    "gdrive:results/Ch3_Figures/"
 ], capture_output=True, text=True)
 if result.returncode == 0:
-    print("Synced to Google Drive")
+    print("Synced to gdrive:results/Ch3_Figures/")
 else:
     print(f"rclone error: {result.stderr}")
