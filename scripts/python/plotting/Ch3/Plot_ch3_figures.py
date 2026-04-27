@@ -6,25 +6,28 @@ All Chapter 3 figures for departmental seminar.
 Changes from previous version:
   - Plot 1b : NEW — shows BOTH phase and amplitude variability side by side
   - Plot 2_3: uses RAW anomalies, baseline = 1979-2015 (pre-2016 record)
-  - Plot 6  : full sequential RMSE improvement (all 4 models as grouped bars)
-  - Case studies: now use raw anomalies with 1979-2015 baseline for consistency
+  - Plot 6  : full sequential RM65SE improvement (all 4 models as grouped bars)
+  - Case studies: z-scored anomalies normalised by pre-2016 std dev
+                  for direct comparison of phase (days) and amplitude (Mkm²)
 
 Figures:
-  1.   sector_sie_anomaly.png                    — sector SIE anomaly timeseries
-  1b.  phase_amplitude_variability_by_sector.png — phase AND amplitude std dev
-  2.   phase_anomaly_timeseries.png              — phase anomaly, raw, 1979-2015 baseline
-  3.   amplitude_anomaly_timeseries.png          — amplitude anomaly, raw, 1979-2015 baseline
-  2_3. phase_amplitude_selected.png             — combined phase + amplitude, selected sectors
-  case_study_2016.png                            — 2016 anomalous decay case study
-  case_study_2023.png                            — 2023 record minimum case study
-  4.   season_length_timeseries.png             — growth + retreat season length anomaly
-  6.   rmse_improvement_by_sector.png           — full sequential RMSE improvement
-  7.   rolling_variance_phase_amplitude.png     — 10-yr rolling std dev
-  8.   phase_vs_amplitude_variability.png       — pre/post 2016 std dev bars
-  bridge_phase_as_retreat_advance.png           — retreat/advance timing
+  1.   sector_sie_anomaly.png
+  1b.  phase_amplitude_variability_by_sector.png
+  2.   phase_anomaly_timeseries.png
+  3.   amplitude_anomaly_timeseries.png
+  2_3. phase_amplitude_selected.png
+  case_study_2016.png
+  case_study_2023.png
+  case_study_2016_vs_2023.png
+  4.   season_length_timeseries.png
+  6.   rmse_improvement_by_sector.png
+  7.   rolling_variance_phase_amplitude.png
+  8.   phase_vs_amplitude_variability.png
+  bridge_phase_as_retreat_advance.png
 """
 
 import os
+import subprocess
 import warnings
 import numpy as np
 import pandas as pd
@@ -41,6 +44,7 @@ warnings.filterwarnings("ignore")
 DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data"
 SIE_CSV    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Sea_Ice_Sheets/SIE_daily_sector_and_circumpolar_million_km2.csv"
 OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/figures"
+GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
 
 ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params.csv")
 DAILY_CSV  = os.path.join(DATA_DIR, "daily_fitted.csv")
@@ -100,7 +104,7 @@ DECADE_LEGEND = [
     ("#888780", "1980s"),
     ("#378ADD", "1990s"),
     ("#1D9E75", "2000s"),
-    ("#BA7517", "2010–2015"),
+    ("#BA7517", "2010-2015"),
     ("#D4537E", "2016+"),
 ]
 
@@ -144,6 +148,46 @@ annual["min_doy_raw_anom_2015"]   = (annual["min_doy_raw"]
                                       - annual["sector"].map(bl_min_raw))
 
 print("Baselines computed (1979-2015)")
+
+# =============================================================================
+# Z-SCORE NORMALISATION
+# Divides each anomaly by its pre-2016 standard deviation
+# Puts phase (days) and amplitude (Mkm2) on the same scale
+# for direct comparison across variables and sectors
+# =============================================================================
+
+bl_doy_std = annual[mask].groupby("sector")["max_doy_raw"].std()
+bl_amp_std = annual[mask].groupby("sector")["amplitude_raw_yr"].std()
+bl_min_std = annual[mask].groupby("sector")["min_doy_raw"].std()
+
+annual["max_doy_raw_anom_2015_z"]   = (annual["max_doy_raw_anom_2015"]
+                                        / annual["sector"].map(bl_doy_std))
+annual["amplitude_raw_anom_2015_z"] = (annual["amplitude_raw_anom_2015"]
+                                        / annual["sector"].map(bl_amp_std))
+annual["min_doy_raw_anom_2015_z"]   = (annual["min_doy_raw_anom_2015"]
+                                        / annual["sector"].map(bl_min_std))
+
+print("Z-score normalisation computed (pre-2016 std dev)")
+
+# Print z-score table for 2016 and 2023
+print("\n=== Z-scores for 2016 and 2023 ===")
+for var, label, unit in [
+    ("max_doy_raw_anom_2015_z",   "Phase",     "sigma"),
+    ("amplitude_raw_anom_2015_z", "Amplitude", "sigma"),
+]:
+    print(f"\n  {label}:")
+    print(f"  {'Sector':<22} {'2016':>8} {'2023':>8}  (raw units)")
+    print("  " + "-" * 50)
+    for sec, sec_label in SECTOR_LABELS.items():
+        d = annual[annual["sector"] == sec].set_index("Year")
+        raw_col = var.replace("_z", "")
+        z16   = d.loc[2016, var]   if 2016 in d.index else np.nan
+        z23   = d.loc[2023, var]   if 2023 in d.index else np.nan
+        r16   = d.loc[2016, raw_col] if 2016 in d.index else np.nan
+        r23   = d.loc[2023, raw_col] if 2023 in d.index else np.nan
+        u = "d" if "doy" in var else " Mkm2"
+        print(f"  {sec_label:<22} {z16:>+7.2f}s {z23:>+7.2f}s  "
+              f"({r16:+.1f}{u} / {r23:+.1f}{u})")
 
 # =============================================================================
 # HELPERS
@@ -231,7 +275,7 @@ for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
               pd.Timestamp("2016-01-01"), pd.Timestamp("2022-12-31"),
               colors="#D4537E", linewidth=1.5, linestyle="-", zorder=5)
 
-    ax.text(0.97, 0.04, f"Post-2016: {post_mean:+.2f} Mkm²",
+    ax.text(0.97, 0.04, f"Post-2016: {post_mean:+.2f} Mkm2",
             transform=ax.transAxes, fontsize=8,
             color="#D4537E", ha="right", path_effects=stroke())
 
@@ -247,20 +291,18 @@ for ax, (sec_col, (sec_label, sec_color)) in zip(axes, PLOT_COLS.items()):
     ax.set_xlim(pd.Timestamp("1979-01-01"), pd.Timestamp("2023-01-01"))
 
     if ax == axes[0]:
-        ax.set_ylabel("SIE anomaly (million km²)", fontsize=11, labelpad=8)
+        ax.set_ylabel("SIE anomaly (million km2)", fontsize=11, labelpad=8)
     ax.set_xlabel("Year", fontsize=10, color="#5F5E5A")
 
 fig.suptitle(
-    "Daily SIE Anomaly by Sector — 1979–2010 Baseline  |  5-day running mean",
+    "Daily SIE Anomaly by Sector - 1979-2010 Baseline  |  5-day running mean",
     fontsize=14, fontweight="bold", y=1.01
 )
 fig.tight_layout()
 save(fig, "1_sector_sie_anomaly.png")
 
 # =============================================================================
-# FIG 1b — Phase AND amplitude variability by sector (NEW)
-# Three panels: melt onset timing | freeze onset timing | amplitude
-# Shows directly that phase varies more than amplitude
+# FIG 1b — Phase AND amplitude variability by sector
 # =============================================================================
 print("Fig 1b: Phase and amplitude variability by sector")
 
@@ -282,8 +324,8 @@ panels = [
      "Std dev (days)", "{:.1f}d"),
     (axes[1], phase_std_min, "Freeze onset timing\n(min DOY std dev)",
      "Std dev (days)", "{:.1f}d"),
-    (axes[2], amp_std,       "Amplitude variability\n(max–min range std dev)",
-     "Std dev (million km²)", "{:.2f}"),
+    (axes[2], amp_std,       "Amplitude variability\n(max-min range std dev)",
+     "Std dev (million km2)", "{:.2f}"),
 ]
 
 for ax, vals, title, ylabel, fmt in panels:
@@ -303,14 +345,13 @@ for ax, vals, title, ylabel, fmt in panels:
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
-fig.suptitle("Phase and Amplitude Variability by Sector  (1979–2023)",
+fig.suptitle("Phase and Amplitude Variability by Sector  (1979-2023)",
              fontsize=14, fontweight="bold")
 fig.tight_layout()
 save(fig, "1b_phase_amplitude_variability_by_sector.png")
 
 # =============================================================================
 # FIG 2, 3 & COMBINED
-# UPDATED: raw anomalies, baseline = 1979-2015
 # =============================================================================
 print("Fig 2: Phase anomaly timeseries (raw, 1979-2015 baseline)")
 
@@ -336,7 +377,7 @@ def plot_anomaly_panel(var, ylabel, title, outfile, is_days=True):
 
         post_mean = sub[sub["Year"] >= 2016][var].mean()
         label_str = (f"Post-2016: {post_mean:+.1f} days" if is_days
-                     else f"Post-2016: {post_mean:+.3f} Mkm²")
+                     else f"Post-2016: {post_mean:+.3f} Mkm2")
         ax.text(0.97, 0.04, label_str,
                 transform=ax.transAxes, fontsize=8,
                 color="#D4537E", ha="right", path_effects=stroke())
@@ -365,8 +406,8 @@ def plot_anomaly_panel(var, ylabel, title, outfile, is_days=True):
 
 plot_anomaly_panel(
     var     = "max_doy_raw_anom_2015",
-    ylabel  = "Phase anomaly (days)\n← Ahead of phase  |  Behind phase →",
-    title   = "Timing of Sea Ice Maximum — Anomaly from 1979–2015 Baseline",
+    ylabel  = "Phase anomaly (days)\n<- Ahead of phase  |  Behind phase ->",
+    title   = "Timing of Sea Ice Maximum - Anomaly from 1979-2015 Baseline",
     outfile = "2_phase_anomaly_timeseries.png",
     is_days = True
 )
@@ -374,14 +415,14 @@ plot_anomaly_panel(
 print("Fig 3: Amplitude anomaly timeseries (raw, 1979-2015 baseline)")
 plot_anomaly_panel(
     var     = "amplitude_raw_anom_2015",
-    ylabel  = "Amplitude anomaly (million km²)\n← Smaller  |  Larger →",
-    title   = "Seasonal Amplitude — Anomaly from 1979–2015 Baseline",
+    ylabel  = "Amplitude anomaly (million km2)\n<- Smaller  |  Larger ->",
+    title   = "Seasonal Amplitude - Anomaly from 1979-2015 Baseline",
     outfile = "3_amplitude_anomaly_timeseries.png",
     is_days = False
 )
 
 # =============================================================================
-# FIG 2+3 COMBINED — selected sectors, raw anomalies, 1979-2015 baseline
+# FIG 2+3 COMBINED
 # =============================================================================
 print("Fig 2+3 combined: selected sectors (raw, 1979-2015 baseline)")
 
@@ -401,13 +442,12 @@ fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharex=True, sharey="row")
 
 row_vars    = ["max_doy_raw_anom_2015", "amplitude_raw_anom_2015"]
 row_ylabels = [
-    "Phase anomaly (days)\n← Ahead of phase  |  Behind phase →",
-    "Amplitude anomaly (million km²)\n← Smaller  |  Larger →"
+    "Phase anomaly (days)\n<- Ahead of phase  |  Behind phase ->",
+    "Amplitude anomaly (million km2)\n<- Smaller  |  Larger ->"
 ]
 row_titles = ["Phase", "Amplitude"]
-row_isdays = [True, False]
 
-for row, (var, ylabel, is_days) in enumerate(zip(row_vars, row_ylabels, row_isdays)):
+for row, (var, ylabel) in enumerate(zip(row_vars, row_ylabels)):
     for col, (sec_col, sec_label) in enumerate(SELECTED_SECTORS.items()):
         ax    = axes[row, col]
         sub   = annual[annual["sector"] == sec_col].sort_values("Year")
@@ -427,8 +467,9 @@ for row, (var, ylabel, is_days) in enumerate(zip(row_vars, row_ylabels, row_isda
             ax.plot(yrs, smooth, color=color, lw=2.5, zorder=3, alpha=0.9)
 
         post_mean = sub[sub["Year"] >= 2016][var].mean()
+        is_days   = "doy" in var
         label_str = (f"Post-2016: {post_mean:+.1f} days" if is_days
-                     else f"Post-2016: {post_mean:+.3f} Mkm²")
+                     else f"Post-2016: {post_mean:+.3f} Mkm2")
         ax.text(0.97, 0.04, label_str,
                 transform=ax.transAxes, fontsize=9,
                 color="#D4537E", ha="right", path_effects=stroke())
@@ -458,16 +499,16 @@ fig.legend(handles=handles, loc="lower center", ncol=6,
            fontsize=10, bbox_to_anchor=(0.5, -0.04), frameon=False)
 
 fig.suptitle(
-    "Phase and Amplitude Anomaly — Selected Sectors\n"
-    "Anomaly from 1979–2015 Baseline",
+    "Phase and Amplitude Anomaly - Selected Sectors\n"
+    "Anomaly from 1979-2015 Baseline",
     fontsize=14, fontweight="bold", y=1.01
 )
 fig.tight_layout(rect=[0, 0.04, 0.97, 1])
 save(fig, "2_3_phase_amplitude_selected.png")
 
 # =============================================================================
-# CASE STUDY — helper (2016 and 2023)
-# Uses raw anomalies with 1979-2015 baseline for consistency with time series
+# CASE STUDY HELPER — normalised (z-scored) version
+# Shows z-scores on bars with raw values annotated below
 # =============================================================================
 
 def plot_case_study(case_year, suptitle, outfile):
@@ -481,35 +522,46 @@ def plot_case_study(case_year, suptitle, outfile):
     labels_case = [SECTOR_LABELS[s] for s in sector_order_case]
     colors_case = [SECTOR_COLORS[s] for s in sector_order_case]
 
-    phase_vals = [float(case_data.loc[s, "max_doy_raw_anom_2015"])
+    # Z-scored values for bar heights — comparable across phase and amplitude
+    phase_vals = [float(case_data.loc[s, "max_doy_raw_anom_2015_z"])
                   for s in sector_order_case]
-    amp_vals   = [float(case_data.loc[s, "amplitude_raw_anom_2015"])
+    amp_vals   = [float(case_data.loc[s, "amplitude_raw_anom_2015_z"])
+                  for s in sector_order_case]
+
+    # Raw values for annotations
+    phase_raw  = [float(case_data.loc[s, "max_doy_raw_anom_2015"])
+                  for s in sector_order_case]
+    amp_raw    = [float(case_data.loc[s, "amplitude_raw_anom_2015"])
                   for s in sector_order_case]
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
-    for ax, vals, title, ylabel, fmt in zip(
+    for ax, vals, raw_vals, title, ylabel, raw_unit in zip(
         axes,
         [phase_vals, amp_vals],
-        [f"Phase anomaly — {case_year}",
-         f"Amplitude anomaly — {case_year}"],
-        ["Days (negative = ahead of phase)",
-         "Million km² (negative = smaller cycle)"],
-        ["{:+.0f}d", "{:+.2f}"]
+        [phase_raw,  amp_raw],
+        [f"Phase anomaly - {case_year}",
+         f"Amplitude anomaly - {case_year}"],
+        ["Standard deviations from pre-2016 mean\n(negative = ahead of phase)",
+         "Standard deviations from pre-2016 mean\n(negative = smaller cycle)"],
+        ["d", " Mkm2"]
     ):
         bars = ax.bar(labels_case, vals, color=colors_case,
                       width=0.6, edgecolor="white", zorder=3)
         ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
+        ax.axhline( 1, color="#2C2C2A", lw=0.5, ls="--", alpha=0.3, zorder=2)
+        ax.axhline(-1, color="#2C2C2A", lw=0.5, ls="--", alpha=0.3, zorder=2)
 
-        for bar, val in zip(bars, vals):
-            yabs = max(abs(v) for v in vals)
+        yabs = max(abs(v) for v in vals) if any(vals) else 1
+
+        for bar, val, raw in zip(bars, vals, raw_vals):
             ypos = (bar.get_height() + yabs * 0.03
                     if val >= 0
-                    else bar.get_height() - yabs * 0.06)
+                    else bar.get_height() - yabs * 0.10)
             ax.text(bar.get_x() + bar.get_width()/2, ypos,
-                    fmt.format(val),
+                    f"{val:+.1f}s\n({raw:+.0f}{raw_unit})",
                     ha="center", va="bottom",
-                    fontsize=11, fontweight="bold",
+                    fontsize=9, fontweight="bold",
                     color="#2C2C2A", path_effects=stroke())
 
         ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
@@ -520,9 +572,7 @@ def plot_case_study(case_year, suptitle, outfile):
             lbl.set_ha("right")
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-
-        yabs = max(abs(v) for v in vals)
-        ax.set_ylim(-yabs * 1.4, yabs * 1.4)
+        ax.set_ylim(-yabs * 1.5, yabs * 1.5)
 
     fig.suptitle(suptitle, fontsize=13, fontweight="bold", y=1.02)
     fig.tight_layout()
@@ -531,25 +581,22 @@ def plot_case_study(case_year, suptitle, outfile):
 
 plot_case_study(
     case_year = 2016,
-    suptitle  = ("2016 — Anomalous Decay: Phase or Amplitude?\n"
-                 "APAC phase and amplitude anomalies by sector  |  1979–2015 baseline"),
+    suptitle  = ("2016 - Anomalous Decay: Phase or Amplitude?\n"
+                 "Z-scored anomalies by sector  |  pre-2016 baseline"),
     outfile   = "case_study_2016.png"
 )
 
 plot_case_study(
     case_year = 2023,
-    suptitle  = ("2023 — Record Minimum: Same Signal, Different Mechanisms\n"
-                 "APAC phase and amplitude anomalies by sector  |  1979–2015 baseline"),
+    suptitle  = ("2023 - Record Minimum\n"
+                 "Z-scored anomalies by sector  |  pre-2016 baseline"),
     outfile   = "case_study_2023.png"
 )
 
 # =============================================================================
-# CASE STUDY COMBINED — 2016 vs 2023 side by side (2x2)
-# Top row: phase anomaly 2016 | phase anomaly 2023
-# Bottom row: amplitude anomaly 2016 | amplitude anomaly 2023
-# Shared y-axes within each row for direct comparison
+# CASE STUDY COMBINED — 2016 vs 2023 side by side (2x2), z-scored
 # =============================================================================
-print("Case study combined: 2016 vs 2023")
+print("Case study combined: 2016 vs 2023 (z-scored)")
 
 sector_order_case = ["SIE_Weddell", "SIE_Amundsen_Bellingshausen",
                      "SIE_Ross", "SIE_East_Antarctica", "SIE_King_Haakon"]
@@ -560,42 +607,52 @@ def get_vals(year, var):
     d = annual[annual["Year"] == year].set_index("sector")
     return [float(d.loc[s, var]) for s in sector_order_case]
 
-phase_2016 = get_vals(2016, "max_doy_raw_anom_2015")
-phase_2023 = get_vals(2023, "max_doy_raw_anom_2015")
-amp_2016   = get_vals(2016, "amplitude_raw_anom_2015")
-amp_2023   = get_vals(2023, "amplitude_raw_anom_2015")
+# Z-scored values
+phase_2016 = get_vals(2016, "max_doy_raw_anom_2015_z")
+phase_2023 = get_vals(2023, "max_doy_raw_anom_2015_z")
+amp_2016   = get_vals(2016, "amplitude_raw_anom_2015_z")
+amp_2023   = get_vals(2023, "amplitude_raw_anom_2015_z")
 
-# Shared y limits within each row
-phase_ylim = max(abs(v) for v in phase_2016 + phase_2023) * 1.4
-amp_ylim   = max(abs(v) for v in amp_2016   + amp_2023)   * 1.4
+# Raw values for annotations
+phase_2016_raw = get_vals(2016, "max_doy_raw_anom_2015")
+phase_2023_raw = get_vals(2023, "max_doy_raw_anom_2015")
+amp_2016_raw   = get_vals(2016, "amplitude_raw_anom_2015")
+amp_2023_raw   = get_vals(2023, "amplitude_raw_anom_2015")
+
+phase_ylim = max(abs(v) for v in phase_2016 + phase_2023) * 1.5
+amp_ylim   = max(abs(v) for v in amp_2016   + amp_2023)   * 1.5
 
 fig, axes = plt.subplots(2, 2, figsize=(16, 10),
                          sharex=False, sharey="row")
 
 plot_data = [
-    (axes[0, 0], phase_2016, "Phase anomaly — 2016",
-     "Days\n(negative = ahead of phase)", "{:+.0f}d", phase_ylim),
-    (axes[0, 1], phase_2023, "Phase anomaly — 2023",
-     "", "{:+.0f}d", phase_ylim),
-    (axes[1, 0], amp_2016,   "Amplitude anomaly — 2016",
-     "Million km²\n(negative = smaller cycle)", "{:+.2f}", amp_ylim),
-    (axes[1, 1], amp_2023,   "Amplitude anomaly — 2023",
-     "", "{:+.2f}", amp_ylim),
+    (axes[0, 0], phase_2016, phase_2016_raw, "Phase anomaly - 2016",
+     "Standard deviations\n(negative = ahead of phase)",
+     "d", phase_ylim),
+    (axes[0, 1], phase_2023, phase_2023_raw, "Phase anomaly - 2023",
+     "", "d", phase_ylim),
+    (axes[1, 0], amp_2016, amp_2016_raw, "Amplitude anomaly - 2016",
+     "Standard deviations\n(negative = smaller cycle)",
+     " Mkm2", amp_ylim),
+    (axes[1, 1], amp_2023, amp_2023_raw, "Amplitude anomaly - 2023",
+     "", " Mkm2", amp_ylim),
 ]
 
-for ax, vals, title, ylabel, fmt, ylim in plot_data:
+for ax, vals, raw_vals, title, ylabel, raw_unit, ylim in plot_data:
     bars = ax.bar(labels_case, vals, color=colors_case,
                   width=0.6, edgecolor="white", zorder=3)
     ax.axhline(0, color="#2C2C2A", lw=0.8, zorder=4)
+    ax.axhline( 1, color="#2C2C2A", lw=0.5, ls="--", alpha=0.3, zorder=2)
+    ax.axhline(-1, color="#2C2C2A", lw=0.5, ls="--", alpha=0.3, zorder=2)
 
-    for bar, val in zip(bars, vals):
+    for bar, val, raw in zip(bars, vals, raw_vals):
         ypos = (bar.get_height() + ylim * 0.03
                 if val >= 0
-                else bar.get_height() - ylim * 0.06)
+                else bar.get_height() - ylim * 0.10)
         ax.text(bar.get_x() + bar.get_width()/2, ypos,
-                fmt.format(val),
+                f"{val:+.1f}s\n({raw:+.0f}{raw_unit})",
                 ha="center", va="bottom",
-                fontsize=10, fontweight="bold",
+                fontsize=9, fontweight="bold",
                 color="#2C2C2A", path_effects=stroke())
 
     ax.set_title(title, fontsize=12, fontweight="bold", pad=10)
@@ -610,7 +667,6 @@ for ax, vals, title, ylabel, fmt, ylim in plot_data:
     if ylabel:
         ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
 
-# Column labels at top
 axes[0, 0].annotate("2016", xy=(0.5, 1.08), xycoords="axes fraction",
                     ha="center", fontsize=14, fontweight="bold",
                     color="#D85A30")
@@ -619,8 +675,8 @@ axes[0, 1].annotate("2023", xy=(0.5, 1.08), xycoords="axes fraction",
                     color="#BA7517")
 
 fig.suptitle(
-    "2016 vs 2023 — Phase and Amplitude Anomalies by Sector\n"
-    "Anomaly from 1979–2015 baseline",
+    "2016 vs 2023 - Phase and Amplitude Anomalies by Sector\n"
+    "Z-scored relative to pre-2016 standard deviation",
     fontsize=13, fontweight="bold", y=1.01
 )
 fig.tight_layout()
@@ -674,8 +730,7 @@ fig.tight_layout()
 save(fig, "4_season_length_timeseries.png")
 
 # =============================================================================
-# FIG 6 — Full sequential RMSE improvement (all 4 models)
-# UPDATED: grouped bars showing Invariant, Amplitude, Phase, Amp+Phase
+# FIG 6 — Full sequential RMSE improvement
 # =============================================================================
 print("Fig 6: Full sequential RMSE improvement")
 
@@ -740,7 +795,7 @@ fig, axes = plt.subplots(2, 5, figsize=(18, 7), sharey="row", sharex=True)
 
 row_vars   = ["max_doy_raw_anom_2015", "amplitude_raw_anom_2015"]
 row_labels = ["10-yr rolling std dev of phase (days)",
-              "10-yr rolling std dev of amplitude (million km²)"]
+              "10-yr rolling std dev of amplitude (million km2)"]
 row_titles = ["Phase Variability Over Time",
               "Amplitude Variability Over Time"]
 
@@ -765,9 +820,6 @@ for row, (var, ylabel, row_title) in enumerate(
         if row == 1:
             ax.set_xlabel("Year", fontsize=9)
             ax.tick_params(axis="x", rotation=30)
-
-for row, row_title in enumerate(row_titles):
-    axes[row, 0].set_ylabel(row_title, fontsize=9)
 
 fig.suptitle("Has Variability Changed Over Time? Phase and Amplitude",
              fontsize=13, fontweight="bold", y=1.01)
@@ -803,17 +855,17 @@ for ax, pre_vals, post_vals, ylabel, title, fmt in zip(
     [phase_pre,  amp_pre],
     [phase_post, amp_post],
     ["Std dev of phase anomaly (days)",
-     "Std dev of amplitude anomaly (million km²)"],
+     "Std dev of amplitude anomaly (million km2)"],
     ["Phase Variability\n(timing of maximum)",
      "Amplitude Variability\n(size of seasonal cycle)"],
     ["{:.1f}d", "{:.2f}"]
 ):
     bars_pre  = ax.bar(x - width/2, pre_vals,  width,
                        color=colors, alpha=1.0,
-                       edgecolor="white", label="1979–2015", zorder=3)
+                       edgecolor="white", label="1979-2015", zorder=3)
     bars_post = ax.bar(x + width/2, post_vals, width,
                        color=colors, alpha=0.45,
-                       edgecolor="white", label="2016–2023",
+                       edgecolor="white", label="2016-2023",
                        hatch="///", zorder=3)
 
     for bar, val in zip(bars_pre, pre_vals):
@@ -840,7 +892,7 @@ for ax, pre_vals, post_vals, ylabel, title, fmt in zip(
     ax.spines["right"].set_visible(False)
 
 fig.text(0.5, -0.02,
-         "Note: post-2016 period spans only 8 years (2016–2023) — "
+         "Note: post-2016 period spans only 8 years (2016-2023) - "
          "std dev estimates are less stable",
          ha="center", fontsize=9, color="#5F5E5A", style="italic")
 
@@ -894,11 +946,11 @@ for row, (var, row_title) in enumerate(zip(row_vars, row_titles)):
             ax.set_xlabel("Year", fontsize=9)
             ax.tick_params(axis="x", rotation=30)
 
-for row, row_title in enumerate(row_titles):
-    axes[row, -1].annotate(
-        row_title, xy=(1.02, 0.5), xycoords="axes fraction",
-        rotation=270, va="center", ha="left", fontsize=9
-    )
+    for row2, row_title2 in enumerate(row_titles):
+        axes[row2, -1].annotate(
+            row_title2, xy=(1.02, 0.5), xycoords="axes fraction",
+            rotation=270, va="center", ha="left", fontsize=9
+        )
 
 fig.suptitle(
     "Earlier Retreat, Later Advance?\n"
@@ -909,6 +961,21 @@ fig.tight_layout()
 save(fig, "bridge_phase_as_retreat_advance.png")
 
 # =============================================================================
-# DONE
+# SYNC ALL FIGURES TO GOOGLE DRIVE
 # =============================================================================
 print(f"\nAll figures saved to:\n  {OUTPUT_DIR}")
+print(f"\nSyncing all figures to {GDRIVE_DEST}")
+
+for fname in sorted(os.listdir(OUTPUT_DIR)):
+    if fname.endswith(".png"):
+        fpath  = os.path.join(OUTPUT_DIR, fname)
+        result = subprocess.run(
+            ["rclone", "copy", fpath, GDRIVE_DEST],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print(f"  checkmark {fname}")
+        else:
+            print(f"  x {fname}: {result.stderr.strip()}")
+
+print("Sync complete.")
