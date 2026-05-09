@@ -189,29 +189,18 @@ print(f"  ASL: {asl_seas['year'].min():.0f}–{asl_seas['year'].max():.0f}")
 print("Loading Niño3.4 index...")
 nino_raw = pd.read_csv(
     os.path.join(INDEX_DIR, "nina34.data"),
-    delim_whitespace=True,
-    skiprows=1,        # skip the "1948  2026" header
+    sep=r'\s+',
+    skiprows=1,
     header=None,
     names=["year", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    na_values=["-99.99", -99.99],
+    engine="python",
 )
-nino_raw = nino_raw.replace(-99.99, np.nan)
-nino_raw["year"] = pd.to_numeric(nino_raw["year"], errors="coerce")
-nino_raw = nino_raw.dropna(subset=["year"])
+# Drop any rows where year is not a valid 4-digit integer
+nino_raw = nino_raw[pd.to_numeric(nino_raw["year"], errors="coerce").between(1900, 2100)]
 nino_raw["year"] = nino_raw["year"].astype(int)
-
-nino_long = nino_raw.melt(id_vars="year", var_name="month_str",
-                           value_name="Nino34")
-nino_long["month"] = nino_long["month_str"].map(month_map)
-nino_long = nino_long.dropna(subset=["Nino34"])
-
-nino_seas = compute_seasonal_means(nino_long, "Nino34")
-nino_seas = nino_seas.rename(columns={
-    "annual": "Nino34_annual",
-    "DJF": "Nino34_DJF", "MAM": "Nino34_MAM",
-    "JJA": "Nino34_JJA", "SON": "Nino34_SON",
-})
-print(f"  Nino34: {nino_seas['year'].min():.0f}–{nino_seas['year'].max():.0f}")
+print(f"  Nino34: {nino_raw['year'].min()}–{nino_raw['year'].max()}")
 
 
 # --- Merge all indices ----------------------------------------------------
