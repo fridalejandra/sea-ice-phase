@@ -58,7 +58,14 @@ for col in ["max_doy_anom", "amplitude_anom",
 
 print(f"  {len(annual)} rows | sectors: {annual['sector'].nunique()}")
 
-
+# Debug — check what's actually in the APAC variable columns
+print("\nDebug — APAC variable ranges:")
+for sec in ["SIE_East_Antarctica", "SIE_Ross"]:
+    sub = annual[annual["sector"] == sec]
+    for col in ["max_doy_anom", "amplitude_anom", "max_doy_raw_anom", "amplitude_raw_anom"]:
+        if col in sub.columns:
+            print(f"  {sec} | {col}: mean={sub[col].mean():.4f}, std={sub[col].std():.4f}, n={sub[col].notna().sum()}")
+print()
 # --- Index loading helpers ------------------------------------------------
 
 def compute_seasonal_means(df_monthly, value_col, year_col="year",
