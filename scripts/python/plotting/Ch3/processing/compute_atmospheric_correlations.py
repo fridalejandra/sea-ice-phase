@@ -334,6 +334,8 @@ for var_type in ["phase", "amplitude"]:
 
 results_df = pd.concat(fdr_flags).sort_values(
     ["sector", "var_type", "index", "season"]).reset_index(drop=True)
+results_df["pearson_sig"]  = results_df["pearson_sig"].astype(bool)
+results_df["spearman_sig"] = results_df["spearman_sig"].astype(bool)
 
 
 def sig_star(p_raw, p_fdr):
@@ -356,24 +358,10 @@ print(f"  {len(results_df)} rows | "
 
 print("\nTop 10 by |Pearson r| (FDR significant only):")
 top = (results_df[results_df["pearson_sig"]]
-       .assign(abs_r=results_df["pearson_r"].abs())
+       .copy()
+       .assign(abs_r=lambda df: df["pearson_r"].abs())
        .sort_values("abs_r", ascending=False)
        .head(10)
        [["sector_label","var_type","index","season",
          "pearson_r","pearson_p_fdr","n_eff","sig"]])
 print(top.to_string(index=False))
-
-# Debug — check actual correlation values before FDR
-print("\nDebug — sample correlations before FDR:")
-debug = results_df[
-    (results_df["sector_label"] == "East Antarctica") &
-    (results_df["var_type"] == "amplitude")
-][["index","season","pearson_r","pearson_p","n_eff"]].sort_values("pearson_r", ascending=False)
-print(debug.to_string(index=False))
-
-# Debug — check year overlap between APAC and SAM
-ea = annual_dt[annual_dt["sector"] == "SIE_East_Antarctica"][["Year","amplitude_anom"]].dropna()
-sam_sub = idx[["Year","SAM_annual"]].dropna()
-merged_test = ea.merge(sam_sub, on="Year", how="inner")
-print(f"\nDebug — EA amplitude vs SAM_annual overlap: {len(merged_test)} years")
-print(merged_test[["Year","amplitude_anom","SAM_annual"]].head(10))
