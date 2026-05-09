@@ -66,6 +66,8 @@ for sec in ["SIE_East_Antarctica", "SIE_Ross"]:
         if col in sub.columns:
             print(f"  {sec} | {col}: mean={sub[col].mean():.4f}, std={sub[col].std():.4f}, n={sub[col].notna().sum()}")
 print()
+
+
 # --- Index loading helpers ------------------------------------------------
 
 def compute_seasonal_means(df_monthly, value_col, year_col="year",
@@ -360,3 +362,18 @@ top = (results_df[results_df["pearson_sig"]]
        [["sector_label","var_type","index","season",
          "pearson_r","pearson_p_fdr","n_eff","sig"]])
 print(top.to_string(index=False))
+
+# Debug — check actual correlation values before FDR
+print("\nDebug — sample correlations before FDR:")
+debug = results_df[
+    (results_df["sector_label"] == "East Antarctica") &
+    (results_df["var_type"] == "amplitude")
+][["index","season","pearson_r","pearson_p","n_eff"]].sort_values("pearson_r", ascending=False)
+print(debug.to_string(index=False))
+
+# Debug — check year overlap between APAC and SAM
+ea = annual_dt[annual_dt["sector"] == "SIE_East_Antarctica"][["Year","amplitude_anom"]].dropna()
+sam_sub = idx[["Year","SAM_annual"]].dropna()
+merged_test = ea.merge(sam_sub, on="Year", how="inner")
+print(f"\nDebug — EA amplitude vs SAM_annual overlap: {len(merged_test)} years")
+print(merged_test[["Year","amplitude_anom","SAM_annual"]].head(10))
