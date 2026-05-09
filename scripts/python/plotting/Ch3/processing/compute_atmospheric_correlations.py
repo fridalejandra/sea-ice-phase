@@ -195,7 +195,9 @@ nino_raw = pd.read_csv(
     names=["year", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 )
-nino_raw = nino_raw.replace(-99.99, np.nan).dropna(subset=["year"])
+nino_raw = nino_raw.replace(-99.99, np.nan)
+nino_raw["year"] = pd.to_numeric(nino_raw["year"], errors="coerce")
+nino_raw = nino_raw.dropna(subset=["year"])
 nino_raw["year"] = nino_raw["year"].astype(int)
 
 nino_long = nino_raw.melt(id_vars="year", var_name="month_str",
