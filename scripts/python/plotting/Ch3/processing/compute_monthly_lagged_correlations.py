@@ -174,12 +174,15 @@ asl_raw = asl_raw.rename(columns={"RelCenPres": "ASL"})[["year","month","ASL"]]
 # Nino34 monthly
 nino_raw = pd.read_csv(
     os.path.join(INDEX_DIR, "nina34.data"),
-    delim_whitespace=True, skiprows=1, header=None,
+    sep=r'\s+', skiprows=1, header=None,
     names=["year","Jan","Feb","Mar","Apr","May","Jun",
-           "Jul","Aug","Sep","Oct","Nov","Dec"]
+           "Jul","Aug","Sep","Oct","Nov","Dec"],
+    na_values=["-99.99", -99.99],
+    engine="python",
 )
-nino_raw = nino_raw.replace(-99.99, np.nan).dropna(subset=["year"])
-nino_raw["year"] = nino_raw["year"].astype(int)
+nino_raw = nino_raw[pd.to_numeric(nino_raw["year"], errors="coerce")
+                    .between(1900, 2100)]
+nino_raw["year"] = nino_raw["year"].astype(float).astype(int)
 nino_long = nino_raw.melt(id_vars="year", var_name="month_str",
                            value_name="Nino34")
 nino_long["month"] = nino_long["month_str"].map(month_map)
