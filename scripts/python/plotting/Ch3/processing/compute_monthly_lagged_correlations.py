@@ -278,7 +278,7 @@ def bootstrap_ci(x, y, block_size=BLOCK_SIZE, n_boot=N_BOOTSTRAP,
     se   = 1.0 / np.sqrt(n - 3)
     return (float(np.tanh(z - 1.96 * se)),
             float(np.tanh(z + 1.96 * se)),
-            float(se))-
+            float(se))
 
 
 # --- Helper: permutation test ---------------------------------------------
