@@ -144,8 +144,9 @@ for ax_idx, (period_label, _) in enumerate(PERIODS.items()):
 
     # H&R 2020 reference lines on top panel only
     if ax_idx == 0:
-        ref_colors = {"Amplitude":   "#378ADD",
-                      "Phase":       "#D4537E",
+        ref_colors = {"Invariant": "#B4B2A9",
+                      "Amplitude": "#378ADD",
+                      "Phase": "#D4537E",
                       "Amp + Phase": "#1D9E75"}
         for model_label, ref_val in HR2020.items():
             ax.axhline(ref_val, color=ref_colors[model_label],
