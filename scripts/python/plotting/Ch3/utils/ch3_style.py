@@ -143,10 +143,10 @@ DEFAULT_OUTPUT_DIR = os.path.join(
     "Research", "repos", "sea-ice-phase", "results", "Ch3_Figures"
 )
 
-GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
+GDRIVE_DEST = "gdrive:MyDrive/sea-ice-phase/results/Ch3_Figures/"
 
 
-def save_fig(fig, name, output_dir=None, gdrive_sync=False):
+def save_fig(fig, name, output_dir=None, gdrive_sync=True):
     if output_dir is None:
         output_dir = DEFAULT_OUTPUT_DIR
     os.makedirs(output_dir, exist_ok=True)
