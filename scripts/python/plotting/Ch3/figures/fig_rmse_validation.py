@@ -67,11 +67,17 @@ daily = pd.read_csv(DAILY_CSV, parse_dates=["Date"])
 daily["Year"] = daily["Date"].dt.year
 print(f"  {len(daily)} rows | sectors: {sorted(daily['sector'].unique())}")
 
+# Compute full-record DOY means per sector — used as traditional baseline
+trad_means = {}
+for sector in ALL_SECTORS:
+    sec_data = daily[daily["sector"] == sector]
+    trad_means[sector] = sec_data.groupby("DOY")["Extent"].mean()
 
 # --- Compute RMSE improvement per sector and period -----------------------
 
-def compute_improvements(daily_sub):
-    trad_mean = daily_sub.groupby("DOY")["Extent"].transform("mean")
+def compute_improvements(daily_sub, trad_means_full):
+    # Use full-record DOY means as the traditional baseline — matches H&R 2020
+    trad_mean = daily_sub["DOY"].map(trad_means_full)
     rmse_trad = np.sqrt(np.mean((daily_sub["Extent"] - trad_mean) ** 2))
     if rmse_trad == 0:
         return {label: np.nan for _, label, _ in MODELS}
@@ -93,7 +99,7 @@ for sector in ALL_SECTORS:
         sub = sec_data[sec_data["Year"].between(yr_min, yr_max)].copy()
         if len(sub) < 100:
             continue
-        for label, pct in compute_improvements(sub).items():
+        for label, pct in compute_improvements(sub, trad_means[sector]).items():
             records.append({
                 "sector_label": SECTOR_LABELS.get(sector, sector),
                 "period"      : period_label,
