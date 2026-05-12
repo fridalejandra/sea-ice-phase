@@ -142,11 +142,18 @@ sam_seas = sam_seas.rename(columns={
     "MAM":"SAM_MAM","JJA":"SAM_JJA","SON":"SAM_SON"})
 print(f"  SAM: {sam_seas['year'].min()}–{sam_seas['year'].max()}")
 
-print("Loading ZW3 Raphael annual index...")
-zw3 = pd.read_csv(os.path.join(INDEX_DIR, "ZW3_raphael_annual.csv"))
-zw3 = zw3.rename(columns={zw3.columns[0]:"year", zw3.columns[1]:"ZW3R_annual"})
-zw3[["year","ZW3R_annual"]] = zw3[["year","ZW3R_annual"]].apply(
-    pd.to_numeric, errors="coerce")
+print("Loading ZW3 Raphael monthly index...")
+zw3_monthly_r = pd.read_csv(os.path.join(INDEX_DIR, "ZW3_raphael_monthly.csv"))
+zw3_monthly_r = zw3_monthly_r[["year","month","ZW3_index"]].rename(
+    columns={"ZW3_index":"ZW3R"})
+zw3_monthly_r[["year","month","ZW3R"]] = zw3_monthly_r[
+    ["year","month","ZW3R"]].apply(pd.to_numeric, errors="coerce")
+
+# Compute seasonal means from monthly — consistent with SAM and ASL
+zw3 = compute_seasonal_means(zw3_monthly_r, "ZW3R")
+zw3 = zw3.rename(columns={
+    "annual":"ZW3R_annual","DJF":"ZW3R_DJF",
+    "MAM":"ZW3R_MAM","JJA":"ZW3R_JJA","SON":"ZW3R_SON"})
 print(f"  ZW3R: {zw3['year'].min():.0f}–{zw3['year'].max():.0f}")
 
 print("Loading ASL index...")

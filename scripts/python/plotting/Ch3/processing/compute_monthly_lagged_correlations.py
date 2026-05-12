@@ -155,13 +155,9 @@ zw3_ann.columns = ["year", "ZW3R"]
 zw3_ann["year"] = zw3_ann["year"].astype(int)
 
 # ZW3 Goyal monthly — use this for monthly ZW3
-zw3_monthly = pd.read_csv(os.path.join(INDEX_DIR, "ZW3_goyal_monthly.csv"))
-# Normalise columns — expect year, month, ZW3_magnitude (or similar)
-zw3_monthly.columns = [c.strip() for c in zw3_monthly.columns]
-if "ZW3_magnitude" in zw3_monthly.columns:
-    zw3_monthly = zw3_monthly.rename(columns={"ZW3_magnitude": "ZW3G"})
-elif zw3_monthly.shape[1] == 2:
-    zw3_monthly.columns = ["yearmonth", "ZW3G"]
+zw3_monthly = pd.read_csv(os.path.join(INDEX_DIR, "ZW3_raphael_monthly.csv"))
+zw3_monthly = zw3_monthly[["year", "month", "ZW3_index"]].rename(
+    columns={"ZW3_index": "ZW3R"})
 
 # ASL monthly
 asl_raw = pd.read_csv(
@@ -217,7 +213,7 @@ for col in ["SAM","ASL","Nino34","ZW3G"]:
 
 print(f"  Monthly index table: {monthly_idx.shape}")
 
-INDEX_COLS_MONTHLY = [c for c in ["SAM","ASL","Nino34","ZW3G"]
+INDEX_COLS_MONTHLY = [c for c in ["SAM","ASL","Nino34","ZW3R"]
                       if c in monthly_idx.columns]
 
 
