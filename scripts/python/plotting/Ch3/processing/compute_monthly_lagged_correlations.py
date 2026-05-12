@@ -186,8 +186,10 @@ nino_long = nino_long.dropna(subset=["Nino34"]).drop(columns="month_str")
 
 # Merge all monthly indices into one long table
 monthly_idx = (sam_long
-               .merge(asl_raw,    on=["year","month"], how="outer")
-               .merge(nino_long,  on=["year","month"], how="outer"))
+               .merge(asl_raw,      on=["year","month"], how="outer")
+               .merge(nino_long,    on=["year","month"], how="outer")
+               .merge(zw3_monthly[["year","month","ZW3R"]],
+                      on=["year","month"], how="left"))
 
 # Add ZW3G if monthly is available
 if "ZW3G" in zw3_monthly.columns:
