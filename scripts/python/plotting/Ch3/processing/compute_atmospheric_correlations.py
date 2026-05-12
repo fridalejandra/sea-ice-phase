@@ -156,6 +156,18 @@ zw3 = zw3.rename(columns={
     "MAM":"ZW3R_MAM","JJA":"ZW3R_JJA","SON":"ZW3R_SON"})
 print(f"  ZW3R: {zw3['year'].min():.0f}–{zw3['year'].max():.0f}")
 
+# Goyal ZW3 monthly — supplementary, captures magnitude and phase separately
+print("Loading ZW3 Goyal monthly index...")
+zw3_goyal = pd.read_csv(os.path.join(INDEX_DIR, "ZW3_goyal_monthly.csv"))
+zw3_goyal = zw3_goyal.rename(columns={"ZW3_magnitude": "ZW3G"})
+zw3_goyal = zw3_goyal[["year","month","ZW3G"]].dropna()
+
+zw3g_seas = compute_seasonal_means(zw3_goyal, "ZW3G")
+zw3g_seas = zw3g_seas.rename(columns={
+    "annual":"ZW3G_annual","DJF":"ZW3G_DJF",
+    "MAM":"ZW3G_MAM","JJA":"ZW3G_JJA","SON":"ZW3G_SON"})
+print(f"  ZW3G: {zw3g_seas['year'].min():.0f}–{zw3g_seas['year'].max():.0f}")
+
 print("Loading ASL index...")
 asl_raw = pd.read_csv(
     os.path.join(INDEX_DIR, "asli_era5_v3-latest.csv"), comment="#")
@@ -196,9 +208,10 @@ print(f"  Nino34: {nino_seas['year'].min():.0f}–{nino_seas['year'].max():.0f}"
 
 print("\nMerging indices...")
 idx = (sam_seas
-       .merge(zw3,       on="year", how="outer")
-       .merge(asl_seas,  on="year", how="outer")
-       .merge(nino_seas, on="year", how="outer"))
+       .merge(zw3,        on="year", how="outer")
+       .merge(zw3g_seas,  on="year", how="outer")
+       .merge(asl_seas,   on="year", how="outer")
+       .merge(nino_seas,  on="year", how="outer"))
 
 idx = idx[idx["year"].between(YEAR_MIN, YEAR_MAX)].sort_values("year")
 

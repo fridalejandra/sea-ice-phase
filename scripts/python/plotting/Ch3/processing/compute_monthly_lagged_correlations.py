@@ -159,6 +159,10 @@ zw3_monthly = pd.read_csv(os.path.join(INDEX_DIR, "ZW3_raphael_monthly.csv"))
 zw3_monthly = zw3_monthly[["year", "month", "ZW3_index"]].rename(
     columns={"ZW3_index": "ZW3R"})
 
+# ZW3 Goyal monthly — supplementary index, magnitude component
+zw3_goyal = pd.read_csv(os.path.join(INDEX_DIR, "ZW3_goyal_monthly.csv"))
+zw3_goyal = zw3_goyal.rename(columns={"ZW3_magnitude": "ZW3G"})
+zw3_goyal = zw3_goyal[["year", "month", "ZW3G"]].dropna()
 # ASL monthly
 asl_raw = pd.read_csv(
     os.path.join(INDEX_DIR, "asli_era5_v3-latest.csv"), comment="#")
@@ -189,6 +193,8 @@ monthly_idx = (sam_long
                .merge(asl_raw,      on=["year","month"], how="outer")
                .merge(nino_long,    on=["year","month"], how="outer")
                .merge(zw3_monthly[["year","month","ZW3R"]],
+                      on=["year","month"], how="left")
+               .merge(zw3_goyal[["year","month","ZW3G"]],
                       on=["year","month"], how="left"))
 
 # Add ZW3G if monthly is available
@@ -215,7 +221,7 @@ for col in ["SAM","ASL","Nino34","ZW3G"]:
 
 print(f"  Monthly index table: {monthly_idx.shape}")
 
-INDEX_COLS_MONTHLY = [c for c in ["SAM","ASL","Nino34","ZW3R"]
+INDEX_COLS_MONTHLY = [c for c in ["SAM","ASL","Nino34","ZW3R","ZW3G"]
                       if c in monthly_idx.columns]
 
 
