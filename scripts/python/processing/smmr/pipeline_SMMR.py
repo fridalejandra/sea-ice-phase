@@ -1,71 +1,89 @@
 
+"""
+pipeline_SMMR.py  –  Main orchestrator
+Runs the full pipeline to update the Bootstrap SIE CSV to today's date.
+
+Steps:
+  1. download_smmr.py   – fetch NSIDC-0079 SH granules via earthaccess
+  2. merge_smmr.py      – merge new data with Stammerjohn 2008 base file
+  3. compute_SIE_csv.py – compute daily SIE and write CSV
+
+Usage:
+  python pipeline_SMMR.py
+
+To force re-running a step even if its output already exists, delete the
+corresponding output file or pass --force on the command line.
+"""
+
 import subprocess
-import os
+import sys
 import shutil
-from datetime import datetime
+from pathlib import Path
+from config import (
+    GRANULE_DIR, MERGED_2024, FINAL_MERGED, LATEST_MERGED,
+    SIE_CSV, TODAY,
+)
 
-# ---- CONFIG ---- #
-SCRIPT_DIR = "/scripts/python/"
-DATA_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/"
-PHASE_DIR = "/Users/fridaperez/Developer/repos/phase_project/Stammerjohn_2008/"
-
-END_DATE = datetime.today().strftime("%Y-%m-%d")
-
-# File paths
-granule_dir = os.path.join(DATA_DIR, "test_downloads")
-merged_2024 = os.path.join(DATA_DIR, f"merged_bootstrap_SH_2024_until_{END_DATE}.nc")
-final_merged = os.path.join(DATA_DIR, f"merged_bootstrap_extended_SH_until_{END_DATE}.nc")
+SCRIPT_DIR = Path(__file__).parent
+FORCE = "--force" in sys.argv
 
 # ---- UTILITY ---- #
-def run_script(script_path, env_vars=None):
-    print(f"\n🔧 Running {os.path.basename(script_path)}...\n")
+def run(script_name):
+    script = SCRIPT_DIR / script_name
+    print(f"\n{'='*60}")
+    print(f"🔧  Running {script_name}")
+    print(f"{'='*60}")
     result = subprocess.run(
-        ["python", script_path],
-        capture_output=True,
+        [sys.executable, str(script)],
         text=True,
-        env={**os.environ, **(env_vars or {})}
     )
-    print(result.stdout)
-    if result.stderr:
-        print("⚠️ STDERR:")
-        print(result.stderr)
     if result.returncode != 0:
-        raise RuntimeError(f"❌ {script_path} failed.")
+        print(f"\n{script_name} failed (exit code {result.returncode}). Aborting.")
+        sys.exit(result.returncode)
+
+def skip(label, path):
+    print(f"{label} already exists — skipping.")
+    print(f"   {path}")
 
 # ---- STEP 1: DOWNLOAD ---- #
-download_script = os.path.join(SCRIPT_DIR, "download_SH_2024.py")
-if os.path.exists(granule_dir) and len(os.listdir(granule_dir)) > 0:
-    print("✅ SH granules already downloaded. Skipping Step 1.")
+already_downloaded = GRANULE_DIR.exists() and any(GRANULE_DIR.iterdir())
+if not FORCE and already_downloaded:
+    skip("Downloaded granules", GRANULE_DIR)
 else:
-    run_script(download_script, env_vars={"END_DATE": END_DATE})
+    run("download_smmr.py")
 
-# ---- STEP 2: MERGE 2024 GRANULES ---- #
-merge_2024_script = os.path.join(SCRIPT_DIR, "merge_SH_2024.py")
-if os.path.exists(merged_2024):
-    print(f"✅ 2024 merged file exists: {merged_2024}. Skipping Step 2.")
+# ---- STEP 2: MERGE ---- #
+if not FORCE and FINAL_MERGED.exists():
+    skip(f"Final merged file (until {TODAY})", FINAL_MERGED)
+    # Still ensure the symlink is current
+    if LATEST_MERGED.is_symlink() or LATEST_MERGED.exists():
+        LATEST_MERGED.unlink()
+    LATEST_MERGED.symlink_to(FINAL_MERGED)
+    print(f"🔗  Symlink refreshed: {LATEST_MERGED.name} → {FINAL_MERGED.name}")
 else:
-    run_script(merge_2024_script, env_vars={"END_DATE": END_DATE})
+    run("merge_smmr.py")
 
-# ---- STEP 3: MERGE INTO FINAL FILE ---- #
-merge_final_script = os.path.join(SCRIPT_DIR, "merge_smmr.py")
-if os.path.exists(final_merged):
-    print(f"✅ Final merged file already exists: {final_merged}. Skipping Step 3.")
+# ---- STEP 3: COMPUTE SIE CSV ---- #
+if not FORCE and SIE_CSV.exists():
+    skip("SIE CSV", SIE_CSV)
 else:
-    run_script(merge_final_script, env_vars={
-        "END_DATE": END_DATE,
-        "PHASE_DIR": PHASE_DIR
-    })
+    run("compute_SIE_csv.py")
 
 # ---- CLEANUP ---- #
-print("\n🧹 Cleaning up temporary files...")
+print(f"\n{'='*60}")
+print("Cleaning up temporary files...")
 
-if os.path.exists(merged_2024):
-    os.remove(merged_2024)
-    print(f"🗑 Deleted: {merged_2024}")
+if MERGED_2024.exists():
+    MERGED_2024.unlink()
+    print(f"   🗑  Deleted intermediate: {MERGED_2024.name}")
 
-if os.path.exists(granule_dir):
-    shutil.rmtree(granule_dir)
-    print(f"🗑 Deleted granule directory: {granule_dir}")
+if GRANULE_DIR.exists():
+    shutil.rmtree(GRANULE_DIR)
+    print(f"   🗑  Deleted granule directory: {GRANULE_DIR}")
 
-print("\n✅ All done.")
-print(f"📦 Final merged file located at: {final_merged}")
+# ---- DONE ---- #
+print(f"\n{'='*60}")
+print("Pipeline complete!")
+print(f"Merged NetCDF : {FINAL_MERGED}")
+print(f"SIE CSV       : {SIE_CSV}")
+print(f"{'='*60}\n")

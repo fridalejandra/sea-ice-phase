@@ -31,7 +31,7 @@ from statsmodels.stats.multitest import multipletests
 warnings.filterwarnings("ignore")
 
 INDEX_DIR  = "/user/geog/falejandraperez/sea-ice-phase/data/indices"
-DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data"
+DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 OUTPUT_DIR = DATA_DIR
 
 ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params.csv")

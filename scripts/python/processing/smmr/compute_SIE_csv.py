@@ -1,110 +1,98 @@
-# calc_SIE_pan_and_sector.py
+"""
+compute_SIE_csv.py  –  Step 3
+Reads the latest merged Bootstrap SIC NetCDF and computes daily Sea Ice
+Extent (SIE) for:
+  • Circumpolar Antarctic  (pan-Antarctic)
+  • 5 standard sectors     (Weddell, Amundsen-Bellingshausen, Ross,
+                            East Antarctica, King Haakon VII)
+
+Output: CSV with columns [time, SIE_circumpolar, SIE_<sector>, ...]
+Units: million km²
+"""
+
+import sys
 import xarray as xr
 import numpy as np
-from pathlib import Path
+from config import (
+    LATEST_MERGED, AREA_FILE, MASK_FILE,
+    SIE_CSV, SIC_VAR, AREA_VAR, MASK_VAR,
+    SIC_THRESHOLD, SECTORS,
+)
 
-# =====================================================
-# User settings
-# =====================================================
-sic_file   = "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc"
-area_file  = "/user/geog/falejandraperez/sea-ice-phase/data/NSIDC0771_CellArea_PS_S25km_v1.0.nc"
-mask_file  = "/user/geog/falejandraperez/sea-ice-phase/data/canonical_sectors.nc"
+# ---- CHECKS ---- #
+for path, label in [
+    (LATEST_MERGED, "LATEST_MERGED (merged SIC file)"),
+    (AREA_FILE,     "AREA_FILE"),
+    (MASK_FILE,     "MASK_FILE"),
+]:
+    if not path.exists():
+        print(f"{label} not found:\n   {path}")
+        sys.exit(1)
 
-out_dir = Path("/user/geog/falejandraperez/sea-ice-phase/results/SIE")
-out_dir.mkdir(parents=True, exist_ok=True)
+# ---- LOAD ---- #
+print(f"📂 SIC file : {LATEST_MERGED}")
+ds   = xr.open_dataset(LATEST_MERGED, chunks={"time": 365})
 
-out_file = out_dir / "SIE_daily_sector_and_circumpolar_million_km2.csv"
+# Accept the configured variable name, or fall back to any *_ICECON present
+if SIC_VAR in ds.data_vars:
+    sic_var = SIC_VAR
+else:
+    candidates = [v for v in ds.data_vars if v.endswith("_ICECON")]
+    if not candidates:
+        raise ValueError(f"No *_ICECON variable found. "
+                         f"Available: {list(ds.data_vars)}")
+    sic_var = candidates[0]
+    print(f"SIC_VAR '{SIC_VAR}' not found; using '{sic_var}' instead.")
 
-# =====================================================
-# variables
-# =====================================================
-sic_var  = "N07_ICECON"
-area_var = "cell_area"
-mask_var = "sector_id"
-
-thr = 0.15
-
-sectors = {
-    1: "Weddell",
-    2: "Amundsen_Bellingshausen",
-    3: "Ross",
-    4: "East_Antarctica",
-    5: "King_Haakon"
-}
-
-# =====================================================
-# load data
-# =====================================================
-ds   = xr.open_dataset(sic_file, chunks={"time": 365})
 sic  = ds[sic_var]
-area = xr.open_dataset(area_file)[area_var]
-mask = xr.open_dataset(mask_file)[mask_var]
+area = xr.open_dataset(AREA_FILE)[AREA_VAR]
+mask = xr.open_dataset(MASK_FILE)[MASK_VAR]
 
-# =====================================================
-# detect spatial dimensions
-# =====================================================
+# ---- SPATIAL DIMS ---- #
 spatial_dims = [d for d in sic.dims if d != "time"]
 if len(spatial_dims) != 2:
-    raise ValueError(f"Expected 2 spatial dims, found {spatial_dims}")
+    raise ValueError(f"Expected 2 spatial dims, found: {spatial_dims}")
+print(f"   Spatial dims : {spatial_dims}")
+print(f"   Time range   : {str(sic.time.values[0])[:10]} → "
+      f"{str(sic.time.values[-1])[:10]}")
+print(f"   Time steps   : {sic.sizes['time']}")
 
-print("Using spatial dimensions:", spatial_dims)
-
-# =====================================================
-# unit conversion
-# m^2 → million km^2
-# =====================================================
+# ---- UNIT CONVERSION: m² → million km² ---- #
 area = area / 1e12
-area.attrs["units"] = "million km^2"
+area.attrs["units"] = "million km²"
 
-# =====================================================
-# clean SIC (critical)
-# =====================================================
+# ---- CLEAN SIC (flag values, missing data) ---- #
 sic = sic.where((sic >= 0) & (sic <= 1))
 
-# =====================================================
-# binary ice mask (extent definition)
-# =====================================================
-ice = sic >= thr
+# ---- BINARY ICE MASK ---- #
+ice = sic >= SIC_THRESHOLD
 
-# =====================================================
-# circumpolar Antarctic mask (union of sectors)
-# =====================================================
+# ---- CIRCUMPOLAR SIE ---- #
 antarctic_ocean = mask.notnull()
-
-# =====================================================
-# CIRCUMPOLAR SIE (independent)
-# =====================================================
-sie_circ = (
-    ice * area.where(antarctic_ocean)
-).sum(dim=spatial_dims)
-
+sie_circ = (ice * area.where(antarctic_ocean)).sum(dim=spatial_dims)
 sie_circ = sie_circ.rename("SIE_circumpolar")
 
-# =====================================================
-# SECTOR SIE (diagnostic)
-# =====================================================
+# ---- SECTOR SIE ---- #
 sie_vars = [sie_circ]
-
-for code, name in sectors.items():
-    area_sector = area.where(mask == code)
-    sie_sector = (ice * area_sector).sum(dim=spatial_dims)
+for code, name in SECTORS.items():
+    sie_sector = (ice * area.where(mask == code)).sum(dim=spatial_dims)
     sie_sector = sie_sector.rename(f"SIE_{name}")
     sie_vars.append(sie_sector)
 
-# =====================================================
-# to CSV
-# =====================================================
+# ---- TO CSV ---- #
+SIE_CSV.parent.mkdir(parents=True, exist_ok=True)
+
 sie_ds = xr.merge(sie_vars)
 df = sie_ds.to_dataframe().reset_index()
 
-cols = ["time", "SIE_circumpolar"] + [f"SIE_{v}" for v in sectors.values()]
+cols = ["time", "SIE_circumpolar"] + [f"SIE_{v}" for v in SECTORS.values()]
 df = df[cols]
 
-df.to_csv(out_file, index=False)
-print(f"Saved: {out_file}")
+df.to_csv(SIE_CSV, index=False)
+print(f"\nCSV saved: {SIE_CSV}")
+print(f"   Rows: {len(df)}  |  Columns: {list(df.columns)}")
 
-# =====================================================
-# hard sanity checks
-# =====================================================
-assert df["SIE_circumpolar"].max() < 25, "Circumpolar SIE exceeds physical limit"
-assert df["SIE_circumpolar"].min() > 0,  "Non-positive SIE detected"
+# ----  CHECKS ---- #
+assert df["SIE_circumpolar"].max() < 25,  "FAIL: Circumpolar SIE exceeds physical limit (25 M km²)"
+assert df["SIE_circumpolar"].min() >  0,  "FAIL: Non-positive SIE detected"
+print("Sanity checks passed.")

@@ -72,7 +72,7 @@ except ImportError:
     print("Warning: arch package not found. Block bootstrap will be skipped.")
     print("Install with: pip install arch")
 
-DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data"
+DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 INDEX_DIR  = "/user/geog/falejandraperez/sea-ice-phase/data/indices"
 
 ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params.csv")

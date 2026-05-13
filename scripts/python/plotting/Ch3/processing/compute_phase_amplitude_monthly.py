@@ -51,7 +51,7 @@ import os
 import numpy as np
 import pandas as pd
 
-DATA_DIR    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data"
+DATA_DIR    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 DAILY_CSV   = os.path.join(DATA_DIR, "daily_fitted.csv")
 ANNUAL_CSV  = os.path.join(DATA_DIR, "annual_params.csv")
 OUTPUT_CSV  = os.path.join(DATA_DIR, "monthly_params.csv")
