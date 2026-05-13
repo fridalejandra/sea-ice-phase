@@ -36,6 +36,7 @@ print("\nConcatenating granules...")
 ds = xr.open_mfdataset(
     [str(f) for f in new_files],
     combine="by_coords",
+    engine="h5netcdf",
     parallel=True,
 )
 
