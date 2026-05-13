@@ -1,28 +1,24 @@
-
 """
 pipeline_SMMR.py  –  Main orchestrator
-Runs the full pipeline to update the Bootstrap SIE CSV to today's date.
 
 Steps:
-  1. download_smmr.py   – fetch NSIDC-0079 SH granules via earthaccess
-  2. merge_smmr.py      – merge new data with Stammerjohn 2008 base file
+  1. merge_granules.py  – concatenate the 567 new daily .nc files into one
+  2. merge_smmr.py      – append new data to historical base record
   3. compute_SIE_csv.py – compute daily SIE and write CSV
 
 Usage:
-  python pipeline_SMMR.py
+  python pipeline_SMMR.py           # skips steps whose output already exists
+  python pipeline_SMMR.py --force   # re-runs all steps
 
-To force re-running a step even if its output already exists, delete the
-corresponding output file or pass --force on the command line.
+To fetch new granules in future runs, update BASE_NC_END_DATE in config.py
+and run download_smmr.py before this pipeline.
 """
 
 import subprocess
 import sys
 import shutil
 from pathlib import Path
-from config import (
-    GRANULE_DIR, MERGED_2024, FINAL_MERGED, LATEST_MERGED,
-    SIE_CSV, TODAY,
-)
+from config import GRANULE_DIR, MERGED_NEW, FINAL_MERGED, LATEST_MERGED, SIE_CSV, TODAY
 
 SCRIPT_DIR = Path(__file__).parent
 FORCE = "--force" in sys.argv
@@ -33,10 +29,7 @@ def run(script_name):
     print(f"\n{'='*60}")
     print(f"🔧  Running {script_name}")
     print(f"{'='*60}")
-    result = subprocess.run(
-        [sys.executable, str(script)],
-        text=True,
-    )
+    result = subprocess.run([sys.executable, str(script)], text=True)
     if result.returncode != 0:
         print(f"\n{script_name} failed (exit code {result.returncode}). Aborting.")
         sys.exit(result.returncode)
@@ -45,21 +38,19 @@ def skip(label, path):
     print(f"{label} already exists — skipping.")
     print(f"   {path}")
 
-# ---- STEP 1: DOWNLOAD ---- #
-already_downloaded = GRANULE_DIR.exists() and any(GRANULE_DIR.iterdir())
-if not FORCE and already_downloaded:
-    skip("Downloaded granules", GRANULE_DIR)
+# ---- STEP 1: MERGE NEW GRANULES ---- #
+if not FORCE and MERGED_NEW.exists():
+    skip("Merged new granules", MERGED_NEW)
 else:
-    run("download_smmr.py")
+    run("merge_granules.py")
 
-# ---- STEP 2: MERGE ---- #
+# ---- STEP 2: MERGE WITH HISTORICAL BASE ---- #
 if not FORCE and FINAL_MERGED.exists():
     skip(f"Final merged file (until {TODAY})", FINAL_MERGED)
-    # Still ensure the symlink is current
     if LATEST_MERGED.is_symlink() or LATEST_MERGED.exists():
         LATEST_MERGED.unlink()
     LATEST_MERGED.symlink_to(FINAL_MERGED)
-    print(f"🔗  Symlink refreshed: {LATEST_MERGED.name} → {FINAL_MERGED.name}")
+    print(f"🔗  Symlink refreshed → {FINAL_MERGED.name}")
 else:
     run("merge_smmr.py")
 
@@ -72,14 +63,9 @@ else:
 # ---- CLEANUP ---- #
 print(f"\n{'='*60}")
 print("Cleaning up temporary files...")
-
-if MERGED_2024.exists():
-    MERGED_2024.unlink()
-    print(f"   🗑  Deleted intermediate: {MERGED_2024.name}")
-
-if GRANULE_DIR.exists():
-    shutil.rmtree(GRANULE_DIR)
-    print(f"   🗑  Deleted granule directory: {GRANULE_DIR}")
+if MERGED_NEW.exists():
+    MERGED_NEW.unlink()
+    print(f"   🗑  Deleted: {MERGED_NEW.name}")
 
 # ---- DONE ---- #
 print(f"\n{'='*60}")

@@ -1,74 +1,75 @@
-import xarray as xr
-
 """
-merge_smmr.py  –  Step 2
-Merges two NetCDF files:
-  1. ds_base : Stammerjohn 2008 historical record  (BASE_NC)
-  2. ds_new  : newly downloaded / merged 2024-present granules  (MERGED_2024)
+pipeline_SMMR.py  –  Main orchestrator
 
-Produces a single time-sorted file saved to FINAL_MERGED, and updates
-the stable symlink LATEST_MERGED so downstream scripts always find it.
+Steps:
+  1. merge_granules.py  – concatenate the 567 new daily .nc files into one
+  2. merge_smmr.py      – append new data to historical base record
+  3. compute_SIE_csv.py – compute daily SIE and write CSV
+
+Usage:
+  python pipeline_SMMR.py           # skips steps whose output already exists
+  python pipeline_SMMR.py --force   # re-runs all steps
+
+To fetch new granules in future runs, update BASE_NC_END_DATE in config.py
+and run download_smmr.py before this pipeline.
 """
 
+import subprocess
 import sys
-import os
-import xarray as xr
-from config import BASE_NC, MERGED_2024, FINAL_MERGED, LATEST_MERGED
+import shutil
+from pathlib import Path
+from config import GRANULE_DIR, MERGED_NEW, FINAL_MERGED, LATEST_MERGED, SIE_CSV, TODAY
 
-# ---- CHECKS ---- #
-for path, label in [(BASE_NC, "BASE_NC"), (MERGED_2024, "MERGED_2024")]:
-    if not path.exists():
-        print(f"{label} not found: {path}")
-        sys.exit(1)
+SCRIPT_DIR = Path(__file__).parent
+FORCE = "--force" in sys.argv
 
-# ---- LOAD ---- #
-print(f"Loading base file:  {BASE_NC}")
-ds_base = xr.open_dataset(BASE_NC)
+# ---- UTILITY ---- #
+def run(script_name):
+    script = SCRIPT_DIR / script_name
+    print(f"\n{'='*60}")
+    print(f"Running {script_name}")
+    print(f"{'='*60}")
+    result = subprocess.run([sys.executable, str(script)], text=True)
+    if result.returncode != 0:
+        print(f"\n{script_name} failed (exit code {result.returncode}). Aborting.")
+        sys.exit(result.returncode)
 
-print(f"Loading new file:   {MERGED_2024}")
-ds_new  = xr.open_dataset(MERGED_2024)
+def skip(label, path):
+    print(f"{label} already exists — skipping.")
+    print(f"   {path}")
 
-# ---- MATCH VARIABLE NAME ---- #
-def get_icecon_var(ds, label):
-    candidates = [v for v in ds.data_vars if v.endswith("_ICECON")]
-    if not candidates:
-        raise ValueError(f"No *_ICECON variable found in {label}. "
-                         f"Available vars: {list(ds.data_vars)}")
-    return candidates[0]
+# ---- STEP 1: MERGE NEW GRANULES ---- #
+if not FORCE and MERGED_NEW.exists():
+    skip("Merged new granules", MERGED_NEW)
+else:
+    run("merge_granules.py")
 
-var_base = get_icecon_var(ds_base, "base file")
-var_new  = get_icecon_var(ds_new,  "new file")
+# ---- STEP 2: MERGE WITH HISTORICAL BASE ---- #
+if not FORCE and FINAL_MERGED.exists():
+    skip(f"Final merged file (until {TODAY})", FINAL_MERGED)
+    if LATEST_MERGED.is_symlink() or LATEST_MERGED.exists():
+        LATEST_MERGED.unlink()
+    LATEST_MERGED.symlink_to(FINAL_MERGED)
+    print(f"🔗  Symlink refreshed → {FINAL_MERGED.name}")
+else:
+    run("merge_smmr.py")
 
-if var_base != var_new:
-    print(f"Variable name mismatch: '{var_base}' vs '{var_new}'. Renaming new → base.")
-    ds_new = ds_new.rename({var_new: var_base})
+# ---- STEP 3: COMPUTE SIE CSV ---- #
+if not FORCE and SIE_CSV.exists():
+    skip("SIE CSV", SIE_CSV)
+else:
+    run("compute_SIE_csv.py")
 
-print(f"   Using variable: {var_base}")
+# ---- CLEANUP ---- #
+print(f"\n{'='*60}")
+print("Cleaning up temporary files...")
+if MERGED_NEW.exists():
+    MERGED_NEW.unlink()
+    print(f" Deleted: {MERGED_NEW.name}")
 
-# ---- CHECK FOR TIME OVERLAP ---- #
-t_base = ds_base.time.values
-t_new  = ds_new.time.values
-overlap = set(t_base) & set(t_new)
-if overlap:
-    print(f"{len(overlap)} overlapping time steps found. "
-          "Keeping base file values for those dates.")
-    ds_new = ds_new.sel(time=~ds_new.time.isin(list(overlap)))
-
-# ---- MERGE & SORT ---- #
-print("Concatenating and sorting by time...")
-merged = xr.concat([ds_base[var_base], ds_new[var_base]], dim="time")
-merged = merged.sortby("time")
-
-# ---- SAVE DATED FILE ---- #
-FINAL_MERGED.parent.mkdir(parents=True, exist_ok=True)
-print(f"Saving merged file to: {FINAL_MERGED}")
-merged.to_dataset(name=var_base).to_netcdf(str(FINAL_MERGED))
-
-# ---- UPDATE SYMLINK ---- #
-if LATEST_MERGED.is_symlink() or LATEST_MERGED.exists():
-    LATEST_MERGED.unlink()
-LATEST_MERGED.symlink_to(FINAL_MERGED)
-print(f"🔗 Symlink updated: {LATEST_MERGED} → {FINAL_MERGED}")
-
-print(f"\nMerge complete. Time range: "
-      f"{str(merged.time.values[0])[:10]} → {str(merged.time.values[-1])[:10]}")
+# ---- DONE ---- #
+print(f"\n{'='*60}")
+print("Pipeline complete!")
+print(f" Merged NetCDF : {FINAL_MERGED}")
+print(f" SIE CSV       : {SIE_CSV}")
+print(f"{'='*60}\n")
