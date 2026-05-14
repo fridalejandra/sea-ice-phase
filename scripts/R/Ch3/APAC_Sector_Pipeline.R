@@ -5,7 +5,7 @@
 #
 # Models fitted per sector:
 #   1. Traditional annual cycle
-#   2. Invariant annual cycle         — Extent ~ s(DOY)
+#   2. Invariant annual cycle         — Extent ~ s(tdate) + s(DOY)
 #   3. Amplitude-adjusted             — scaling_factor ~ s(tdate) + s(DOY)
 #   4. Phase-adjusted                 — Extent ~ s(tdate) + s(DOY) + s(phase)
 #   5. Full APAC                      — scaling_factor ~ s(tdate) + s(DOY) + s(phase)
@@ -36,8 +36,8 @@ library(rugarch)
 # 0. USER SETTINGS
 # =============================================================================
 
-INPUT_FILE <- "~/Research/repos/sea-ice-phase/scripts/R/Sea_Ice_Sheets/SIE_daily_sector_and_circumpolar_million_km2.csv"
-OUTPUT_DIR <- "~/Research/repos/sea-ice-phase/scripts/R/chapter3/data"
+INPUT_FILE <- "~/Research/repos/sea-ice-phase/scripts/R/observations/SIE_daily_sector_and_circumpolar_million_km2.csv"
+OUTPUT_DIR <- "~/Research/repos/sea-ice-phase/scripts/R/Ch3/data"
 
 DATE_START <- as.Date("1979-01-01")
 DATE_END   <- as.Date("2023-12-31")
@@ -47,7 +47,8 @@ SECTOR_COLS <- c(
   "SIE_Amundsen_Bellingshausen",
   "SIE_Ross",
   "SIE_East_Antarctica",
-  "SIE_King_Haakon"
+  "SIE_King_Haakon",
+  "SIE_circumpolar"
 )
 
 # =============================================================================
@@ -159,7 +160,7 @@ fit_sector <- function(raw_data, sector_col) {
   
   # --- 2e. MODEL 2: Invariant ------------------------------------------------
   gam_invariant <- gam(
-    Extent ~ s(DOY, bs = "cc", k = 100),
+    Extent ~ s(tdate, bs = "cc", k = 14) + s(DOY, bs = "cc", k = 25),
     data = sie, method = "GCV.Cp",
     knots = list(DOY = c(1, 365))
   )
@@ -582,7 +583,7 @@ circ <- circ %>% left_join(trad_circ, by = "DOY")
 rmse_trad_circ <- sqrt(mean((circ$Extent - circ$trad_mean)^2, na.rm = TRUE))
 
 gam_c_iac <- gam(
-  Extent ~ s(DOY, bs = "cc", k = 100),
+  Extent ~ s(tdate, bs = "cc", k = 14) + s(DOY, bs = "cc", k = 25),
   data = circ, method = "GCV.Cp",
   knots = list(DOY = c(1, 365))
 )
@@ -850,7 +851,7 @@ message("Per-sector time series : figures/annual_params_*.png")
 message("Sector comparison      : figures/sector_comparison_phase_amplitude.png")
 
 # =============================================================================
-# 9. FIGURE 7 REPRODUCTION — tabled for later
+# 9. FIGURE 1 REPRODUCTION — tabled for later
 # =============================================================================
 # All component columns needed are present in daily_fitted.csv:
 #   trend_component, amplitude_component, phase_component,
@@ -859,4 +860,5 @@ message("Sector comparison      : figures/sector_comparison_phase_amplitude.png"
 # Day 0 reference: median min DOY per sector
 # =============================================================================
 
-message("\nFig 7 plotting tabled — all component columns saved in daily_fitted.csv")
+message("\nFig 1 plotting tabled — all component columns saved in daily_fitted.csv")
+message("\nFig 1 plotting tabled — all component columns saved in daily_fitted.csv")
