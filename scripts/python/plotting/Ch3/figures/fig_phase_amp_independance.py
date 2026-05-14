@@ -142,11 +142,6 @@ def draw_scatter_grid(sectors, figsize, outfile):
                         va="bottom", color="#5F5E5A", style="italic",
                         path_effects=stroke())
 
-    # Detrend note
-    fig.text(0.5, -0.01,
-             "Variables linearly detrended before correlation",
-             ha="center", fontsize=7.5, color="#5F5E5A", style="italic")
-
     # Decade legend
     handles = [
         plt.scatter([], [], color=c, s=35,
