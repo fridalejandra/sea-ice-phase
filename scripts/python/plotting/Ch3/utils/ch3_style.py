@@ -140,7 +140,7 @@ def sigma_lines(ax, levels=(1,), **kwargs):
 
 DEFAULT_OUTPUT_DIR = os.path.join(
     os.path.expanduser("~"),
-    "Research", "repos", "sea-ice-phase", "results", "Ch3_Figures"
+    "Research", "repos", "sea-ice-phase", "scripts", "python", "plotting", "Ch3", "figures"
 )
 
 GDRIVE_DEST = "gdrive:MyDrive/sea-ice-phase/results/Ch3_Figures/"
