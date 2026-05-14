@@ -83,7 +83,7 @@ df.to_csv(SIE_CSV, index=False)
 print(f"\nCSV saved: {SIE_CSV}")
 print(f"   Rows: {len(df)}  |  Columns: {list(df.columns)}")
 
-# ---- SANITY CHECKS ---- #
+# ---- CHECKS ---- #
 assert df["SIE_circumpolar"].max() < 25, "FAIL: Circumpolar SIE exceeds physical limit (25 M km²)"
 assert df["SIE_circumpolar"].min() >  0, "FAIL: Non-positive SIE detected"
-print("Sanity checks passed.")
+print("Checks passed.")

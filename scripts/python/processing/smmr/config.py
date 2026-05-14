@@ -48,10 +48,10 @@ LATEST_MERGED    = MERGED_DIR / "merged_bootstrap_SH_latest.nc"
 SIE_CSV          = RESULTS_DIR / "SIE_daily_sector_and_circumpolar_million_km2.csv"
 
 # ============================================================
-# SCIENCE SETTINGS
+#  SETTINGS
 # ============================================================
 SIC_THRESHOLD    = 0.15
-SIC_VAR          = "N07_ICECON"   # fallback: any *_ICECON variable
+SIC_VAR = "F17_ICECON"
 AREA_VAR         = "cell_area"
 MASK_VAR         = "sector_id"
 

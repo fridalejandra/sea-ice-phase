@@ -1,75 +1,57 @@
 """
-pipeline_SMMR.py  –  Main orchestrator
-
-Steps:
-  1. merge_granules.py  – concatenate the 567 new daily .nc files into one
-  2. merge_smmr.py      – append new data to historical base record
-  3. compute_SIE_csv.py – compute daily SIE and write CSV
-
-Usage:
-  python pipeline_SMMR.py           # skips steps whose output already exists
-  python pipeline_SMMR.py --force   # re-runs all steps
-
-To fetch new granules in future runs, update BASE_NC_END_DATE in config.py
-and run download_smmr.py before this pipeline.
+merge_smmr.py  –  Step 2
+Merges the historical base record (BASE_NC) with the newly merged
+granules (MERGED_NEW) into a single time-sorted file (FINAL_MERGED)
+using CDO mergetime, then updates the LATEST_MERGED symlink.
 """
 
-import subprocess
 import sys
-import shutil
-from pathlib import Path
-from config import GRANULE_DIR, MERGED_NEW, FINAL_MERGED, LATEST_MERGED, SIE_CSV, TODAY
+import subprocess
+import xarray as xr
+from config import BASE_NC, MERGED_NEW, FINAL_MERGED, LATEST_MERGED
 
-SCRIPT_DIR = Path(__file__).parent
-FORCE = "--force" in sys.argv
+# ---- CHECKS ---- #
+for path, label in [(BASE_NC, "BASE_NC"), (MERGED_NEW, "MERGED_NEW")]:
+    if not path.exists():
+        print(f"{label} not found: {path}")
+        sys.exit(1)
 
-# ---- UTILITY ---- #
-def run(script_name):
-    script = SCRIPT_DIR / script_name
-    print(f"\n{'='*60}")
-    print(f"Running {script_name}")
-    print(f"{'='*60}")
-    result = subprocess.run([sys.executable, str(script)], text=True)
-    if result.returncode != 0:
-        print(f"\n{script_name} failed (exit code {result.returncode}). Aborting.")
-        sys.exit(result.returncode)
+# ---- PREVIEW ---- #
+ds_base = xr.open_dataset(BASE_NC)
+ds_new  = xr.open_dataset(MERGED_NEW)
+print(f"Base : {BASE_NC.name}")
+print(f"Range: {str(ds_base.time.values[0])[:10]} → {str(ds_base.time.values[-1])[:10]}  ({ds_base.sizes['time']} steps)")
+print(f"New  : {MERGED_NEW.name}")
+print(f"   Range: {str(ds_new.time.values[0])[:10]} → {str(ds_new.time.values[-1])[:10]}  ({ds_new.sizes['time']} steps)")
+ds_base.close()
+ds_new.close()
 
-def skip(label, path):
-    print(f"{label} already exists — skipping.")
-    print(f"   {path}")
+# ---- CDO MERGETIME ---- #
+FINAL_MERGED.parent.mkdir(parents=True, exist_ok=True)
+print(f"\nMerging with CDO mergetime...")
+print(f"   Output: {FINAL_MERGED}")
 
-# ---- STEP 1: MERGE NEW GRANULES ---- #
-if not FORCE and MERGED_NEW.exists():
-    skip("Merged new granules", MERGED_NEW)
-else:
-    run("merge_granules.py")
+cmd = ["cdo", "mergetime", str(BASE_NC), str(MERGED_NEW), str(FINAL_MERGED)]
+result = subprocess.run(cmd, text=True, capture_output=True)
 
-# ---- STEP 2: MERGE WITH HISTORICAL BASE ---- #
-if not FORCE and FINAL_MERGED.exists():
-    skip(f"Final merged file (until {TODAY})", FINAL_MERGED)
-    if LATEST_MERGED.is_symlink() or LATEST_MERGED.exists():
-        LATEST_MERGED.unlink()
-    LATEST_MERGED.symlink_to(FINAL_MERGED)
-    print(f"🔗  Symlink refreshed → {FINAL_MERGED.name}")
-else:
-    run("merge_smmr.py")
+print(result.stdout)
+if result.stderr:
+    print(result.stderr)
 
-# ---- STEP 3: COMPUTE SIE CSV ---- #
-if not FORCE and SIE_CSV.exists():
-    skip("SIE CSV", SIE_CSV)
-else:
-    run("compute_SIE_csv.py")
+if result.returncode != 0:
+    print("CDO mergetime failed.")
+    sys.exit(1)
 
-# ---- CLEANUP ---- #
-print(f"\n{'='*60}")
-print("Cleaning up temporary files...")
-if MERGED_NEW.exists():
-    MERGED_NEW.unlink()
-    print(f" Deleted: {MERGED_NEW.name}")
+# ---- VERIFY ---- #
+ds_final = xr.open_dataset(FINAL_MERGED)
+print(f"Final range : {str(ds_final.time.values[0])[:10]} → {str(ds_final.time.values[-1])[:10]}")
+print(f"   Total steps : {ds_final.sizes['time']}")
+ds_final.close()
 
-# ---- DONE ---- #
-print(f"\n{'='*60}")
-print("Pipeline complete!")
-print(f" Merged NetCDF : {FINAL_MERGED}")
-print(f" SIE CSV       : {SIE_CSV}")
-print(f"{'='*60}\n")
+# ---- UPDATE SYMLINK ---- #
+if LATEST_MERGED.is_symlink() or LATEST_MERGED.exists():
+    LATEST_MERGED.unlink()
+LATEST_MERGED.symlink_to(FINAL_MERGED)
+print(f"🔗 Symlink updated: {LATEST_MERGED.name} → {FINAL_MERGED.name}")
+
+print(f"\nMerge complete.")

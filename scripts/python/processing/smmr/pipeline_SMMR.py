@@ -2,8 +2,8 @@
 pipeline_SMMR.py  –  Main orchestrator
 
 Steps:
-  1. merge_granules.py  – concatenate the 567 new daily .nc files into one
-  2. merge_smmr.py      – append new data to historical base record
+  1. merge_granules.py  – concatenate new daily .nc files into one (CDO)
+  2. merge_smmr.py      – append new data to historical base record (CDO)
   3. compute_SIE_csv.py – compute daily SIE and write CSV
 
 Usage:
@@ -22,6 +22,12 @@ from config import GRANULE_DIR, MERGED_NEW, FINAL_MERGED, LATEST_MERGED, SIE_CSV
 
 SCRIPT_DIR = Path(__file__).parent
 FORCE = "--force" in sys.argv
+
+# ---- CHECK CDO IS AVAILABLE ---- #
+if subprocess.run(["which", "cdo"], capture_output=True).returncode != 0:
+    print("CDO is not installed or not on PATH.")
+    print("   Install with: conda install -c conda-forge cdo")
+    sys.exit(1)
 
 # ---- UTILITY ---- #
 def run(script_name):
@@ -65,7 +71,7 @@ print(f"\n{'='*60}")
 print("Cleaning up temporary files...")
 if MERGED_NEW.exists():
     MERGED_NEW.unlink()
-    print(f"   🗑  Deleted: {MERGED_NEW.name}")
+    print(f"Deleted: {MERGED_NEW.name}")
 
 # ---- DONE ---- #
 print(f"\n{'='*60}")
