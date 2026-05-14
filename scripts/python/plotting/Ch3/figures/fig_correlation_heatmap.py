@@ -138,7 +138,8 @@ def draw_heatmap(ax, r_mat, sig_mat, title, show_xticklabels=False):
                 brightness = 0.299*color[0] + 0.587*color[1] + 0.114*color[2]
                 txt_color  = "white" if brightness < 0.5 else "#2C2C2A"
 
-                label = f"{r:+.2f}{sig if isinstance(sig, str) else ""}"
+                sig_str = sig if isinstance(sig, str) else ""
+                label = f"{r:+.2f}{sig_str}"
                 ax.text(j + 0.5, i + 0.5, label,
                         ha="center", va="center",
                         fontsize=9, color=txt_color,
