@@ -134,14 +134,6 @@ def draw_scatter_grid(sectors, figsize, outfile):
                 ax.set_title(col_title, fontsize=9,
                              fontweight="bold", pad=6)
 
-            # ABS coupling note
-            if sector == "SIE_Amundsen_Bellingshausen" and col == 1:
-                ax.text(0.03, 0.03,
-                        "Note: fitting procedure\nintroduces coupling here",
-                        transform=ax.transAxes, fontsize=7,
-                        va="bottom", color="#5F5E5A", style="italic",
-                        path_effects=stroke())
-
     # Decade legend
     handles = [
         plt.scatter([], [], color=c, s=35,
