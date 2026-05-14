@@ -15,8 +15,8 @@ import os
 # 0. SETTINGS
 # =============================================================================
 
-DAILY_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data/daily_fitted.csv"
-OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/figures/"
+DAILY_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/daily_fitted.csv"
+OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 plt.rcParams.update({

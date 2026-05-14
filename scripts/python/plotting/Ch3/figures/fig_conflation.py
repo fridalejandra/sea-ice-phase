@@ -43,7 +43,7 @@ from ch3_style import (
 
 apply_style()
 
-DATA_DIR    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data"
+DATA_DIR    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 DAILY_CSV   = os.path.join(DATA_DIR, "daily_fitted.csv")
 OUTPUT_DIR  = DEFAULT_OUTPUT_DIR
 

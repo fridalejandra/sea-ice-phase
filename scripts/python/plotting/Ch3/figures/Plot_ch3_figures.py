@@ -41,9 +41,9 @@ warnings.filterwarnings("ignore")
 # PATHS
 # =============================================================================
 
-DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data"
+DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 SIE_CSV    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Sea_Ice_Sheets/SIE_daily_sector_and_circumpolar_million_km2.csv"
-OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/figures"
+OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures"
 GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
 
 ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params.csv")

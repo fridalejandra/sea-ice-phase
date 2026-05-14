@@ -38,8 +38,8 @@ import os
 # 0. PATHS — update these to match your directory structure
 # =============================================================================
 
-FIGURES_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/figures/"
-ANNUAL_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/chapter3/data/annual_params.csv"
+FIGURES_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures/"
+ANNUAL_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/annual_params.csv"
 INDEX_CSV   = os.path.join(FIGURES_DIR, "master_index_detrended.csv")
 OUTPUT_DIR  = FIGURES_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
