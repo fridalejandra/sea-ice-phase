@@ -38,9 +38,9 @@ import os
 # 0. PATHS — update these to match your directory structure
 # =============================================================================
 
-FIGURES_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures/"
+FIGURES_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures/"
 ANNUAL_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/annual_params.csv"
-INDEX_CSV   = os.path.join(FIGURES_DIR, "master_index_detrended.csv")
+INDEX_CSV   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/master_index_detrended.csv"
 OUTPUT_DIR  = FIGURES_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -372,7 +372,7 @@ axes[-1].set_xticks(range(1990, 2020, 5))
 # --- Overall title ---
 fig.suptitle("", fontsize=11)
 
-# Output to chapter3/figures same as heatmap
+# Output to Ch3/figures
 outpath = os.path.join(OUTPUT_DIR, "rolling_window_correlations.png")
 fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
