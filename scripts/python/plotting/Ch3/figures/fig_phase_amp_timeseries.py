@@ -236,78 +236,47 @@ save_fig(fig, "fig_phase_amplitude_timeseries_3c_selected.png", OUTPUT_DIR)
 
 
 # =============================================================================
-# PANEL 3d — rolling variance with pre/post-2016 annotation
+# PANEL 3d — rolling variance: all sectors as lines on 2 panels
 # =============================================================================
 print("Panel 3d: rolling variance")
 
-plot_sectors_roll = SECTORS_NO_CIRC + ["SIE_circumpolar"]
-fig, axes = plt.subplots(2, 3, figsize=(6.5, 4.5),
-                         sharey="row", sharex=True)
-
+all_sectors_roll = SECTORS_NO_CIRC + ["SIE_circumpolar"]
 row_vars   = ["max_doy_raw_anom_2015", "amplitude_raw_anom_2015"]
 row_labels = [
-    "10-yr rolling std dev\nof phase (days)",
-    "10-yr rolling std dev\nof amplitude (million km\u00b2)",
+    "(a)  10-yr rolling std dev of phase (days)",
+    "(b)  10-yr rolling std dev of amplitude (million km\u00b2)",
 ]
-letter_idx = 0
 
-for row, (var, ylabel) in enumerate(zip(row_vars, row_labels)):
-    for col, sec in enumerate(plot_sectors_roll):
-        ax   = axes[row, col]
+fig, axes = plt.subplots(2, 1, figsize=(6.5, 5.0), sharex=True)
+
+for ax, var, ylabel in zip(axes, row_vars, row_labels):
+    for sec in all_sectors_roll:
         sub  = (annual[annual["sector"] == sec]
                 .sort_values("Year").set_index("Year"))
         roll = sub[var].rolling(10, center=True, min_periods=6).std()
-
         color = SECTOR_COLORS[sec]
+        lw    = 2.2 if sec == "SIE_circumpolar" else 1.6
+        ls    = "--" if sec == "SIE_circumpolar" else "-"
+        ax.plot(roll.index, roll.values, color=color, lw=lw, ls=ls,
+                zorder=3, label=SECTOR_LABELS[sec])
 
-        ax.plot(roll.index, roll.values, color=color, lw=1.8, zorder=3)
-        ax.fill_between(roll.index, roll.values,
-                        color=color, alpha=0.15, zorder=2)
+    shade2016(ax, yr_max=yr_max)
+    ax.axvline(2016, color="#D4537E", lw=0.9, ls=":", alpha=0.7, zorder=4)
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(yr_min + 4, yr_max - 4)
+    ax.set_ylabel(ylabel.split("  ")[1], fontsize=9)
+    ax.text(0.02, 0.97, ylabel.split("  ")[0],
+            transform=ax.transAxes, fontsize=9,
+            fontweight="bold", va="top", color="#2C2C2A")
+    ax.tick_params(labelsize=8)
 
-        # Pre/post-2016 mean lines — this is what was "underwhelming" without
-        pre_mean  = roll[roll.index <  2016].mean()
-        post_mean = roll[roll.index >= 2016].mean()
-        ax.axhline(pre_mean,  color=color, lw=1.0, ls="--", alpha=0.7,
-                   zorder=4)
-        ax.axhline(post_mean, color="#D4537E", lw=1.0, ls="--", alpha=0.9,
-                   zorder=4)
+axes[1].set_xlabel("Year", fontsize=9)
 
-        # Annotate the change
-        change = post_mean - pre_mean
-        sign   = "+" if change >= 0 else ""
-        ax.text(0.97, 0.97,
-                f"{sign}{change:.1f}",
-                transform=ax.transAxes, fontsize=7.5,
-                color="#D4537E", ha="right", va="top",
-                fontweight="bold", path_effects=stroke())
-
-        shade2016(ax, yr_max=yr_max)
-        ax.set_xlim(yr_min + 4, yr_max - 4)
-        ax.set_ylim(bottom=0)
-
-        ax.text(0.03, 0.97, f"({PANEL_LETTERS[letter_idx]})",
-                transform=ax.transAxes, fontsize=8, fontweight="bold",
-                va="top", color="#2C2C2A")
-        letter_idx += 1
-
-        if row == 0:
-            ax.set_title(SECTOR_LABELS[sec], fontsize=9,
-                         fontweight="bold", pad=4, color=color)
-        if col == 0:
-            ax.set_ylabel(ylabel, fontsize=8, labelpad=4)
-        if row == 1:
-            ax.set_xlabel("Year", fontsize=8)
-            ax.tick_params(axis="x", rotation=30, labelsize=8)
-        ax.tick_params(labelsize=8)
-
-# Shared legend for the mean lines
-legend_elements = [
-    Line2D([0], [0], color="grey", lw=1.0, ls="--", label="Pre-2016 mean"),
-    Line2D([0], [0], color="#D4537E", lw=1.0, ls="--", label="Post-2016 mean"),
-]
-fig.legend(handles=legend_elements, loc="lower center", ncol=2,
-           fontsize=8, bbox_to_anchor=(0.5, -0.03), frameon=False)
-fig.tight_layout(rect=[0, 0.04, 1, 1])
+# Single legend below both panels
+handles, labels = axes[0].get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", ncol=6,
+           fontsize=8, bbox_to_anchor=(0.5, -0.04), frameon=False)
+fig.tight_layout(rect=[0, 0.05, 1, 1])
 save_fig(fig, "fig_phase_amplitude_timeseries_3d_rolling_variance.png", OUTPUT_DIR)
 
 

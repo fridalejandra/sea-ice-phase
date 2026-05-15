@@ -142,7 +142,7 @@ def draw_heatmap(ax, r_mat, sig_mat, title, show_xticklabels=False):
                 label = f"{r:+.2f}{sig_str}"
                 ax.text(j + 0.5, i + 0.5, label,
                         ha="center", va="center",
-                        fontsize=9, color=txt_color,
+                        fontsize=10, color=txt_color,
                         fontweight="bold" if isinstance(sig, str) and ("**" in sig or "*" in sig) else "normal",
                         path_effects=stroke(lw=1.5, foreground="none")
                         if brightness > 0.3 else [])
@@ -151,17 +151,17 @@ def draw_heatmap(ax, r_mat, sig_mat, title, show_xticklabels=False):
     ax.set_ylim(0, n_rows)
     ax.set_yticks(np.arange(n_rows) + 0.5)
     ax.set_yticklabels(r_mat.index[::-1] if False else r_mat.index,
-                       fontsize=10)
+                       fontsize=11)
     ax.invert_yaxis()
 
     if show_xticklabels:
         ax.set_xticks(np.arange(n_cols) + 0.5)
-        ax.set_xticklabels(r_mat.columns, fontsize=9,
+        ax.set_xticklabels(r_mat.columns, fontsize=10,
                            ha="center", va="top")
     else:
         ax.set_xticks([])
 
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=8)
 
     # Light grid lines between cells
     for x in range(n_cols + 1):
@@ -200,38 +200,35 @@ r_amp,     sig_amp     = build_matrix("amplitude", all_cols)
 n_rows = len(SECTOR_ORDER)
 n_cols = len(all_cols)
 
-# Figure height scales with number of rows; width with columns
-fig_w = max(10, n_cols * 1.4)
-fig_h = n_rows * 0.9 * 2 + 2.5   # two panels + legend space
+# Cell size drives the figure dimensions — keep cells large enough to read
+cell_w = 1.1
+cell_h = 0.9
+fig_w  = max(7.5, n_cols * cell_w + 1.5)
+fig_h  = n_rows * cell_h * 2 + 3.5
 
 fig, (ax_phase, ax_amp) = plt.subplots(
     2, 1,
     figsize=(fig_w, fig_h),
-    gridspec_kw={"hspace": 0.35}
+    gridspec_kw={"hspace": 0.5}
 )
 
 norm, cmap = draw_heatmap(ax_phase, r_phase, sig_phase,
-                           "Phase anomaly\nvs atmospheric indices",
+                           "(a)  Phase anomaly vs atmospheric indices",
                            show_xticklabels=False)
 
 draw_heatmap(ax_amp, r_amp, sig_amp,
-             "Amplitude anomaly\nvs atmospheric indices",
+             "(b)  Amplitude anomaly vs atmospheric indices",
              show_xticklabels=True)
 
 # Colourbar
 sm  = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
-cbar_ax = fig.add_axes([0.25, -0.03, 0.50, 0.025])
+cbar_ax = fig.add_axes([0.20, -0.02, 0.60, 0.02])
 cbar    = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
-cbar.set_label("Pearson r  |  ** FDR p<0.05   * p<0.05   . p<0.10",
-               fontsize=9)
-cbar.ax.tick_params(labelsize=8)
+cbar.set_label("Pearson r  |  ** FDR p<0.05   * p<0.05",
+               fontsize=10)
+cbar.ax.tick_params(labelsize=9)
 
-fig.suptitle(
-    "Atmospheric drivers of sea ice phase and amplitude\n"
-    "Columns shown where at least one sector reaches p < 0.10",
-    fontsize=12, fontweight="bold", y=1.01,
-)
-
+fig.tight_layout(rect=[0, 0.04, 1, 1])
 save_fig(fig, "fig_correlation_heatmap.png", OUTPUT_DIR)
 print("fig_correlation_heatmap.png saved.")
