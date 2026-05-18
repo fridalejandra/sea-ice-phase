@@ -136,17 +136,19 @@ def block_bootstrap_p(x, y, block_length=3, n_boot=2000, seed=42):
 
     boot_r = np.empty(n_boot)
     for b in range(n_boot):
-        # Build a resampled series of length n from random blocks
+        # Resample only x (the index) using block bootstrap, keeping y fixed.
+        # This breaks the x-y relationship under the null hypothesis while
+        # preserving the autocorrelation structure of the index series.
         indices = []
         while len(indices) < n:
             start = rng.integers(0, n)
             block = list(range(start, min(start + block_length, n)))
             indices.extend(block)
         idx = np.array(indices[:n])
-        xb, yb = x[idx], y[idx]
-        boot_r[b], _ = pearsonr(xb, yb)
+        xb = x[idx]   # resampled index — autocorrelation preserved
+        boot_r[b], _ = pearsonr(xb, y)  # y (ice) kept in original order
 
-    # Two-sided p-value: proportion of bootstrap r more extreme than observed
+    # Two-sided p-value: proportion of bootstrap r as extreme as observed
     p = float(np.mean(np.abs(boot_r) >= np.abs(r_obs)))
     # Minimum p is 1/n_boot
     p = max(p, 1.0 / n_boot)
