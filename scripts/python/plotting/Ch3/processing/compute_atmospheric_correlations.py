@@ -124,6 +124,35 @@ def pearson_with_neff(x, y):
     return float(r), float(p), int(ne)
 
 
+def block_bootstrap_p(x, y, block_length=3, n_boot=2000, seed=42):
+    """
+    Stationary block bootstrap p-value for Pearson correlation.
+    Resamples contiguous blocks of length `block_length` to preserve
+    temporal autocorrelation. Returns two-sided p-value.
+    """
+    rng  = np.random.default_rng(seed)
+    n    = len(x)
+    r_obs, _ = pearsonr(x, y)
+
+    boot_r = np.empty(n_boot)
+    for b in range(n_boot):
+        # Build a resampled series of length n from random blocks
+        indices = []
+        while len(indices) < n:
+            start = rng.integers(0, n)
+            block = list(range(start, min(start + block_length, n)))
+            indices.extend(block)
+        idx = np.array(indices[:n])
+        xb, yb = x[idx], y[idx]
+        boot_r[b], _ = pearsonr(xb, yb)
+
+    # Two-sided p-value: proportion of bootstrap r more extreme than observed
+    p = float(np.mean(np.abs(boot_r) >= np.abs(r_obs)))
+    # Minimum p is 1/n_boot
+    p = max(p, 1.0 / n_boot)
+    return p
+
+
 # --- Load indices ---------------------------------------------------------
 
 print("Loading SAM index...")
@@ -244,7 +273,7 @@ annual_dt = pd.concat(annual_dt)
 # is corrected separately from ZW3~amplitude. This avoids over-correction
 # from pooling physically unrelated tests together.
 
-print("\nComputing correlations...")
+print("\nComputing correlations (block bootstrap adds ~2-3 min)...")
 
 INDEX_COLS = [c for c in idx.columns if c != "Year"]
 results = []
@@ -267,6 +296,7 @@ for sec_col, sec_label in SECTORS.items():
 
             r, p_neff, ne = pearson_with_neff(x, y)
             rho, p_spear  = spearmanr(x, y)
+            p_boot        = block_bootstrap_p(x, y, block_length=3, n_boot=2000)
 
             parts    = idx_col.rsplit("_", 1)
             idx_name = parts[0]
@@ -281,9 +311,10 @@ for sec_col, sec_label in SECTORS.items():
                 "season"      : season,
                 "n"           : len(merged),
                 "n_eff"       : ne,
-                "pearson_r"   : round(r,   4),
+                "pearson_r"   : round(r,      4),
                 "pearson_p"   : round(p_neff, 4),
-                "spearman_r"  : round(rho, 4),
+                "boot_p"      : round(p_boot, 4),
+                "spearman_r"  : round(rho,    4),
                 "spearman_p"  : round(float(p_spear), 4),
             })
 
@@ -306,6 +337,11 @@ for (var_type, index), group in results_df.groupby(["var_type", "index"]):
     group["pearson_p_fdr"] = np.round(p_adj_p, 4)
     group["pearson_sig"]   = reject_p.astype(bool)
 
+    reject_b, p_adj_b, _, _ = multipletests(
+        group["boot_p"].values, alpha=0.05, method="fdr_bh")
+    group["boot_p_fdr"]    = np.round(p_adj_b, 4)
+    group["boot_sig"]      = reject_b.astype(bool)
+
     reject_s, p_adj_s, _, _ = multipletests(
         group["spearman_p"].values, alpha=0.05, method="fdr_bh")
     group["spearman_p_fdr"] = np.round(p_adj_s, 4)
@@ -318,6 +354,11 @@ results_df = pd.concat(fdr_results).sort_values(
 
 # Significance stars
 def sig_star(row):
+    # *** : survives both n_eff-adjusted FDR AND block bootstrap FDR
+    # **  : survives n_eff-adjusted FDR only
+    # *   : raw p < 0.05 (n_eff adjusted)
+    # .   : raw p < 0.10
+    if row["pearson_p_fdr"] < 0.05 and row["boot_p_fdr"] < 0.05: return "***"
     if row["pearson_p_fdr"] < 0.05: return "**"
     if row["pearson_p"]     < 0.05: return "*"
     if row["pearson_p"]     < 0.10: return "."
@@ -325,8 +366,12 @@ def sig_star(row):
 
 results_df["sig"] = results_df.apply(sig_star, axis=1)
 
-n_sig = int(results_df["pearson_sig"].sum())
-print(f"  {n_sig} significant after FDR (across index×variable groups)")
+n_sig      = int(results_df["pearson_sig"].sum())
+n_boot_sig = int(results_df["boot_sig"].sum())
+n_both     = int((results_df["pearson_sig"] & results_df["boot_sig"]).sum())
+print(f"  {n_sig} significant after n_eff FDR")
+print(f"  {n_boot_sig} significant after block bootstrap FDR")
+print(f"  {n_both} significant under BOTH (shown as *** in heatmap)")
 
 
 # --- Save -----------------------------------------------------------------
@@ -345,9 +390,16 @@ top = (results_df
          "pearson_r","pearson_p","pearson_p_fdr","n_eff","sig"]])
 print(top.to_string(index=False))
 
-print("\nFDR significant results:")
+print("\nResults significant under BOTH methods (***):")
+both = (results_df[results_df["pearson_sig"] & results_df["boot_sig"]]
+        .sort_values("pearson_r", key=abs, ascending=False)
+        [["sector_label","var_type","index","season",
+          "pearson_r","pearson_p_fdr","boot_p_fdr","n_eff","sig"]])
+print(both.to_string(index=False) if len(both) > 0 else "  None")
+
+print("\nAll FDR significant (n_eff method):")
 sig = (results_df[results_df["pearson_sig"]]
        .sort_values("pearson_r", key=abs, ascending=False)
        [["sector_label","var_type","index","season",
-         "pearson_r","pearson_p_fdr","n_eff","sig"]])
+         "pearson_r","pearson_p_fdr","boot_p_fdr","n_eff","sig"]])
 print(sig.to_string(index=False) if len(sig) > 0 else "  None")

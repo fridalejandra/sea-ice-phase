@@ -225,7 +225,7 @@ sm  = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
 cbar_ax = fig.add_axes([0.20, -0.02, 0.60, 0.02])
 cbar    = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
-cbar.set_label("Pearson r  |  ** FDR p<0.05   * p<0.05",
+cbar.set_label("Pearson r  |  *** FDR p<0.05 (n_eff + bootstrap)   ** FDR p<0.05 (n_eff)   * p<0.05",
                fontsize=10)
 cbar.ax.tick_params(labelsize=9)
 
