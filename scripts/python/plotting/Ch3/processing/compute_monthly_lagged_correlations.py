@@ -197,10 +197,7 @@ monthly_idx = (sam_long
                .merge(zw3_goyal[["year","month","ZW3G"]],
                       on=["year","month"], how="left"))
 
-# Add ZW3G if monthly is available
-if "ZW3G" in zw3_monthly.columns:
-    monthly_idx = monthly_idx.merge(
-        zw3_monthly[["year","month","ZW3G"]], on=["year","month"], how="left")
+# ZW3G was already merged above from zw3_goyal — no second merge needed.
 
 monthly_idx = monthly_idx[
     monthly_idx["year"].between(YEAR_MIN, YEAR_MAX)].sort_values(
@@ -331,20 +328,20 @@ for sec_col, sec_label in SECTORS.items():
                 p_perm       = permutation_pval(x, y)
 
                 cross_corr_records.append({
-                    "sector"      : sec_col,
-                    "sector_label": sec_label,
+                    "sector"      : sec_label,        # short label: EA, Ross, ABS…
+                    "sector_col"  : sec_col,           # raw column name kept for joins
+                    "variable"    : var_type,          # "phase" or "amplitude"
                     "apac_var"    : apac_var,
-                    "var_type"    : var_type,
                     "index"       : idx_col,
                     "month"       : month,
                     "month_name"  : MONTH_NAMES[month - 1],
                     "n"           : len(merged),
-                    "pearson_r"   : round(r, 4),
-                    "pearson_p"   : round(p_raw, 4),
+                    "r"           : round(r, 4),       # Pearson r (heatmap uses this)
+                    "p_raw"       : round(p_raw, 4),
                     "spearman_r"  : round(rho, 4),
                     "spearman_p"  : round(p_spear, 4),
-                    "ci_lower"    : round(ci_l, 4) if not np.isnan(ci_l) else np.nan,
-                    "ci_upper"    : round(ci_u, 4) if not np.isnan(ci_u) else np.nan,
+                    "ci_low"      : round(ci_l, 4) if not np.isnan(ci_l) else np.nan,
+                    "ci_high"     : round(ci_u, 4) if not np.isnan(ci_u) else np.nan,
                     "boot_std"    : round(boot_std, 4) if not np.isnan(boot_std) else np.nan,
                     "p_permute"   : round(p_perm, 4),
                     "bootstrap_method": "stationary_block" if HAS_ARCH else "fisher_z",
@@ -352,6 +349,28 @@ for sec_col, sec_label in SECTORS.items():
 
 cross_df = pd.DataFrame(cross_corr_records)
 print(f"  {len(cross_df)} monthly cross-correlation pairs")
+
+# ── Apply Benjamini-Hochberg FDR correction across all tests ──────────────
+# Correction applied separately per variable type (phase / amplitude)
+# to mirror the approach used in the main seasonal heatmap.
+from statsmodels.stats.multitest import multipletests
+
+fdr_p = np.ones(len(cross_df))
+for var_type in cross_df["variable"].unique():
+    mask = cross_df["variable"] == var_type
+    p_vals = cross_df.loc[mask, "p_raw"].values
+    valid  = ~np.isnan(p_vals)
+    if valid.sum() > 1:
+        _, p_adj, _, _ = multipletests(p_vals[valid], method="fdr_bh")
+        p_adj_full = np.ones(len(p_vals))
+        p_adj_full[valid] = p_adj
+        fdr_p[mask.values] = p_adj_full
+
+cross_df["p_fdr"] = np.round(fdr_p, 4)
+n_fdr = (cross_df["p_fdr"] < 0.05).sum()
+n_raw = (cross_df["p_raw"] < 0.05).sum()
+print(f"  Significant at p_raw < 0.05:  {n_raw}")
+print(f"  Significant after FDR (p_fdr < 0.05): {n_fdr}")
 
 
 # --- 2. Atmospheric autocorrelation structure -----------------------------
@@ -477,23 +496,27 @@ loo_records = []
 for sec_col, apac_var, idx_base in KEY_PAIRS:
     matching = [c for c in INDEX_COLS_MONTHLY if c.startswith(idx_base)]
     if not matching:
+        print(f"  Skipping LOO for {idx_base} — not in monthly index columns")
         continue
     idx_col = matching[0]
 
-    # Use the annual mean of the index (most comparable to existing results)
+    # LOO uses the annual mean of the monthly index (consistent with the
+    # main seasonal correlations). This is intentional — we want to know
+    # whether the annual-mean result is driven by individual years,
+    # not to re-do the peak-month analysis here.
     idx_ann = (monthly_idx.groupby("year")[idx_col]
                .mean().reset_index()
-               .rename(columns={"year":"Year"}))
+               .rename(columns={"year": "Year", idx_col: "idx_annual"}))
 
-    ice = annual_dt[annual_dt["sector"] == sec_col][["Year", apac_var]].dropna()
+    ice    = annual_dt[annual_dt["sector"] == sec_col][["Year", apac_var]].dropna()
     merged = ice.merge(idx_ann, on="Year").dropna()
 
     if len(merged) < 8:
         continue
 
-    x    = merged[idx_col].values.astype(float)
-    y    = merged[apac_var].values.astype(float)
-    yrs  = merged["Year"].values
+    x   = merged["idx_annual"].values.astype(float)
+    y   = merged[apac_var].values.astype(float)
+    yrs = merged["Year"].values
 
     r_full, _ = pearsonr(x, y)
 
@@ -501,13 +524,15 @@ for sec_col, apac_var, idx_base in KEY_PAIRS:
         mask  = np.arange(len(yrs)) != i
         r_loo, _ = pearsonr(x[mask], y[mask])
         loo_records.append({
-            "sector"      : sec_col,
-            "apac_var"    : apac_var,
-            "index"       : idx_col,
-            "year_left_out": int(yr),
-            "r_full"      : round(r_full, 4),
-            "r_loo"       : round(r_loo,  4),
-            "r_change"    : round(r_loo - r_full, 4),
+            "sector"        : SECTORS.get(sec_col, sec_col),
+            "sector_col"    : sec_col,
+            "apac_var"      : apac_var,
+            "variable"      : APAC_VARS.get(apac_var, apac_var),
+            "index"         : idx_col,
+            "year_left_out" : int(yr),
+            "r_full"        : round(r_full, 4),
+            "r_loo"         : round(r_loo,  4),
+            "r_change"      : round(r_loo - r_full, 4),
         })
 
 loo_df = pd.DataFrame(loo_records)
