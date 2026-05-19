@@ -69,8 +69,8 @@ CMAP  = "RdBu_r"
 # ── Load and prepare data ─────────────────────────────────────────────────────
 def load_monthly_anomalies(path):
     df = pd.read_csv(path)
-    # Parse date
-    df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%y", errors="coerce")
+    # Parse date — column is 'time' in ISO format (YYYY-MM-DD)
+    df["Date"] = pd.to_datetime(df["time"], errors="coerce")
     df = df.dropna(subset=["Date"])
     df["Year"]  = df["Date"].dt.year
     df["Month"] = df["Date"].dt.month
