@@ -136,13 +136,7 @@ def make_figure(df, variable, outdir):
             ax.plot(x, r, color=color, linewidth=1.4,
                     label=SECTOR_LABELS.get(sec, sec), zorder=3)
 
-            # Shaded CI band
-            valid = ~np.isnan(r) & ~np.isnan(ci_lo) & ~np.isnan(ci_hi)
-            if valid.sum() > 1:
-                ax.fill_between(x[valid], ci_lo[valid], ci_hi[valid],
-                                color=color, alpha=0.12, zorder=2)
-
-            # Significance markers
+            # Significance markers on individual points
             for m_i, m in enumerate(MONTHS):
                 if np.isnan(r[m_i]):
                     continue
@@ -153,8 +147,19 @@ def make_figure(df, variable, outdir):
                     ax.text(m, r[m_i] + 0.03, "*", ha="center", va="bottom",
                             fontsize=6, color=color, fontweight="bold", zorder=4)
 
+        # Significance threshold band (two-tailed p<0.05, n=45, Spearman approx)
+        # Critical r ≈ ±t / sqrt(t² + n-2), t = 2.016 for df=43
+        n_obs   = 45
+        t_crit  = 2.016
+        r_crit  = t_crit / np.sqrt(t_crit**2 + n_obs - 2)
+        ax.fill_between([0.5, 12.5], -r_crit, r_crit,
+                        color="#cccccc", alpha=0.25, zorder=0,
+                        label=f"p>0.05 (n={n_obs})")
+        ax.axhline( r_crit, color="#aaaaaa", linewidth=0.8, linestyle="--", zorder=1)
+        ax.axhline(-r_crit, color="#aaaaaa", linewidth=0.8, linestyle="--", zorder=1)
+
         # Reference line at r=0
-        ax.axhline(0, color="#999999", linewidth=0.7, linestyle="--", zorder=1)
+        ax.axhline(0, color="#666666", linewidth=0.8, linestyle="-", zorder=1)
 
         # Axes formatting
         ax.set_xlim(0.5, 12.5)
@@ -163,12 +168,7 @@ def make_figure(df, variable, outdir):
         ax.tick_params(axis="y", labelsize=8)
         ax.set_ylabel("Spearman  r", fontsize=8)
         ax.set_title(idx_lbl, fontsize=10, fontweight="bold", pad=4)
-        ax.grid(axis="y", linestyle="--", linewidth=0.4, alpha=0.5, zorder=0)
         ax.set_axisbelow(True)
-
-        # r=±0.5 reference lines (visual guide)
-        for ref in (-0.4, 0.4):
-            ax.axhline(ref, color="#cccccc", linewidth=0.5, linestyle=":", zorder=1)
 
         # Panel label
         ax.text(-0.01, 1.04, f"({letters[k]})",
@@ -185,7 +185,8 @@ def make_figure(df, variable, outdir):
                fontsize=8.5, frameon=True, bbox_to_anchor=(0.5, 0.01))
 
     # Significance note
-    fig.text(0.97, 0.01, "** FDR p<0.05   * p<0.05",
+    fig.text(0.97, 0.01,
+             "Grey band = p>0.05 threshold (n=45)   ** FDR p<0.05   * p<0.05",
              fontsize=7.5, ha="right", va="bottom", color="#555555")
 
     fig.suptitle(VAR_TITLES[variable], fontsize=12, fontweight="bold")
