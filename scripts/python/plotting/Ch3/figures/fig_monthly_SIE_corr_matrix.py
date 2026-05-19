@@ -114,9 +114,11 @@ def correlation_matrix(mon_df):
             paired = mon_df[[m1, m2]].dropna()
             if len(paired) < 10:
                 continue
-            result = spearmanr(paired[m1], paired[m2])
-            r_mat[i, j] = float(result.statistic) if hasattr(result, 'statistic') else float(result[0])
-            p_mat[i, j] = float(result.pvalue)    if hasattr(result, 'pvalue')    else float(result[1])
+            result = spearmanr(paired[m1].values, paired[m2].values)
+            r_val = result.statistic if hasattr(result, 'statistic') else result[0]
+            p_val = result.pvalue    if hasattr(result, 'pvalue')    else result[1]
+            r_mat[i, j] = float(np.atleast_1d(r_val).flat[0])
+            p_mat[i, j] = float(np.atleast_1d(p_val).flat[0])
     return r_mat, p_mat
 
 
