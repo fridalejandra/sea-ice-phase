@@ -356,21 +356,29 @@ print(f"  {len(cross_df)} monthly cross-correlation pairs")
 from statsmodels.stats.multitest import multipletests
 
 fdr_p = np.ones(len(cross_df))
+# Apply FDR within each index × variable combination.
+# Correcting across all 600 tests simultaneously is too conservative for n~45;
+# correcting within each index (12 months × 5 sectors = 60 tests per index/variable)
+# matches the approach used in the main seasonal heatmap and is more defensible.
 for var_type in cross_df["variable"].unique():
-    mask = cross_df["variable"] == var_type
-    p_vals = cross_df.loc[mask, "p_raw"].values
-    valid  = ~np.isnan(p_vals)
-    if valid.sum() > 1:
-        _, p_adj, _, _ = multipletests(p_vals[valid], method="fdr_bh")
-        p_adj_full = np.ones(len(p_vals))
-        p_adj_full[valid] = p_adj
-        fdr_p[mask.values] = p_adj_full
+    for idx_col in cross_df["index"].unique():
+        mask = (cross_df["variable"] == var_type) & (cross_df["index"] == idx_col)
+        p_vals = cross_df.loc[mask, "p_raw"].values
+        valid  = ~np.isnan(p_vals)
+        if valid.sum() > 1:
+            _, p_adj, _, _ = multipletests(p_vals[valid], method="fdr_bh")
+            p_adj_full = np.ones(len(p_vals))
+            p_adj_full[valid] = p_adj
+            fdr_p[mask.values] = p_adj_full
 
 cross_df["p_fdr"] = np.round(fdr_p, 4)
 n_fdr = (cross_df["p_fdr"] < 0.05).sum()
 n_raw = (cross_df["p_raw"] < 0.05).sum()
 print(f"  Significant at p_raw < 0.05:  {n_raw}")
 print(f"  Significant after FDR (p_fdr < 0.05): {n_fdr}")
+print("  FDR survivors by index/variable:")
+fdr_hits = cross_df[cross_df["p_fdr"] < 0.05].groupby(["index","variable"]).size()
+print(fdr_hits.to_string() if len(fdr_hits) else "    (none)")
 
 
 # --- 2. Atmospheric autocorrelation structure -----------------------------
@@ -421,9 +429,6 @@ for sec_col, apac_var, idx_base in KEY_PAIRS:
             continue
         matching = [annual_col]
     idx_col = matching[0]
-
-    if idx_col not in INDEX_COLS_MONTHLY:
-        continue
 
     ice = annual_dt[annual_dt["sector"] == sec_col][["Year", apac_var]].dropna()
 
