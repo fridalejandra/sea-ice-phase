@@ -51,8 +51,8 @@ import pandas as pd
 from matplotlib.colors import TwoSlopeNorm, Normalize
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-DEFAULT_INPUT  = pathlib.Path("processed/monthly_cross_correlations.csv")
-DEFAULT_OUTDIR = pathlib.Path("figures")
+DEFAULT_INPUT  = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/monthly_cross_correlations.csv")
+DEFAULT_OUTDIR = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures")
 
 INDEX_ORDER   = ["SAM", "ZW3", "ASL", "Nino34"]
 SECTOR_ORDER  = ["EA", "Ross", "ABS", "Weddell", "KH"]

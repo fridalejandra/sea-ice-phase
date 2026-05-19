@@ -35,8 +35,8 @@ import matplotlib.ticker as mticker
 import pandas as pd
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-DEFAULT_RESID = pathlib.Path("processed/loo_index_residuals.csv")
-DEFAULT_OUT   = pathlib.Path("figures")
+DEFAULT_RESID = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/loo_index_residuals.csv")
+DEFAULT_OUT   = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures")
 
 # ── Display order ─────────────────────────────────────────────────────────────
 SECTOR_ORDER = ["EA", "Ross", "ABS", "Weddell", "King Haakon"]
