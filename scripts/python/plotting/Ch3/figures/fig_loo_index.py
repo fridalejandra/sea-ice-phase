@@ -1,278 +1,206 @@
 """
 fig_loo_index.py
 ================
-Leave-one-index-out figure — two panels per sector/variable combination,
-styled after Fig 4 / Fig 6 from the reference paper.
+Leave-one-index-out residual timeseries figures.
 
-Layout:
-    Rows = sector × variable combinations (all sectors, phase + amplitude)
-    Each row has two subplots:
-        (left)  Skill metrics — RMSE and R² bars for each scenario
-        (right) Residual timeseries — absolute residuals 1979–2023,
-                one line per scenario
+For each variable (amplitude / phase), produces a figure with one panel
+per sector (5 panels total), showing absolute residuals 1979–2023 for
+each single-predictor scenario plus ALL as reference.
 
 Scenarios shown:
-    ALL, noSAM, noZW3, noASL, noNiño3.4
-    (single-predictor models are in the CSV but not plotted here —
-     they make the timeseries panel too busy; use them for supplementary)
+    ALL           — all four indices as predictors (reference, black)
+    SAM_only      — SAM alone
+    ZW3_only      — ZW3 alone
+    ASL_only      — ASL alone
+    Niño3.4_only  — Niño3.4 alone
+
+Two output figures:
+    fig_loo_amplitude.pdf/.png
+    fig_loo_phase.pdf/.png
 
 Input:
-    processed/loo_index_skill.csv
-    processed/loo_index_residuals.csv
-
-Output:
-    figures/fig_loo_index.pdf  +  .png  (300 dpi)
+    loo_index_residuals.csv   (from compute_loo_index.py)
 
 Usage:
     python fig_loo_index.py
-    python fig_loo_index.py --skill path/to/skill.csv --resid path/to/resid.csv --outdir figures/
+    python fig_loo_index.py --resid /full/path/to/loo_index_residuals.csv --outdir figures/
 """
 
 import argparse
 import pathlib
-import warnings
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-import numpy as np
 import pandas as pd
 
-warnings.filterwarnings("ignore")
-
 # ── Defaults ──────────────────────────────────────────────────────────────────
-DEFAULT_SKILL = pathlib.Path("processed/loo_index_skill.csv")
 DEFAULT_RESID = pathlib.Path("processed/loo_index_residuals.csv")
 DEFAULT_OUT   = pathlib.Path("figures")
 
 # ── Display order ─────────────────────────────────────────────────────────────
-SECTOR_ORDER   = ["EA", "Ross", "ABS", "Weddell", "King Haakon"]
-VARIABLE_ORDER = ["amplitude", "phase"]
-
-SECTOR_LABELS  = {
-    "EA"        : "East Antarctica",
-    "Ross"      : "Ross",
-    "ABS"       : "ABS",
-    "Weddell"   : "Weddell",
+SECTOR_ORDER = ["EA", "Ross", "ABS", "Weddell", "King Haakon"]
+SECTOR_LABELS = {
+    "EA"         : "East Antarctica",
+    "Ross"       : "Ross",
+    "ABS"        : "ABS",
+    "Weddell"    : "Weddell",
     "King Haakon": "King Haakon",
 }
-VAR_LABELS = {"amplitude": "Amplitude anomaly (σ)",
-              "phase"    : "Phase anomaly (days)"}
-
-# Scenarios to show in the figure (LOO set — not single-predictor)
-LOO_SCENARIOS = ["ALL", "noSAM", "noZW3", "noASL", "noNiño3.4"]
-# Fallback if Niño3.4 stored differently
-NINO_ALIASES  = ["noNiño3.4", "noNino34", "noNiño34"]
-
-SCENARIO_COLORS = {
-    "ALL"       : "#222222",
-    "noSAM"     : "#e6194b",   # red
-    "noZW3"     : "#f58231",   # orange
-    "noASL"     : "#4363d8",   # blue
-    "noNiño3.4" : "#3cb44b",   # green
-    "noNino34"  : "#3cb44b",
-    "noNiño34"  : "#3cb44b",
+VAR_YLABELS = {
+    "amplitude": "|residual| (σ)",
+    "phase"    : "|residual| (days)",
 }
-SCENARIO_DISPLAY = {
-    "ALL"       : "ALL",
-    "noSAM"     : "no SAM",
-    "noZW3"     : "no ZW3",
-    "noASL"     : "no ASL",
-    "noNiño3.4" : "no Niño3.4",
-    "noNino34"  : "no Niño3.4",
-    "noNiño34"  : "no Niño3.4",
+VAR_TITLES = {
+    "amplitude": "Leave-one-index-out — Amplitude anomaly",
+    "phase"    : "Leave-one-index-out — Phase anomaly",
 }
 
-FIG_WIDTH   = 15.0
-ROW_HEIGHT  = 2.6   # inches per sector×variable row
-HSPACE      = 0.55
-WSPACE      = 0.30
-LEFT_FRAC   = 0.06
-RIGHT_FRAC  = 0.97
+# Single-predictor scenarios + ALL reference (aliases handled below)
+SCENARIO_PREFS = ["ALL", "SAM_only", "ZW3_only", "ASL_only", "Niño3.4_only", "Nino34_only"]
+
+SCENARIO_STYLE = {
+    "ALL"          : dict(color="#222222", lw=1.8, alpha=1.0,  zorder=4, ls="-"),
+    "SAM_only"     : dict(color="#e6194b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "ZW3_only"     : dict(color="#f58231", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "ASL_only"     : dict(color="#4363d8", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "Niño3.4_only" : dict(color="#3cb44b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "Nino34_only"  : dict(color="#3cb44b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+}
+SCENARIO_LABELS = {
+    "ALL"          : "ALL",
+    "SAM_only"     : "SAM",
+    "ZW3_only"     : "ZW3",
+    "ASL_only"     : "ASL",
+    "Niño3.4_only" : "Niño3.4",
+    "Nino34_only"  : "Niño3.4",
+}
+
+FIG_WIDTH  = 11.0
+ROW_HEIGHT = 2.2
+LEFT_FRAC  = 0.08
+RIGHT_FRAC = 0.97
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def resolve_scenarios(df_scenarios):
-    """Return the LOO scenario names actually present in the data."""
-    present = set(df_scenarios)
-    out = ["ALL"]
-    for s in ["noSAM", "noZW3", "noASL"]:
+def resolve_scenarios(present):
+    """Return scenario names to plot, deduplicated by display label."""
+    seen, out = set(), []
+    for s in SCENARIO_PREFS:
         if s in present:
-            out.append(s)
-    # Niño3.4 may be stored under different spellings
-    for alias in NINO_ALIASES:
-        if alias in present:
-            out.append(alias)
-            break
+            lbl = SCENARIO_LABELS.get(s, s)
+            if lbl not in seen:
+                out.append(s)
+                seen.add(lbl)
     return out
 
 
-def color_for(scenario):
-    return SCENARIO_COLORS.get(scenario, "#888888")
+# ── Figure builder ────────────────────────────────────────────────────────────
+def make_figure(resid_df, variable, scenarios, outdir):
+    sectors = [s for s in SECTOR_ORDER
+               if not resid_df[(resid_df["sector"] == s) &
+                               (resid_df["variable"] == variable)].empty]
+    if not sectors:
+        print(f"  No data for variable={variable}, skipping.")
+        return
 
+    n     = len(sectors)
+    fig_h = n * ROW_HEIGHT + 1.0
 
-def label_for(scenario):
-    return SCENARIO_DISPLAY.get(scenario, scenario)
-
-
-# ── Panel drawing ─────────────────────────────────────────────────────────────
-def draw_skill_panel(ax, skill_sub, scenarios, row_label):
-    """
-    Grouped bar chart: RMSE (left y-axis, black) and R² (right y-axis, red).
-    One group per scenario.
-    """
-    n = len(scenarios)
-    x = np.arange(n)
-    w = 0.35
-
-    rmse_vals = [skill_sub.loc[skill_sub["scenario"] == s, "rmse"].values
-                 for s in scenarios]
-    r2_vals   = [skill_sub.loc[skill_sub["scenario"] == s, "r2"].values
-                 for s in scenarios]
-
-    rmse_vals = [v[0] if len(v) else np.nan for v in rmse_vals]
-    r2_vals   = [v[0] if len(v) else np.nan for v in r2_vals]
-
-    # RMSE bars — left axis (note: inverted so higher skill = top)
-    ax.bar(x - w / 2, rmse_vals, width=w,
-           color=[color_for(s) for s in scenarios],
-           alpha=0.85, label="RMSE", zorder=3)
-
-    ax.set_ylabel("RMSE", fontsize=7.5, color="black")
-    ax.tick_params(axis="y", labelsize=7, colors="black")
-    ax.invert_yaxis()   # higher skill toward top, matching reference fig
-
-    # R² bars — right axis
-    ax2 = ax.twinx()
-    ax2.bar(x + w / 2, r2_vals, width=w,
-            color=[color_for(s) for s in scenarios],
-            alpha=0.45, hatch="///", label="R²", zorder=3)
-    ax2.set_ylabel("R²", fontsize=7.5, color="#cc0000")
-    ax2.tick_params(axis="y", labelsize=7, colors="#cc0000")
-    ax2.set_ylim(0, 1)
-
-    ax.set_xticks(x)
-    ax.set_xticklabels([label_for(s) for s in scenarios],
-                       fontsize=7, rotation=25, ha="right")
-    ax.tick_params(axis="x", length=0)
-    ax.set_xlim(-0.6, n - 0.4)
-    ax.set_title(f"{row_label}\nskill metrics", fontsize=8,
-                 fontweight="bold", pad=3)
-    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.5, zorder=0)
-    ax.set_axisbelow(True)
-
-
-def draw_resid_panel(ax, resid_sub, scenarios, row_label):
-    """
-    Timeseries of absolute residuals, one line per scenario.
-    """
-    for scenario in scenarios:
-        sub = resid_sub[resid_sub["scenario"] == scenario].sort_values("year")
-        if sub.empty:
-            continue
-        ax.plot(sub["year"], sub["abs_resid"],
-                color=color_for(scenario),
-                linewidth=1.4 if scenario == "ALL" else 0.9,
-                alpha=1.0    if scenario == "ALL" else 0.75,
-                label=label_for(scenario),
-                zorder=3     if scenario == "ALL" else 2)
-
-    ax.set_ylabel("|residual|", fontsize=7.5)
-    ax.tick_params(axis="both", labelsize=7)
-    ax.set_xlim(1979, 2023)
-    ax.xaxis.set_major_locator(mticker.MultipleLocator(10))
-    ax.xaxis.set_minor_locator(mticker.MultipleLocator(5))
-    ax.grid(linestyle="--", linewidth=0.4, alpha=0.4, zorder=0)
-    ax.set_axisbelow(True)
-    ax.set_title(f"{row_label}\nresiduals 1979–2023",
-                 fontsize=8, fontweight="bold", pad=3)
-
-
-# ── Figure assembly ───────────────────────────────────────────────────────────
-def make_figure(skill_path, resid_path, outdir):
-    skill_df = pd.read_csv(skill_path)
-    resid_df = pd.read_csv(resid_path)
-
-    # Normalise sector/variable names
-    for df in (skill_df, resid_df):
-        df["sector"]   = df["sector"].str.strip()
-        df["variable"] = df["variable"].str.strip().str.lower()
-
-    # Build ordered row list
-    rows = [(sec, var)
-            for var in VARIABLE_ORDER
-            for sec in SECTOR_ORDER
-            if not skill_df[(skill_df["sector"] == sec) &
-                            (skill_df["variable"] == var)].empty]
-
-    if not rows:
-        raise ValueError("No matching sector/variable combinations found in skill CSV.")
-
-    n_rows    = len(rows)
-    scenarios = resolve_scenarios(skill_df["scenario"].unique())
-
-    fig_height = n_rows * ROW_HEIGHT + 1.2
-    fig, axes  = plt.subplots(
-        n_rows, 2,
-        figsize=(FIG_WIDTH, fig_height),
-        gridspec_kw={"wspace": WSPACE, "hspace": HSPACE,
-                     "left": LEFT_FRAC, "right": RIGHT_FRAC}
+    fig, axes = plt.subplots(
+        n, 1,
+        figsize=(FIG_WIDTH, fig_h),
+        gridspec_kw={
+            "hspace" : 0.55,
+            "left"   : LEFT_FRAC,
+            "right"  : RIGHT_FRAC,
+            "top"    : 1 - 0.4 / fig_h,
+            "bottom" : 0.7 / fig_h,
+        }
     )
-    if n_rows == 1:
-        axes = axes[np.newaxis, :]
+    if n == 1:
+        axes = [axes]
 
-    for row_i, (sec, var) in enumerate(rows):
-        row_label = f"{SECTOR_LABELS.get(sec, sec)} — {VAR_LABELS.get(var, var)}"
+    letters = "abcdefghijklmnopqrstuvwxyz"
 
-        skill_sub = skill_df[(skill_df["sector"]   == sec) &
-                             (skill_df["variable"] == var)]
-        resid_sub = resid_df[(resid_df["sector"]   == sec) &
-                             (resid_df["variable"] == var)]
+    for i, sec in enumerate(sectors):
+        ax  = axes[i]
+        sub = resid_df[(resid_df["sector"]   == sec) &
+                       (resid_df["variable"] == variable)]
 
-        draw_skill_panel(axes[row_i, 0], skill_sub, scenarios, row_label)
-        draw_resid_panel(axes[row_i, 1], resid_sub, scenarios, row_label)
+        for scenario in scenarios:
+            s_sub = sub[sub["scenario"] == scenario].sort_values("year")
+            if s_sub.empty:
+                continue
+            style = SCENARIO_STYLE.get(
+                scenario, dict(color="#aaaaaa", lw=0.9, alpha=0.7, zorder=2, ls="-")
+            )
+            ax.plot(s_sub["year"], s_sub["abs_resid"],
+                    label=SCENARIO_LABELS.get(scenario, scenario),
+                    **style)
 
-    # ── Shared legend ─────────────────────────────────────────────────────────
-    handles = [
-        mpl.lines.Line2D([0], [0], color=color_for(s), linewidth=2,
-                         label=label_for(s))
-        for s in scenarios
-    ]
-    fig.legend(handles=handles, loc="lower center",
-               ncol=len(scenarios), fontsize=8,
-               frameon=True, bbox_to_anchor=(0.5, 0.005))
+        ax.set_xlim(1979, 2023)
+        ax.xaxis.set_major_locator(mticker.MultipleLocator(10))
+        ax.xaxis.set_minor_locator(mticker.MultipleLocator(5))
+        ax.tick_params(axis="both", labelsize=8)
+        ax.set_ylabel(VAR_YLABELS.get(variable, "|residual|"), fontsize=8)
+        ax.grid(linestyle="--", linewidth=0.4, alpha=0.4, zorder=0)
+        ax.set_axisbelow(True)
 
-    fig.suptitle(
-        "Leave-one-index-out regression skill — phase and amplitude anomalies",
-        fontsize=11, fontweight="bold", y=1.002
-    )
+        ax.text(-0.005, 1.03, f"({letters[i]})",
+                transform=ax.transAxes,
+                fontsize=9, fontweight="bold", va="bottom", ha="right")
+        ax.set_title(SECTOR_LABELS.get(sec, sec),
+                     fontsize=9, fontweight="bold", pad=3, loc="left")
 
-    # ── Panel labels (a), (b), (c)… ──────────────────────────────────────────
-    panel_letters = "abcdefghijklmnopqrstuvwxyz"
-    for i, axrow in enumerate(axes):
-        for j, ax in enumerate(axrow):
-            label = f"({panel_letters[i * 2 + j]})"
-            ax.text(-0.01, 1.05, label, transform=ax.transAxes,
-                    fontsize=9, fontweight="bold", va="bottom", ha="right")
+        if i < n - 1:
+            ax.set_xticklabels([])
+        else:
+            ax.set_xlabel("Year", fontsize=8)
 
-    # ── Save ──────────────────────────────────────────────────────────────────
-    outdir.mkdir(parents=True, exist_ok=True)
-    stem = "fig_loo_index"
+    # Shared legend at bottom
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels,
+               loc="lower center", ncol=len(scenarios),
+               fontsize=8.5, frameon=True,
+               bbox_to_anchor=(0.5, 0.01))
+
+    fig.suptitle(VAR_TITLES[variable], fontsize=11,
+                 fontweight="bold", y=1.002)
+
+    stem = f"fig_loo_{variable}"
     for ext in ("pdf", "png"):
         fpath = outdir / f"{stem}.{ext}"
         fig.savefig(fpath, dpi=300, bbox_inches="tight")
-        print(f"Saved → {fpath}")
+        print(f"  Saved → {fpath}")
     plt.close(fig)
-    print("Done.")
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+def main(resid_path, outdir):
+    print("Loading residuals...")
+    resid_df = pd.read_csv(resid_path)
+    resid_df["sector"]   = resid_df["sector"].str.strip()
+    resid_df["variable"] = resid_df["variable"].str.strip().str.lower()
+    resid_df["scenario"] = resid_df["scenario"].str.strip()
+
+    scenarios = resolve_scenarios(resid_df["scenario"].unique())
+    print(f"  Scenarios: {scenarios}")
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    for variable in ["amplitude", "phase"]:
+        print(f"\nPlotting {variable}...")
+        make_figure(resid_df, variable, scenarios, outdir)
+
+    print("\nDone.")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Leave-one-index-out skill and residual figure"
+        description="LOO index residual timeseries figures (amplitude + phase)"
     )
-    parser.add_argument("--skill",  type=pathlib.Path, default=DEFAULT_SKILL)
     parser.add_argument("--resid",  type=pathlib.Path, default=DEFAULT_RESID)
     parser.add_argument("--outdir", type=pathlib.Path, default=DEFAULT_OUT)
     args = parser.parse_args()
-    make_figure(args.skill, args.resid, args.outdir)
+    main(args.resid, args.outdir)
