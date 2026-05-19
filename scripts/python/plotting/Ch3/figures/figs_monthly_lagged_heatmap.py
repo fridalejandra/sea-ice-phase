@@ -1,5 +1,5 @@
 """
-figS_monthly_lagged_heatmap.py
+figs_monthly_lagged_heatmap.py
 ==============================
 Monthly lagged correlation heatmaps (phase and amplitude) with block bootstrap
 CI width panels. Style matches Fig 10 (existing seasonal correlation heatmap).
@@ -54,12 +54,13 @@ from matplotlib.colors import TwoSlopeNorm, Normalize
 DEFAULT_INPUT  = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/monthly_cross_correlations.csv")
 DEFAULT_OUTDIR = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures")
 
-INDEX_ORDER   = ["SAM", "ZW3", "ASL", "Nino34"]
-SECTOR_ORDER  = ["EA", "Ross", "ABS", "Weddell", "KH"]
+INDEX_ORDER   = ["SAM", "ZW3R", "ASL", "Nino34"]
+SECTOR_ORDER  = ["East Antarctica", "Ross", "ABS", "Weddell", "King Haakon"]
 
-INDEX_LABELS  = {"SAM": "SAM", "ZW3": "ZW3", "ASL": "ASL", "Nino34": "Niño3.4"}
-SECTOR_LABELS = {"EA": "East Antarctica", "Ross": "Ross",
-                 "ABS": "ABS", "Weddell": "Weddell", "KH": "King Haakon"}
+INDEX_LABELS  = {"SAM": "SAM", "ZW3R": "ZW3", "ASL": "ASL", "Nino34": "Niño3.4"}
+SECTOR_LABELS = {"East Antarctica": "East Antarctica", "Ross": "Ross",
+                 "ABS": "ABS", "Weddell": "Weddell", "King Haakon": "King Haakon"}
+                 "ABS": "ABS", "Weddell": "Weddell", "King Haakon": "King Haakon"}
 
 MONTH_LABELS  = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
