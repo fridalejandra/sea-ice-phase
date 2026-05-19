@@ -101,7 +101,8 @@ def make_figure(df, variable, outdir):
     fig, axes = plt.subplots(
         nrows, ncols,
         figsize=(FIG_WIDTH, FIG_HEIGHT),
-        gridspec_kw={"hspace": 0.45, "wspace": 0.32,
+        sharey=True,
+        gridspec_kw={"hspace": 0.45, "wspace": 0.18,
                      "left": 0.07, "right": 0.97,
                      "top": 0.88, "bottom": 0.10}
     )
@@ -163,10 +164,12 @@ def make_figure(df, variable, outdir):
 
         # Axes formatting
         ax.set_xlim(0.5, 12.5)
+        ax.set_ylim(-0.6, 0.6)
         ax.set_xticks(MONTHS)
         ax.set_xticklabels(MONTH_LABELS, fontsize=8)
         ax.tick_params(axis="y", labelsize=8)
-        ax.set_ylabel("Spearman  r", fontsize=8)
+        if k % ncols == 0:
+            ax.set_ylabel("Spearman  r", fontsize=8)
         ax.set_title(idx_lbl, fontsize=10, fontweight="bold", pad=4)
         ax.set_axisbelow(True)
 
