@@ -60,7 +60,6 @@ SECTOR_ORDER  = ["East Antarctica", "Ross", "ABS", "Weddell", "King Haakon"]
 INDEX_LABELS  = {"SAM": "SAM", "ZW3R": "ZW3", "ASL": "ASL", "Nino34": "Niño3.4"}
 SECTOR_LABELS = {"East Antarctica": "East Antarctica", "Ross": "Ross",
                  "ABS": "ABS", "Weddell": "Weddell", "King Haakon": "King Haakon"}
-                 "ABS": "ABS", "Weddell": "Weddell", "King Haakon": "King Haakon"}
 
 MONTH_LABELS  = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
