@@ -115,8 +115,8 @@ def correlation_matrix(mon_df):
             if len(paired) < 10:
                 continue
             r, p = spearmanr(paired[m1], paired[m2])
-            r_mat[i, j] = r
-            p_mat[i, j] = p
+            r_mat[i, j] = float(r)
+            p_mat[i, j] = float(p)
     return r_mat, p_mat
 
 
