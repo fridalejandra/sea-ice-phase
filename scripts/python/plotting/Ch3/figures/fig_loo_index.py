@@ -27,6 +27,7 @@ Usage:
 """
 
 import argparse
+import os
 import pathlib
 
 import matplotlib.pyplot as plt
@@ -51,28 +52,28 @@ VAR_YLABELS = {
     "phase"    : "|residual| (days)",
 }
 VAR_TITLES = {
-    "amplitude": "Leave-one-index-out — Amplitude anomaly",
-    "phase"    : "Leave-one-index-out — Phase anomaly",
+    "amplitude": "Leave-one-index-out — Amplitude anomaly\n(coloured line above ALL = that index contributes predictive skill)",
+    "phase"    : "Leave-one-index-out — Phase anomaly\n(coloured line above ALL = that index contributes predictive skill)",
 }
 
 # Single-predictor scenarios + ALL reference (aliases handled below)
-SCENARIO_PREFS = ["ALL", "SAM_only", "ZW3_only", "ASL_only", "Niño3.4_only", "Nino34_only"]
+SCENARIO_PREFS = ["ALL", "noSAM", "noZW3", "noASL", "noNiño3.4", "noNino34"]
 
 SCENARIO_STYLE = {
-    "ALL"          : dict(color="#222222", lw=1.8, alpha=1.0,  zorder=4, ls="-"),
-    "SAM_only"     : dict(color="#e6194b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
-    "ZW3_only"     : dict(color="#f58231", lw=1.1, alpha=0.85, zorder=3, ls="-"),
-    "ASL_only"     : dict(color="#4363d8", lw=1.1, alpha=0.85, zorder=3, ls="-"),
-    "Niño3.4_only" : dict(color="#3cb44b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
-    "Nino34_only"  : dict(color="#3cb44b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "ALL"       : dict(color="#222222", lw=1.8, alpha=1.0,  zorder=4, ls="-"),
+    "noSAM"     : dict(color="#e6194b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "noZW3"     : dict(color="#f58231", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "noASL"     : dict(color="#4363d8", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "noNiño3.4" : dict(color="#3cb44b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
+    "noNino34"  : dict(color="#3cb44b", lw=1.1, alpha=0.85, zorder=3, ls="-"),
 }
 SCENARIO_LABELS = {
-    "ALL"          : "ALL",
-    "SAM_only"     : "SAM",
-    "ZW3_only"     : "ZW3",
-    "ASL_only"     : "ASL",
-    "Niño3.4_only" : "Niño3.4",
-    "Nino34_only"  : "Niño3.4",
+    "ALL"       : "ALL",
+    "noSAM"     : "no SAM",
+    "noZW3"     : "no ZW3",
+    "noASL"     : "no ASL",
+    "noNiño3.4" : "no Niño3.4",
+    "noNino34"  : "no Niño3.4",
 }
 
 FIG_WIDTH  = 11.0
@@ -167,12 +168,18 @@ def make_figure(resid_df, variable, scenarios, outdir):
     fig.suptitle(VAR_TITLES[variable], fontsize=11,
                  fontweight="bold", y=1.002)
 
-    stem = f"fig_loo_{variable}"
-    for ext in ("pdf", "png"):
-        fpath = outdir / f"{stem}.{ext}"
-        fig.savefig(fpath, dpi=300, bbox_inches="tight")
-        print(f"  Saved → {fpath}")
+    stem  = f"fig_loo_{variable}"
+    fpath = outdir / f"{stem}.png"
+    fig.savefig(fpath, dpi=300, bbox_inches="tight")
+    print(f"  Saved → {fpath}")
     plt.close(fig)
+
+    gdrive_dest = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+    ret = os.system(f'rclone copy "{fpath}" "{gdrive_dest}"')
+    if ret == 0:
+        print(f"  Synced → {gdrive_dest}/{stem}.png")
+    else:
+        print(f"  WARNING: rclone failed (exit code {ret})")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

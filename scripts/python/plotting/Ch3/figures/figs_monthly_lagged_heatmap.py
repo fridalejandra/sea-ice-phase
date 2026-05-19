@@ -41,6 +41,7 @@ Usage
 """
 
 import argparse
+import os
 import pathlib
 
 import matplotlib as mpl
@@ -327,12 +328,18 @@ def make_figure(input_path, outdir):
 
     # ── Save ──────────────────────────────────────────────────────────────
     outdir.mkdir(parents=True, exist_ok=True)
-    stem = "figS_monthly_lagged_heatmap"
-    for ext in ("pdf", "png"):
-        fpath = outdir / f"{stem}.{ext}"
-        fig.savefig(fpath, dpi=300, bbox_inches="tight")
-        print(f"Saved → {fpath}")
+    stem  = "figS_monthly_lagged_heatmap"
+    fpath = outdir / f"{stem}.png"
+    fig.savefig(fpath, dpi=300, bbox_inches="tight")
+    print(f"Saved → {fpath}")
     plt.close(fig)
+
+    gdrive_dest = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+    ret = os.system(f'rclone copy "{fpath}" "{gdrive_dest}"')
+    if ret == 0:
+        print(f"Synced → {gdrive_dest}/{stem}.png")
+    else:
+        print(f"WARNING: rclone failed (exit code {ret})")
     print("Done.")
 
 
