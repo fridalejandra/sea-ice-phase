@@ -125,7 +125,7 @@ def draw_heatmap(ax, r_mat, sig_mat, title, show_xticklabels=True):
     else:
         ax.set_xticks([])
 
-    ax.set_title(title, fontsize=15, fontweight="bold", pad=8)
+    ax.set_title(title, fontsize=18, fontweight="bold", pad=8)
 
     for x in range(n_cols + 1):
         ax.axvline(x, color="white", lw=0.5, zorder=1)
