@@ -101,7 +101,7 @@ def draw_case_panel(ax, z_vals, raw_vals, title, ylabel, raw_unit, ylim):
             color="#2C2C2A", path_effects=stroke()
         )
 
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=10)
+    ax.set_title(title, fontsize=13, fontweight="bold", pad=10)
     ax.set_ylim(-ylim, ylim)
     ax.tick_params(axis="x", rotation=20, labelsize=10)
     for lbl in ax.get_xticklabels():
@@ -217,18 +217,12 @@ for ax, letter in zip(axes.flatten(), ["(a)", "(b)", "(c)", "(d)"]):
     ax.text(0.02, 0.97, letter, transform=ax.transAxes,
             fontsize=11, fontweight="bold", va="top", color="#2C2C2A")
 
-# Year labels above each column — cleaner than repeating the year in every title
-axes[0, 0].annotate("2016", xy=(0.5, 1.08), xycoords="axes fraction",
-                    ha="center", fontsize=14, fontweight="bold",
-                    color="#D85A30")
-axes[0, 1].annotate("2023", xy=(0.5, 1.08), xycoords="axes fraction",
-                    ha="center", fontsize=14, fontweight="bold",
-                    color="#BA7517")
 
 fig.suptitle(
-    "2016 vs 2023 — Phase and Amplitude Anomalies by Sector",
-    fontsize=13, fontweight="bold", y=1.01
+    "Sectoral phase and amplitude anomalies during 2016 and 2023",
+    fontsize=15, fontweight="bold", y=1.01
 )
+
 fig.tight_layout()
 save_fig(fig, "fig_case_study_2016_2023_c_combined.png", OUTPUT_DIR)
 
