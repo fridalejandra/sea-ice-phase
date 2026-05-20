@@ -162,7 +162,7 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     fig, (ax_phase, ax_amp) = plt.subplots(
         1, 2,
         figsize=(fig_w * 1.8, fig_h),
-        gridspec_kw={"wspace": 0.25}
+        gridspec_kw={"wspace": 0.05}
     )
 
     norm, cmap = draw_heatmap(ax_phase, r_phase, sig_phase,
@@ -172,8 +172,8 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     draw_heatmap(ax_amp, r_amp, sig_amp,
                  "(b)  Amplitude anomaly",
                  show_xticklabels=True)
-    ax_amp.set_yticks([])
-
+    ax_amp.set_yticks(np.arange(len(SECTOR_ORDER)) + 0.5)
+    ax_amp.set_yticklabels(SECTOR_ORDER, fontsize=10)
     # Shared colorbar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
