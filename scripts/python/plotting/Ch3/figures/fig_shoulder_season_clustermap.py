@@ -93,36 +93,46 @@ def draw_clustermap(var_type, title, outfile):
 
     r_full, r_masked, sig_mat = build_masked_matrix(var_type)
 
+    # Fill NaN with 0 for clustering purposes only
+    r_for_clustering = r_full.fillna(0)
+
     # Row colors — sector colors
     row_colors = pd.Series(
         [SECTOR_COLORS[s] for s in r_full.index],
         index=r_full.index, name="Sector"
     )
 
-    # Use full r matrix for clustering (so structure reflects all correlations)
-    # but display the masked matrix (non-sig = white)
     norm = mcolors.TwoSlopeNorm(vmin=-VLIM, vcenter=0, vmax=VLIM)
     cmap_with_nan = plt.get_cmap(CMAP).copy()
-    cmap_with_nan.set_bad(color="white")  # NaN cells → white
+    cmap_with_nan.set_bad(color="#F5F5F5")  # NaN cells → light grey
+
+    # First compute linkage from full matrix
+    from scipy.cluster.hierarchy import linkage
+    from scipy.spatial.distance import pdist
+
+    row_dist = pdist(r_for_clustering.values, metric="euclidean")
+    col_dist = pdist(r_for_clustering.values.T, metric="euclidean")
+    row_link = linkage(row_dist, method="average")
+    col_link = linkage(col_dist, method="average")
 
     g = sns.clustermap(
         r_masked,
-        row_linkage   = None,
-        col_linkage   = None,
-        row_cluster   = True,
-        col_cluster   = True,
-        cmap          = cmap_with_nan,
-        norm          = norm,
-        row_colors    = row_colors,
-        figsize       = (10, 5),
-        linewidths    = 0.5,
-        linecolor     = "white",
+        row_linkage      = row_link,
+        col_linkage      = col_link,
+        row_cluster      = True,
+        col_cluster      = True,
+        cmap             = cmap_with_nan,
+        norm             = norm,
+        row_colors       = row_colors,
+        figsize          = (10, 5),
+        linewidths       = 0.5,
+        linecolor        = "white",
         dendrogram_ratio = (0.15, 0.15),
-        cbar_pos      = (0.02, 0.85, 0.03, 0.12),
-        annot         = r_masked.round(2),
-        annot_kws     = {"size": 9, "weight": "bold"},
-        fmt           = ".2f",
-        mask          = r_masked.isna(),
+        cbar_pos         = (0.02, 0.85, 0.03, 0.12),
+        annot            = r_full.round(2),
+        annot_kws        = {"size": 9},
+        fmt              = ".2f",
+        mask             = r_masked.isna(),
     )
 
     # Style
