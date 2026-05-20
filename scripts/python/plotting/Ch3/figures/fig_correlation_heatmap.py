@@ -109,23 +109,23 @@ def draw_heatmap(ax, r_mat, sig_mat, title, show_xticklabels=True):
                 sig_str    = sig if isinstance(sig, str) else ""
                 ax.text(j + 0.5, i + 0.5, f"{r:+.2f}{sig_str}",
                         ha="center", va="center",
-                        fontsize=9, color=txt_color,
+                        fontsize=12, color=txt_color,
                         fontweight="bold" if "*" in sig_str else "normal")
 
     ax.set_xlim(0, n_cols)
     ax.set_ylim(0, n_rows)
     ax.set_yticks(np.arange(n_rows) + 0.5)
-    ax.set_yticklabels(r_mat.index, fontsize=10)
+    ax.set_yticklabels(r_mat.index, fontsize=13)
     ax.invert_yaxis()
 
     if show_xticklabels:
         ax.set_xticks(np.arange(n_cols) + 0.5)
-        ax.set_xticklabels(r_mat.columns, fontsize=9,
+        ax.set_xticklabels(r_mat.columns, fontsize=12,
                            ha="center", va="top")
     else:
         ax.set_xticks([])
 
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=8)
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
 
     for x in range(n_cols + 1):
         ax.axvline(x, color="white", lw=0.5, zorder=1)
@@ -162,7 +162,7 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     fig, (ax_phase, ax_amp) = plt.subplots(
         1, 2,
         figsize=(fig_w * 1.8, fig_h),
-        gridspec_kw={"wspace": 0.05}
+        gridspec_kw={"wspace": 0.3}
     )
 
     norm, cmap = draw_heatmap(ax_phase, r_phase, sig_phase,
@@ -172,8 +172,7 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     draw_heatmap(ax_amp, r_amp, sig_amp,
                  "(b)  Amplitude anomaly",
                  show_xticklabels=True)
-    ax_amp.set_yticks(np.arange(len(SECTOR_ORDER)) + 0.5)
-    ax_amp.set_yticklabels(SECTOR_ORDER, fontsize=10)
+    ax_amp.set_yticks([])
     # Shared colorbar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
