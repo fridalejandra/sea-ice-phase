@@ -146,13 +146,14 @@ def make_side_by_side_figure(
     Left panel  = raw anomaly      (a–f)
     Right panel = APAC fitted anom (g–l)
     """
-    fig = plt.figure(figsize=(13.5, 5.5))
+    fig = plt.figure(figsize=(13.5, 6))
 
     # Two groups of 2×3 axes side by side with a gap between them
     gs = GridSpec(2, 7, figure=fig,
-                  hspace=0.45, wspace=0.35,
+                  hspace=0.45, wspace=0.25,
                   left=0.06, right=0.98,
-                  top=0.88, bottom=0.12)
+                  top=0.88, bottom=0.12,
+                  width_ratios=[1, 1, 1, 0.15, 1, 1, 1])
 
     # Left panel axes (columns 0-2)
     axes_left = [fig.add_subplot(gs[r, c]) for r in range(2) for c in range(3)]
