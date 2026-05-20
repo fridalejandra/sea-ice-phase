@@ -60,6 +60,7 @@ def sort_key(label):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_significant_cols(var_types, threshold=INCLUDE_THRESHOLD):
     sub = df[df["var_type"].isin(var_types)].copy()
+    sub = sub[~sub["season"].isin(["ADV", "RET"])]  # exclude shoulder seasons
     sub["col_label"] = sub["index"] + "\n" + sub["season"]
     sig_cols = (sub.groupby("col_label")["pearson_p"]
                 .min()
