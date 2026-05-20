@@ -143,9 +143,8 @@ def draw_scatter_grid(sectors, figsize, outfile):
     fig.legend(handles=handles, loc="lower center", ncol=5,
                fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.04))
 
-    fig.tight_layout(rect=[0.06, 0.05, 1, 1])
+    fig.tight_layout(rect=[0.14, 0.05, 1, 1])
     save_fig(fig, outfile, OUTPUT_DIR)
-
 
 # --- Figure 1: all 5 sectors -----------------------------------------------
 print("\nFigure 1: all 5 sectors")
