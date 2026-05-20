@@ -124,7 +124,7 @@ def draw_scatter_grid(sectors, figsize, outfile):
 
             # Sector row label on left column
             if col == 0:
-                ax.text(-0.18, 0.5, SECTOR_LABELS[sector],
+                ax.text(-0.28, 0.5, SECTOR_LABELS[sector],
                         transform=ax.transAxes, fontsize=8,
                         fontweight="bold", color=color,
                         va="center", ha="right", rotation=90)
