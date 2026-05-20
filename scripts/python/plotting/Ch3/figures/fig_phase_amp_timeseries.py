@@ -156,7 +156,21 @@ plot_anomaly_timeseries(
     outfile = "fig_phase_amplitude_timeseries_3a_phase.png",
     is_days = True,
 )
+print("Panel 3a FITTED: phase anomaly timeseries (APAC fitted)")
+plot_anomaly_timeseries(
+    var     = "max_doy_anom",
+    ylabel  = "Phase anomaly — APAC fitted (days)\n\u2190 Ahead  |  Behind \u2192",
+    outfile = "fig_phase_amplitude_timeseries_3a_phase_fitted.png",
+    is_days = True,
+)
 
+print("Panel 3b FITTED: amplitude anomaly timeseries (APAC fitted)")
+plot_anomaly_timeseries(
+    var     = "amplitude_anom",
+    ylabel  = "Amplitude anomaly — APAC fitted (million km\u00b2)\n\u2190 Smaller  |  Larger \u2192",
+    outfile = "fig_phase_amplitude_timeseries_3b_amplitude_fitted.png",
+    is_days = False,
+)
 print("Panel 3b: amplitude anomaly timeseries")
 plot_anomaly_timeseries(
     var     = "amplitude_raw_anom_2015",
