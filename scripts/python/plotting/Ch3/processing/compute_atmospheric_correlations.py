@@ -47,8 +47,10 @@ SECTORS = {
 }
 
 APAC_VARS = {
-    "amplitude_anom": "amplitude",
-    "max_doy_anom"  : "phase",
+    "amplitude_anom"    : "amplitude_apac",
+    "max_doy_anom"      : "phase_apac",
+    "amplitude_raw_anom": "amplitude_raw",
+    "max_doy_raw_anom"  : "phase_raw",
 }
 
 month_map = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
