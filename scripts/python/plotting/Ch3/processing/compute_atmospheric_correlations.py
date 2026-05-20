@@ -13,7 +13,7 @@ Indices:
     ASL     — Amundsen Sea Low relative central pressure, monthly ERA5 v3
     Nino3.4 — CPC ERSSTv5 Nino 3.4 mean, monthly
 
-Seasons: DJF, MAM, JJA, SON, annual
+Seasons: DJF, MAM, JJA, SON, annual, ADV (Mar-Aug), RET (Oct-Jan)
 
 Outputs:
     correlations_output.csv     — one row per (sector, variable, index, season)
@@ -81,6 +81,7 @@ def compute_seasonal_means(df_monthly, value_col, year_col="year",
                    .mean(numeric_only=True).reset_index()
                    .rename(columns={value_col: "annual"}))
 
+    # Standard meteorological seasons
     season_map = {12:"DJF", 1:"DJF", 2:"DJF",
                   3:"MAM", 4:"MAM", 5:"MAM",
                   6:"JJA", 7:"JJA", 8:"JJA",
@@ -95,7 +96,28 @@ def compute_seasonal_means(df_monthly, value_col, year_col="year",
                 .reset_index()
                 .rename(columns={"season_year": year_col}))
 
-    return annual_mean.merge(seasonal, on=year_col, how="outer")
+    # Advance season: March-August (ice growth phase, ~7 months)
+    # Based on circumpolar minimum ~DOY50 (Feb) to maximum ~DOY260 (Sep)
+    # Goosse et al. 2023, Handcock & Raphael 2020
+    adv = (df[df[month_col].isin([3,4,5,6,7,8])]
+           .groupby(year_col)[value_col]
+           .mean(numeric_only=True).reset_index()
+           .rename(columns={value_col: "ADV"}))
+
+    # Retreat season: October-January (ice melt phase, ~4 months)
+    # January assigned to preceding year's retreat season
+    df_ret = df[df[month_col].isin([10,11,12,1])].copy()
+    df_ret["ret_year"] = df_ret[year_col]
+    df_ret.loc[df_ret[month_col] == 1, "ret_year"] = (
+        df_ret.loc[df_ret[month_col] == 1, year_col] - 1)
+    ret = (df_ret.groupby("ret_year")[value_col]
+           .mean(numeric_only=True).reset_index()
+           .rename(columns={"ret_year": year_col, value_col: "RET"}))
+
+    result = annual_mean.merge(seasonal, on=year_col, how="outer")
+    result = result.merge(adv, on=year_col, how="outer")
+    result = result.merge(ret, on=year_col, how="outer")
+    return result
 
 
 def detrend_series(years, values):
@@ -172,7 +194,8 @@ sam_long = sam_long.dropna(subset=["SAM"])
 sam_seas = compute_seasonal_means(sam_long, "SAM")
 sam_seas = sam_seas.rename(columns={
     "annual":"SAM_annual","DJF":"SAM_DJF",
-    "MAM":"SAM_MAM","JJA":"SAM_JJA","SON":"SAM_SON"})
+    "MAM":"SAM_MAM","JJA":"SAM_JJA","SON":"SAM_SON",
+    "ADV":"SAM_ADV","RET":"SAM_RET"})
 print(f"  SAM: {sam_seas['year'].min()}–{sam_seas['year'].max()}")
 
 print("Loading ZW3 Raphael monthly index...")
@@ -186,7 +209,8 @@ zw3_monthly_r[["year","month","ZW3R"]] = zw3_monthly_r[
 zw3 = compute_seasonal_means(zw3_monthly_r, "ZW3R")
 zw3 = zw3.rename(columns={
     "annual":"ZW3R_annual","DJF":"ZW3R_DJF",
-    "MAM":"ZW3R_MAM","JJA":"ZW3R_JJA","SON":"ZW3R_SON"})
+    "MAM":"ZW3R_MAM","JJA":"ZW3R_JJA","SON":"ZW3R_SON",
+    "ADV":"ZW3R_ADV","RET":"ZW3R_RET"})
 print(f"  ZW3R: {zw3['year'].min():.0f}–{zw3['year'].max():.0f}")
 
 # Goyal ZW3 monthly — supplementary, captures magnitude and phase separately
@@ -198,7 +222,8 @@ zw3_goyal = zw3_goyal[["year","month","ZW3G"]].dropna()
 zw3g_seas = compute_seasonal_means(zw3_goyal, "ZW3G")
 zw3g_seas = zw3g_seas.rename(columns={
     "annual":"ZW3G_annual","DJF":"ZW3G_DJF",
-    "MAM":"ZW3G_MAM","JJA":"ZW3G_JJA","SON":"ZW3G_SON"})
+    "MAM":"ZW3G_MAM","JJA":"ZW3G_JJA","SON":"ZW3G_SON",
+    "ADV":"ZW3G_ADV","RET":"ZW3G_RET"})
 print(f"  ZW3G: {zw3g_seas['year'].min():.0f}–{zw3g_seas['year'].max():.0f}")
 
 print("Loading ASL index...")
@@ -211,7 +236,8 @@ asl_raw = asl_raw.rename(columns={"RelCenPres":"ASL"})
 asl_seas = compute_seasonal_means(asl_raw, "ASL")
 asl_seas = asl_seas.rename(columns={
     "annual":"ASL_annual","DJF":"ASL_DJF",
-    "MAM":"ASL_MAM","JJA":"ASL_JJA","SON":"ASL_SON"})
+    "MAM":"ASL_MAM","JJA":"ASL_JJA","SON":"ASL_SON",
+    "ADV":"ASL_ADV","RET":"ASL_RET"})
 print(f"  ASL: {asl_seas['year'].min():.0f}–{asl_seas['year'].max():.0f}")
 
 print("Loading Niño3.4 index...")
@@ -233,7 +259,8 @@ nino_long = nino_long.dropna(subset=["Nino34"]).drop(columns="month_str")
 nino_seas = compute_seasonal_means(nino_long, "Nino34")
 nino_seas = nino_seas.rename(columns={
     "annual":"Nino34_annual","DJF":"Nino34_DJF",
-    "MAM":"Nino34_MAM","JJA":"Nino34_JJA","SON":"Nino34_SON"})
+    "MAM":"Nino34_MAM","JJA":"Nino34_JJA","SON":"Nino34_SON",
+    "ADV":"Nino34_ADV","RET":"Nino34_RET"})
 print(f"  Nino34: {nino_seas['year'].min():.0f}–{nino_seas['year'].max():.0f}")
 
 
