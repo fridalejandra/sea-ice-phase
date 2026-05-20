@@ -64,7 +64,7 @@ annual["amplitude_raw_anom_2015_z"] = (annual["amplitude_raw_anom_2015"]
                                        / annual["sector"].map(bl_amp_std))
 
 # Sector order and styling for all case study panels
-CASE_SECTORS = SECTORS_NO_CIRC
+CASE_SECTORS = SECTORS_NO_CIRC + ["SIE_circumpolar"]
 case_labels  = [SECTOR_LABELS[s] for s in CASE_SECTORS]
 case_colors  = [SECTOR_COLORS[s] for s in CASE_SECTORS]
 
@@ -95,7 +95,7 @@ def draw_case_panel(ax, z_vals, raw_vals, title, ylabel, raw_unit, ylim):
                 else bar.get_height() - ylim * 0.10)
         ax.text(
             bar.get_x() + bar.get_width() / 2, ypos,
-            f"{z:+.1f}σ\n({raw:+.0f}{raw_unit})",
+            f"{z:+.1f}σ\n({raw:+.2f}{raw_unit})",
             ha="center", va="bottom",
             fontsize=9, fontweight="bold",
             color="#2C2C2A", path_effects=stroke()
@@ -213,6 +213,10 @@ panel_data = [
 for ax, z_vals, raw_vals, title, ylabel, raw_unit, ylim in panel_data:
     draw_case_panel(ax, z_vals, raw_vals, title, ylabel, raw_unit, ylim)
 
+for ax, letter in zip(axes.flatten(), ["(a)", "(b)", "(c)", "(d)"]):
+    ax.text(0.02, 0.97, letter, transform=ax.transAxes,
+            fontsize=11, fontweight="bold", va="top", color="#2C2C2A")
+
 # Year labels above each column — cleaner than repeating the year in every title
 axes[0, 0].annotate("2016", xy=(0.5, 1.08), xycoords="axes fraction",
                     ha="center", fontsize=14, fontweight="bold",
@@ -222,8 +226,7 @@ axes[0, 1].annotate("2023", xy=(0.5, 1.08), xycoords="axes fraction",
                     color="#BA7517")
 
 fig.suptitle(
-    "2016 vs 2023 — Phase and Amplitude Anomalies by Sector\n"
-    "Z-scored relative to pre-2016 standard deviation",
+    "2016 vs 2023 — Phase and Amplitude Anomalies by Sector",
     fontsize=13, fontweight="bold", y=1.01
 )
 fig.tight_layout()
