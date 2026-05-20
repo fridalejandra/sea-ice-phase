@@ -162,7 +162,7 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     fig, (ax_phase, ax_amp) = plt.subplots(
         1, 2,
         figsize=(fig_w * 1.8, fig_h),
-        gridspec_kw={"wspace": 0.21}
+        gridspec_kw={"wspace": 0.25}
     )
 
     norm, cmap = draw_heatmap(ax_phase, r_phase, sig_phase,
@@ -180,10 +180,10 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     cbar_ax = fig.add_axes([0.25, -0.04, 0.50, 0.025])
     cbar    = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
     cbar.set_label("Pearson r  |  ** FDR p<0.05   * p<0.05",
-                   fontsize=11)
-    cbar.ax.tick_params(labelsize=10)
+                   fontsize=14)
+    cbar.ax.tick_params(labelsize=15)
 
-    fig.suptitle(suptitle, fontsize=14, fontweight="bold", y=1.02)
+    fig.suptitle(suptitle, fontsize=16, fontweight="bold", y=1.02)
     fig.tight_layout(rect=[0, 0.06, 1, 1])
 
     save_fig(fig, outfile, OUTPUT_DIR)
