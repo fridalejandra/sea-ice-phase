@@ -37,7 +37,7 @@ OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 GDRIVE     = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
 CORR_CSV   = os.path.join(DATA_DIR, "correlations_output.csv")
 
-INCLUDE_THRESHOLD = 0.10
+INCLUDE_THRESHOLD = 0.05
 CMAP  = "RdBu_r"
 VLIM  = 0.5
 
@@ -154,8 +154,8 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     n_rows = len(SECTOR_ORDER)
     n_cols = len(all_cols)
 
-    cell_w = 1.1
-    cell_h = 0.9
+    cell_w = 1.3
+    cell_h = 1.3
     fig_w  = max(10, n_cols * cell_w + 2.0)
     fig_h  = n_rows * cell_h + 3.5
 
