@@ -4,7 +4,7 @@ fig_prepost2016_variability.py
 Pre vs post-2016 variability of phase and amplitude anomalies.
 Grouped bar chart comparing std dev before and after 2016 for each sector.
 
-Fig 8 in Chapter 3.
+Fig 7 in Chapter 3.
 
 Two lettered panels:
   (a) Phase variability (days)
