@@ -162,7 +162,7 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     fig, (ax_phase, ax_amp) = plt.subplots(
         1, 2,
         figsize=(fig_w * 1.8, fig_h),
-        gridspec_kw={"wspace": 0.15}
+        gridspec_kw={"wspace": 0.21}
     )
 
     norm, cmap = draw_heatmap(ax_phase, r_phase, sig_phase,
