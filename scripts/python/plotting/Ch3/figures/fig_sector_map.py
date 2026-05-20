@@ -79,11 +79,11 @@ def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-40, n=100):
 fig = plt.figure(figsize=(8, 11))
 
 # Top panel — polar stereographic
-ax_polar = fig.add_axes([0.05, 0.42, 0.90, 0.55],
+ax_polar = fig.add_axes([0.05, 0.40, 0.90, 0.52],
                          projection=ccrs.SouthPolarStereo())
 
 # Bottom panel — rectangular Southern Ocean view
-ax_rect  = fig.add_axes([0.05, 0.04, 0.90, 0.35],
+ax_rect  = fig.add_axes([0.05, 0.04, 0.90, 0.34],
                          projection=ccrs.PlateCarree(central_longitude=0))
 
 # ── Top panel: polar view ─────────────────────────────────────────────────────
@@ -172,6 +172,19 @@ gl2.xlocator     = plt.FixedLocator(range(-180, 181, 30))
 gl2.ylocator     = plt.FixedLocator([-70, -60, -50])
 gl2.xlabel_style = {"size": 8}
 gl2.ylabel_style = {"size": 8}
+
+# Ocean basin labels
+ocean_labels = [
+    (-150, -45, "Pacific Ocean"),
+    (-30,  -45, "Atlantic Ocean"),
+    (70,   -45, "Indian Ocean"),
+]
+for lon, lat, label in ocean_labels:
+    ax_rect.text(lon, lat, label,
+                 transform=ccrs.PlateCarree(),
+                 ha="center", va="center",
+                 fontsize=9, fontstyle="italic",
+                 color="#1a5276", zorder=6)
 
 ax_rect.set_title("(b)  Southern Ocean view",
                    fontsize=11, fontweight="bold", pad=8)
