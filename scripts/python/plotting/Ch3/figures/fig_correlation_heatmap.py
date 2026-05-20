@@ -125,7 +125,7 @@ def draw_heatmap(ax, r_mat, sig_mat, title, show_xticklabels=True):
     else:
         ax.set_xticks([])
 
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
+    ax.set_title(title, fontsize=15, fontweight="bold", pad=8)
 
     for x in range(n_cols + 1):
         ax.axvline(x, color="white", lw=0.5, zorder=1)
@@ -162,7 +162,6 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
     fig, (ax_phase, ax_amp) = plt.subplots(
         1, 2,
         figsize=(fig_w * 1.8, fig_h),
-        gridspec_kw={"wspace": 0.3}
     )
 
     norm, cmap = draw_heatmap(ax_phase, r_phase, sig_phase,
@@ -182,9 +181,8 @@ def make_figure(phase_var, amp_var, outfile, suptitle):
                    fontsize=14)
     cbar.ax.tick_params(labelsize=15)
 
-    fig.suptitle(suptitle, fontsize=16, fontweight="bold", y=1.02)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
-
+  #  fig.suptitle(suptitle, fontsize=16, fontweight="bold", y=1.02)
+    fig.subplots_adjust(left=0.08, right=0.98, wspace=0.08, bottom=0.12, top=0.95)
     save_fig(fig, outfile, OUTPUT_DIR)
 
     ret = os.system(f'rclone copy "{os.path.join(OUTPUT_DIR, outfile)}" "{GDRIVE}"')
