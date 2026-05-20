@@ -160,22 +160,39 @@ def block_bootstrap_p(x, y, block_length=3, n_boot=2000, seed=42):
 
     boot_r = np.empty(n_boot)
     for b in range(n_boot):
-        # Resample only x (the index) using block bootstrap, keeping y fixed.
-        # This breaks the x-y relationship under the null hypothesis while
-        # preserving the autocorrelation structure of the index series.
         indices = []
         while len(indices) < n:
             start = rng.integers(0, n)
             block = list(range(start, min(start + block_length, n)))
             indices.extend(block)
         idx = np.array(indices[:n])
-        xb = x[idx]   # resampled index — autocorrelation preserved
-        boot_r[b], _ = pearsonr(xb, y)  # y (ice) kept in original order
+        xb = x[idx]
+        boot_r[b], _ = pearsonr(xb, y)
 
-    # Two-sided p-value: proportion of bootstrap r as extreme as observed
     p = float(np.mean(np.abs(boot_r) >= np.abs(r_obs)))
-    # Minimum p is 1/n_boot
     p = max(p, 1.0 / n_boot)
+    return p
+
+
+def permutation_p(x, y, n_perm=10000, seed=42):
+    """
+    Permutation test p-value for Pearson correlation.
+    Randomly shuffles x (breaking the x-y relationship) to build
+    the null distribution of r under all-zero correlations.
+    Unlike block bootstrap, this does not preserve autocorrelation —
+    it tests the strict null hypothesis of zero correlation.
+    Returns two-sided p-value.
+    """
+    rng   = np.random.default_rng(seed)
+    r_obs, _ = pearsonr(x, y)
+
+    perm_r = np.empty(n_perm)
+    for i in range(n_perm):
+        xp = rng.permutation(x)
+        perm_r[i], _ = pearsonr(xp, y)
+
+    p = float(np.mean(np.abs(perm_r) >= np.abs(r_obs)))
+    p = max(p, 1.0 / n_perm)
     return p
 
 
@@ -328,6 +345,7 @@ for sec_col, sec_label in SECTORS.items():
             r, p_neff, ne = pearson_with_neff(x, y)
             rho, p_spear  = spearmanr(x, y)
             p_boot        = block_bootstrap_p(x, y, block_length=3, n_boot=2000)
+            p_perm        = permutation_p(x, y, n_perm=10000)
 
             parts    = idx_col.rsplit("_", 1)
             idx_name = parts[0]
@@ -345,6 +363,7 @@ for sec_col, sec_label in SECTORS.items():
                 "pearson_r"   : round(r,      4),
                 "pearson_p"   : round(p_neff, 4),
                 "boot_p"      : round(p_boot, 4),
+                "perm_p"      : round(p_perm, 4),
                 "spearman_r"  : round(rho,    4),
                 "spearman_p"  : round(float(p_spear), 4),
             })
@@ -373,6 +392,11 @@ for (var_type, index), group in results_df.groupby(["var_type", "index"]):
     group["boot_p_fdr"]    = np.round(p_adj_b, 4)
     group["boot_sig"]      = reject_b.astype(bool)
 
+    reject_perm, p_adj_perm, _, _ = multipletests(
+        group["perm_p"].values, alpha=0.05, method="fdr_bh")
+    group["perm_p_fdr"]    = np.round(p_adj_perm, 4)
+    group["perm_sig"]      = reject_perm.astype(bool)
+
     reject_s, p_adj_s, _, _ = multipletests(
         group["spearman_p"].values, alpha=0.05, method="fdr_bh")
     group["spearman_p_fdr"] = np.round(p_adj_s, 4)
@@ -385,24 +409,31 @@ results_df = pd.concat(fdr_results).sort_values(
 
 # Significance stars
 def sig_star(row):
-    # *** : survives both n_eff-adjusted FDR AND block bootstrap FDR
-    # **  : survives n_eff-adjusted FDR only
+    # *** : survives n_eff FDR AND block bootstrap FDR AND permutation FDR
+    # **  : survives n_eff FDR AND at least one of boot/perm FDR
     # *   : raw p < 0.05 (n_eff adjusted)
     # .   : raw p < 0.10
-    if row["pearson_p_fdr"] < 0.05 and row["boot_p_fdr"] < 0.05: return "***"
-    if row["pearson_p_fdr"] < 0.05: return "**"
-    if row["pearson_p"]     < 0.05: return "*"
-    if row["pearson_p"]     < 0.10: return "."
+    all_three = (row["pearson_p_fdr"] < 0.05 and
+                 row["boot_p_fdr"]    < 0.05 and
+                 row["perm_p_fdr"]    < 0.05)
+    two_of_three = (row["pearson_p_fdr"] < 0.05 and
+                    (row["boot_p_fdr"] < 0.05 or row["perm_p_fdr"] < 0.05))
+    if all_three:   return "***"
+    if two_of_three: return "**"
+    if row["pearson_p"] < 0.05: return "*"
+    if row["pearson_p"] < 0.10: return "."
     return ""
 
 results_df["sig"] = results_df.apply(sig_star, axis=1)
 
 n_sig      = int(results_df["pearson_sig"].sum())
 n_boot_sig = int(results_df["boot_sig"].sum())
-n_both     = int((results_df["pearson_sig"] & results_df["boot_sig"]).sum())
+n_perm_sig = int(results_df["perm_sig"].sum())
+n_all      = int((results_df["pearson_sig"] & results_df["boot_sig"] & results_df["perm_sig"]).sum())
 print(f"  {n_sig} significant after n_eff FDR")
 print(f"  {n_boot_sig} significant after block bootstrap FDR")
-print(f"  {n_both} significant under BOTH (shown as *** in heatmap)")
+print(f"  {n_perm_sig} significant after permutation FDR")
+print(f"  {n_all} significant under ALL three methods (shown as *** in heatmap)")
 
 
 # --- Save -----------------------------------------------------------------
@@ -421,11 +452,11 @@ top = (results_df
          "pearson_r","pearson_p","pearson_p_fdr","n_eff","sig"]])
 print(top.to_string(index=False))
 
-print("\nResults significant under BOTH methods (***):")
-both = (results_df[results_df["pearson_sig"] & results_df["boot_sig"]]
+print("\nResults significant under ALL three methods (***):")
+both = (results_df[results_df["pearson_sig"] & results_df["boot_sig"] & results_df["perm_sig"]]
         .sort_values("pearson_r", key=abs, ascending=False)
         [["sector_label","var_type","index","season",
-          "pearson_r","pearson_p_fdr","boot_p_fdr","n_eff","sig"]])
+          "pearson_r","pearson_p_fdr","boot_p_fdr","perm_p_fdr","n_eff","sig"]])
 print(both.to_string(index=False) if len(both) > 0 else "  None")
 
 print("\nAll FDR significant (n_eff method):")
