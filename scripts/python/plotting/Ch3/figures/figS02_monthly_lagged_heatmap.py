@@ -334,7 +334,7 @@ def make_figure(input_path, outdir):
     print(f"Saved → {fpath}")
     plt.close(fig)
 
-    gdrive_dest = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+    gdrive_dest = "gdrive:sea-ice-phase/results/Ch3_Figures/"
     ret = os.system(f'rclone copy "{fpath}" "{gdrive_dest}"')
     if ret == 0:
         print(f"Synced → {gdrive_dest}/{stem}.png")

@@ -18,7 +18,7 @@ import os
 # =============================================================================
 
 ANNUAL_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/annual_params.csv"
-INDEX_CSV   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures/master_index_detrended.csv"
+INDEX_CSV   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/master_index_detrended.csv"
 OUTPUT_DIR  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures/"
 
 YEAR_MIN = 1979

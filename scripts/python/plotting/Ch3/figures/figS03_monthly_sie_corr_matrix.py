@@ -40,7 +40,7 @@ INPUT_FILE = pathlib.Path(
 OUTDIR     = pathlib.Path(
     "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures"
 )
-GDRIVE     = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+GDRIVE     = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 
 YEAR_MIN = 1979
 YEAR_MAX = 2023
