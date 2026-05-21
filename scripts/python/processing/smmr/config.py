@@ -51,7 +51,7 @@ SIE_CSV          = RESULTS_DIR / "SIE_daily_sector_and_circumpolar_million_km2.c
 #  SETTINGS
 # ============================================================
 SIC_THRESHOLD    = 0.15
-SIC_VAR = "F17_ICECON"
+SIC_VAR = "N07_ICECON"
 AREA_VAR         = "cell_area"
 MASK_VAR         = "sector_id"
 
