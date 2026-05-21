@@ -1,301 +1,383 @@
-# compute_gamlss.R
-# =================
-# GAMLSS models for key atmosphere-ice pairs.
-#
-# For each pair, fits a GAMLSS model with:
-#   mu    ~ atmospheric_index + s(Year)   — mean as function of index + time trend
-#   sigma ~ s(Year)                        — variance as function of time
-#
-# This tests whether:
-#   1. The atmospheric index predicts the mean of the ice variable
-#   2. The variance of the ice variable has changed over time (post-2016)
-#
-# Three key pairs (run for both raw and APAC anomalies):
-#   1. EA phase       ~ SAM RET      (r=+0.49, strongest result)
-#   2. King Haakon amplitude ~ Nino34 annual  (r=-0.42, most robust)
-#   3. Weddell amplitude ~ Nino34 RET  (r=+0.44, shoulder season signal)
-#
-# Output:
-#   gamlss_results.csv     — model summaries, AIC, variance shift estimates
-#   fig_gamlss_*.png       — one figure per pair showing mean + variance fits
-#
-# Requires: gamlss, dplyr, ggplot2, mgcv
+# compute_gamlss_expanded.R
+# ==========================
+# Expanded GAMLSS: mean shifts, volatility changes, structural breaks
+# Monthly + annual amplitude, all sectors x indices
 
 library(gamlss)
 library(dplyr)
 library(ggplot2)
-library(mgcv)
+library(tidyr)
+if (!requireNamespace("strucchange", quietly=TRUE))
+  install.packages("strucchange", repos="https://cran.r-project.org")
+library(strucchange)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-DATA_DIR   <- "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
-FIG_DIR    <- "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures"
-GDRIVE     <- "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+DATA_DIR  <- "~/Research/repos/sea-ice-phase/scripts/R/Ch3/data"
+FIG_DIR   <- "~/Research/repos/sea-ice-phase/scripts/R/Ch3/figures"
+INDEX_DIR <- "~/Research/repos/sea-ice-phase/data/indices"
+dir.create(FIG_DIR, showWarnings=FALSE, recursive=TRUE)
 
-ANNUAL_CSV <- file.path(DATA_DIR, "annual_params.csv")
-INDEX_CSV  <- file.path(DATA_DIR, "master_index_detrended.csv")
+YEAR_MIN <- 1979
+YEAR_MAX <- 2023
 
-YEAR_MIN   <- 1979
-YEAR_MAX   <- 2023
+SECTOR_LABELS <- c(
+  "SIE_Weddell"                 = "Weddell",
+  "SIE_Amundsen_Bellingshausen" = "ABS",
+  "SIE_Ross"                    = "Ross",
+  "SIE_East_Antarctica"         = "East Antarctica",
+  "SIE_King_Haakon"             = "King Haakon"
+)
+SECTOR_COLORS <- c(
+  "Weddell"         = "#2196F3",
+  "ABS"             = "#F44336",
+  "Ross"            = "#4CAF50",
+  "East Antarctica" = "#FF9800",
+  "King Haakon"     = "#9C27B0"
+)
+SECTORS <- names(SECTOR_LABELS)
+INDEX_LABELS <- c(
+  "SAM_annual"    = "SAM",
+  "Nino34_annual" = "Nino34",
+  "ASL_annual"    = "ASL",
+  "ZW3R_annual"   = "ZW3R"
+)
+INDICES <- names(INDEX_LABELS)
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 cat("Loading data...\n")
-annual <- read.csv(ANNUAL_CSV)
-annual <- annual[annual$Year >= YEAR_MIN & annual$Year <= YEAR_MAX, ]
+annual  <- read.csv(file.path(DATA_DIR,"annual_params.csv"))  %>% filter(Year>=YEAR_MIN,Year<=YEAR_MAX)
+monthly <- read.csv(file.path(DATA_DIR,"monthly_params.csv")) %>% filter(Year>=YEAR_MIN,Year<=YEAR_MAX)
+idx     <- read.csv(file.path(DATA_DIR,"master_index_detrended.csv"))
+cat(sprintf("  Annual:%d  Monthly:%d  Index:%d\n",nrow(annual),nrow(monthly),nrow(idx)))
 
-idx    <- read.csv(INDEX_CSV)
+# ── Load monthly indices ──────────────────────────────────────────────────────
+cat("Loading monthly indices...\n")
 
-# ── Helper: detrend a series ──────────────────────────────────────────────────
-detrend_series <- function(years, values) {
+read_fixed_table <- function(path, skip_header=1) {
+  lines <- readLines(path)
+  lines <- lines[!is.na(lines) & nchar(trimws(lines))>0]
+  lines <- lines[sapply(strsplit(trimws(lines),"\\s+"), length)==13]
+  read.table(text=paste(lines,collapse="\n"), header=FALSE,
+             col.names=c("year","Jan","Feb","Mar","Apr","May","Jun",
+                         "Jul","Aug","Sep","Oct","Nov","Dec"),
+             na.strings=c("-99.99","999.9","99.9"))
+}
+
+sam_raw  <- read_fixed_table(file.path(INDEX_DIR,"marshall_sam_monthly.txt"))
+nino_raw <- read_fixed_table(file.path(INDEX_DIR,"nina34.data"))
+
+to_long <- function(df, val_name) {
+  df %>%
+    filter(suppressWarnings(as.numeric(as.character(year))) %in% 1900:2100) %>%
+    mutate(year=as.integer(as.character(year))) %>%
+    pivot_longer(-year, names_to="month_str", values_to=val_name) %>%
+    mutate(Month=match(month_str, month.abb), Year=year) %>%
+    select(Year, Month, all_of(val_name)) %>%
+    filter(!is.na(.data[[val_name]]), !is.na(Month))
+}
+
+sam_long  <- to_long(sam_raw,  "SAM")
+nino_long <- to_long(nino_raw, "Nino34")
+
+asl_raw       <- read.csv(file.path(INDEX_DIR,"asli_era5_v3-latest.csv"), comment.char="#")
+asl_raw$Year  <- as.integer(format(as.Date(asl_raw$time),"%Y"))
+asl_raw$Month <- as.integer(format(as.Date(asl_raw$time),"%m"))
+asl_long      <- asl_raw %>% select(Year, Month, ASL=RelCenPres)
+
+zw3_raw  <- read.csv(file.path(INDEX_DIR,"ZW3_raphael_monthly.csv"))
+zw3_long <- zw3_raw %>% rename(Year=year, Month=month, ZW3R=ZW3_index) %>% select(Year,Month,ZW3R)
+
+idx_monthly <- sam_long %>%
+  full_join(nino_long, by=c("Year","Month")) %>%
+  full_join(asl_long,  by=c("Year","Month")) %>%
+  full_join(zw3_long,  by=c("Year","Month")) %>%
+  filter(Year>=YEAR_MIN, Year<=YEAR_MAX)
+cat(sprintf("  Monthly index: %d rows\n", nrow(idx_monthly)))
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+detrend_vec <- function(years, values) {
   mask <- !is.na(values)
-  if (sum(mask) < 5) return(values)
-  fit  <- lm(values[mask] ~ years[mask])
-  values - predict(fit, newdata = data.frame(`years[mask]` = years),
-                   type = "response")
+  if (sum(mask)<5) return(values)
+  fit <- lm(values[mask]~years[mask])
+  values - (coef(fit)[1] + coef(fit)[2]*years)
 }
 
-# ── Helper: prepare analysis dataset ─────────────────────────────────────────
-prepare_data <- function(sector_col, apac_var, raw_var, idx_col) {
-  # Pull ice variables for this sector
-  sec <- annual[annual$sector == sector_col,
-                c("Year", apac_var, raw_var)] %>%
-    arrange(Year)
-
-  # Detrend
-  sec[[apac_var]] <- detrend_series(sec$Year, sec[[apac_var]])
-  sec[[raw_var]]  <- detrend_series(sec$Year, sec[[raw_var]])
-
-  # Merge with index
-  df <- sec %>%
-    inner_join(idx[, c("Year", idx_col)], by = "Year") %>%
-    filter(!is.na(.data[[apac_var]]),
-           !is.na(.data[[raw_var]]),
-           !is.na(.data[[idx_col]])) %>%
-    mutate(year_scaled = as.numeric(scale(Year)))
-
-  cat(sprintf("  %s ~ %s: %d rows (%d–%d)\n",
-              sector_col, idx_col, nrow(df),
-              min(df$Year), max(df$Year)))
-  df
-}
-
-# ── Helper: fit GAMLSS and return summary ─────────────────────────────────────
-fit_gamlss <- function(df, response_var, idx_col, pair_label, var_label) {
-
-  y   <- df[[response_var]]
-  x   <- df[[idx_col]]
-  yr  <- df$year_scaled
-  yrs <- df$Year
-
-  # --- Model 0: null (intercept only) ---
-  m0 <- gamlss(y ~ 1,
-               sigma.formula = ~1,
-               family = NO(),
-               trace = FALSE)
-
-  # --- Model 1: index only in mu, constant sigma ---
-  m1 <- gamlss(y ~ x,
-               sigma.formula = ~1,
-               family = NO(),
-               trace = FALSE)
-
-  # --- Model 2: index + time trend in mu, constant sigma ---
-  m2 <- tryCatch(
-    gamlss(y ~ x + pb(yrs),
-           sigma.formula = ~1,
-           family = NO(),
-           trace = FALSE),
-    error = function(e) {
-      cat("    Model 2 failed, falling back to linear time\n")
-      gamlss(y ~ x + yrs, sigma.formula = ~1,
-             family = NO(), trace = FALSE)
+fit_gamlss_pair <- function(y, x, yrs, lbl) {
+  ok <- complete.cases(y,x,yrs)
+  y <- y[ok]; x <- x[ok]; yrs <- yrs[ok]
+  if (length(y)<15) return(NULL)
+  yrs_s <- as.numeric(scale(yrs))
+  
+  m0 <- tryCatch(gamlss(y~1,           sigma.formula=~1,          family=NO(),trace=FALSE),error=function(e)NULL)
+  m1 <- tryCatch(gamlss(y~x,           sigma.formula=~1,          family=NO(),trace=FALSE),error=function(e)NULL)
+  m2 <- tryCatch(gamlss(y~pb(yrs_s),   sigma.formula=~1,          family=NO(),trace=FALSE),error=function(e)NULL)
+  m3 <- tryCatch(gamlss(y~x+pb(yrs_s), sigma.formula=~1,          family=NO(),trace=FALSE),error=function(e)NULL)
+  m4 <- tryCatch(gamlss(y~x+pb(yrs_s), sigma.formula=~pb(yrs_s),  family=NO(),trace=FALSE),error=function(e)NULL)
+  
+  models      <- list(m0,m1,m2,m3,m4)
+  model_names <- c("null","index_only","trend_only","index+trend","index+trend+vol")
+  aic_vals    <- sapply(models, function(m) if(!is.null(m)) AIC(m) else NA_real_)
+  best_idx    <- which.min(aic_vals)
+  best_name   <- model_names[best_idx]
+  cat(sprintf("  %-50s %s (AIC=%.1f)\n", lbl, best_name, min(aic_vals,na.rm=TRUE)))
+  
+  # Structural break
+  break_year <- NA_real_
+  break_p    <- NA_real_
+  tryCatch({
+    if (!is.null(m1)) {
+      bp <- breakpoints(residuals(m1)~1)
+      if (!is.na(bp$breakpoints[1])) {
+        break_year <- as.numeric(yrs[bp$breakpoints[1]])
+        sc <- sctest(residuals(m1)~1, type="Chow", point=bp$breakpoints[1])
+        break_p <- round(sc$p.value,4)
+      }
     }
+  }, error=function(e) NULL)
+  
+  split_yr  <- if (!is.na(break_year)) break_year else 2016
+  pre_sd    <- sd(y[yrs< split_yr], na.rm=TRUE)
+  post_sd   <- sd(y[yrs>=split_yr], na.rm=TRUE)
+  var_ratio <- post_sd/pre_sd
+  
+  best_mod  <- models[[best_idx]]
+  mu_fit    <- if (!is.null(best_mod)) as.numeric(fitted(best_mod,"mu"))   else rep(mean(y),length(y))
+  sigma_fit <- if (!is.null(best_mod)) as.numeric(exp(fitted(best_mod,"sigma"))) else rep(sd(y),length(y))
+  sigma_fit <- pmin(sigma_fit, 3*sd(y,na.rm=TRUE))
+  
+  # Return scalars only — no nested data frames in summary
+  list(
+    n               = length(y),
+    aic_null        = round(aic_vals[1],2),
+    aic_index       = round(aic_vals[2],2),
+    aic_trend       = round(aic_vals[3],2),
+    aic_index_trend = round(aic_vals[4],2),
+    aic_vol         = round(aic_vals[5],2),
+    best_model      = best_name,
+    break_year      = break_year,
+    break_p         = break_p,
+    pre_sd          = round(pre_sd,4),
+    post_sd         = round(post_sd,4),
+    var_ratio       = round(var_ratio,3),
+    # plot data stored separately
+    plot_Year       = list(as.numeric(yrs)),
+    plot_y          = list(as.numeric(y)),
+    plot_mu         = list(as.numeric(mu_fit)),
+    plot_sigma      = list(as.numeric(sigma_fit))
   )
+}
 
-  # --- Model 3: index in mu, time-varying sigma ---
-  m3 <- tryCatch(
-    gamlss(y ~ x + pb(yrs),
-           sigma.formula = ~pb(yrs),
-           family = NO(),
-           trace = FALSE),
-    error = function(e) {
-      cat("    Model 3 failed, falling back to linear sigma\n")
-      gamlss(y ~ x + yrs,
-             sigma.formula = ~yrs,
-             family = NO(), trace = FALSE)
+# ── PART 1: Annual GAMLSS ────────────────────────────────────────────────────
+cat("\n=== PART 1: Annual scalar GAMLSS ===\n")
+
+annual_rows <- list()
+
+for (sec_col in SECTORS) {
+  sec_label <- SECTOR_LABELS[sec_col]
+  sec       <- annual %>% filter(sector==sec_col) %>% arrange(Year)
+  
+  for (ice_var in c("amplitude_raw_anom","amplitude_anom",
+                    "max_doy_raw_anom","max_doy_anom")) {
+    if (!ice_var %in% names(sec)) next
+    var_label <- switch(ice_var,
+                        amplitude_raw_anom="amplitude_raw", amplitude_anom="amplitude_apac",
+                        max_doy_raw_anom="phase_raw",       max_doy_anom="phase_apac")
+    
+    for (idx_col in INDICES) {
+      if (!idx_col %in% names(idx)) next
+      idx_sub <- idx %>% select(Year, index_val=all_of(idx_col))
+      merged  <- sec %>% select(Year) %>% mutate(y=sec[[ice_var]]) %>%
+        left_join(idx_sub,by="Year") %>% filter(!is.na(y),!is.na(index_val))
+      if (nrow(merged)<15) next
+      
+      y   <- detrend_vec(merged$Year, merged$y)
+      x   <- merged$index_val
+      lbl <- sprintf("%s|%s|%s", sec_label, var_label, INDEX_LABELS[idx_col])
+      res <- fit_gamlss_pair(y, x, merged$Year, lbl)
+      if (is.null(res)) next
+      
+      annual_rows[[lbl]] <- data.frame(
+        sector     = sec_label,
+        var_type   = var_label,
+        index      = INDEX_LABELS[idx_col],
+        data_type  = "annual",
+        n          = res$n,
+        best_model = res$best_model,
+        break_year = res$break_year,
+        break_p    = res$break_p,
+        pre_sd     = res$pre_sd,
+        post_sd    = res$post_sd,
+        var_ratio  = res$var_ratio,
+        aic_null   = res$aic_null,
+        aic_index  = res$aic_index,
+        aic_trend  = res$aic_trend,
+        aic_index_trend = res$aic_index_trend,
+        aic_vol    = res$aic_vol,
+        stringsAsFactors = FALSE
+      )
     }
-  )
-
-  # --- Compare models by AIC ---
-  aic_vals <- c(AIC(m0), AIC(m1), AIC(m2), AIC(m3))
-  best_mod <- c("null","index_only","index+trend","index+trend+sigma_trend")[
-    which.min(aic_vals)]
-
-  cat(sprintf("    AIC: null=%.1f  index=%.1f  +trend=%.1f  +sigma=%.1f  → best: %s\n",
-              aic_vals[1], aic_vals[2], aic_vals[3], aic_vals[4], best_mod))
-
-  # --- Extract fitted values from best model ---
-  best <- list(m0, m1, m2, m3)[[which.min(aic_vals)]]
-
-  # Fitted mean and sigma over time
-  mu_fit    <- fitted(m3, "mu")
-  sigma_fit <- exp(fitted(m3, "sigma"))  # gamlss models log(sigma)
-
-  # Pre vs post 2016 variance
-  pre_sd  <- sd(y[yrs <  2016], na.rm = TRUE)
-  post_sd <- sd(y[yrs >= 2016], na.rm = TRUE)
-  var_ratio <- post_sd / pre_sd
-
-  # Coefficient on index in m1
-  coef_idx <- coef(m1)["x"]
-
-  list(
-    pair        = pair_label,
-    variable    = var_label,
-    response    = response_var,
-    index       = idx_col,
-    n           = nrow(df),
-    aic_null    = round(aic_vals[1], 2),
-    aic_index   = round(aic_vals[2], 2),
-    aic_trend   = round(aic_vals[3], 2),
-    aic_sigma   = round(aic_vals[4], 2),
-    best_model  = best_mod,
-    coef_index  = round(coef_idx, 4),
-    pre_sd      = round(pre_sd,   4),
-    post_sd     = round(post_sd,  4),
-    var_ratio   = round(var_ratio, 3),
-    df_plot     = data.frame(
-      Year      = yrs,
-      y         = y,
-      index     = x,
-      mu_fit    = mu_fit,
-      sigma_fit = sigma_fit,
-      period    = ifelse(yrs >= 2016, "2016+", "1979–2015")
-    )
-  )
+  }
 }
 
-# ── Helper: plot one pair ─────────────────────────────────────────────────────
-plot_gamlss_pair <- function(res_raw, res_apac, pair_label, outfile) {
+annual_df <- bind_rows(annual_rows)
+write.csv(annual_df, file.path(DATA_DIR,"gamlss_expanded_annual.csv"), row.names=FALSE)
+cat(sprintf("\nSaved → gamlss_expanded_annual.csv (%d rows)\n", nrow(annual_df)))
 
-  # Combine raw and APAC plot data
-  df_raw   <- res_raw$df_plot  %>% mutate(type = "Raw anomaly")
-  df_apac  <- res_apac$df_plot %>% mutate(type = "APAC anomaly")
-  df_all   <- bind_rows(df_raw, df_apac)
+# ── PART 2: Monthly GAMLSS ───────────────────────────────────────────────────
+cat("\n=== PART 2: Monthly amplitude GAMLSS ===\n")
 
-  # Colour by period
-  period_cols <- c("1979–2015" = "#378ADD", "2016+" = "#D4537E")
+monthly_rows <- list()
 
-  p <- ggplot(df_all, aes(x = Year)) +
-
-    # ±1σ fitted band (time-varying sigma from m3)
-    geom_ribbon(aes(ymin = mu_fit - sigma_fit,
-                    ymax = mu_fit + sigma_fit),
-                fill = "#BBBBBB", alpha = 0.35) +
-
-    # Fitted mean line
-    geom_line(aes(y = mu_fit), color = "#2C2C2A",
-              linewidth = 1.2, linetype = "solid") +
-
-    # Observed points coloured by period
-    geom_point(aes(y = y, color = period), size = 2.0, alpha = 0.85) +
-
-    # 2016 vertical reference line
-    geom_vline(xintercept = 2016, color = "#D4537E",
-               linewidth = 0.8, linetype = "dotted") +
-
-    scale_color_manual(values = period_cols, name = NULL) +
-
-    facet_wrap(~type, ncol = 2, scales = "free_y") +
-
-    labs(
-      title    = pair_label,
-      subtitle = sprintf(
-        "Raw: pre-2016 σ=%.3f, post-2016 σ=%.3f (ratio=%.2f)  |  APAC: pre σ=%.3f, post σ=%.3f (ratio=%.2f)",
-        res_raw$pre_sd,  res_raw$post_sd,  res_raw$var_ratio,
-        res_apac$pre_sd, res_apac$post_sd, res_apac$var_ratio),
-      x = "Year",
-      y = "Anomaly"
-    ) +
-
-    theme_classic(base_size = 11) +
-    theme(
-      strip.text       = element_text(face = "bold", size = 11),
-      plot.title       = element_text(face = "bold", size = 12),
-      plot.subtitle    = element_text(size = 8, color = "#5F5E5A"),
-      legend.position  = "bottom",
-      panel.grid.major = element_line(color = "#F0F0F0"),
+for (sec_col in SECTORS) {
+  sec_label   <- SECTOR_LABELS[sec_col]
+  sec_monthly <- monthly %>% filter(sector==sec_col) %>% arrange(Year,Month)
+  
+  for (idx_name in c("SAM","Nino34","ASL","ZW3R")) {
+    if (!idx_name %in% names(idx_monthly)) next
+    merged <- sec_monthly %>% select(Year,Month,monthly_amp_anom) %>%
+      left_join(idx_monthly %>% select(Year,Month,all_of(idx_name)), by=c("Year","Month")) %>%
+      filter(!is.na(monthly_amp_anom), !is.na(.data[[idx_name]])) %>% arrange(Year,Month)
+    if (nrow(merged)<30) next
+    
+    t_axis   <- merged$Year + merged$Month/12
+    merged$y <- detrend_vec(t_axis, merged$monthly_amp_anom)
+    merged$x <- detrend_vec(t_axis, merged[[idx_name]])
+    lbl      <- sprintf("%s|amplitude_monthly|%s", sec_label, idx_name)
+    res      <- fit_gamlss_pair(merged$y, merged$x, t_axis, lbl)
+    if (is.null(res)) next
+    
+    monthly_rows[[lbl]] <- data.frame(
+      sector=sec_label, var_type="amplitude_monthly",
+      index=idx_name, data_type="monthly",
+      n=res$n, best_model=res$best_model,
+      break_year=res$break_year, break_p=res$break_p,
+      pre_sd=res$pre_sd, post_sd=res$post_sd, var_ratio=res$var_ratio,
+      aic_null=res$aic_null, aic_index=res$aic_index,
+      aic_trend=res$aic_trend, aic_index_trend=res$aic_index_trend,
+      aic_vol=res$aic_vol, stringsAsFactors=FALSE
     )
-
-  ggsave(outfile, p, width = 11, height = 5, dpi = 300)
-  cat(sprintf("  Saved → %s\n", outfile))
-
-  # Sync to Google Drive
-  system(sprintf('rclone copy "%s" "%s"', outfile, GDRIVE))
+  }
 }
 
-# ── Define key pairs ──────────────────────────────────────────────────────────
-PAIRS <- list(
-  list(
-    label      = "East Antarctica phase ~ SAM retreat season",
-    sector     = "SIE_East_Antarctica",
-    apac_var   = "max_doy_anom",
-    raw_var    = "max_doy_raw_anom",
-    idx_col    = "SAM_RET",
-    outfile    = file.path(FIG_DIR, "fig_gamlss_ea_phase_sam_ret.png")
-  ),
-  list(
-    label      = "King Haakon amplitude ~ Niño3.4 annual",
-    sector     = "SIE_King_Haakon",
-    apac_var   = "amplitude_anom",
-    raw_var    = "amplitude_raw_anom",
-    idx_col    = "Nino34_annual",
-    outfile    = file.path(FIG_DIR, "fig_gamlss_kh_amp_nino34_annual.png")
-  ),
-  list(
-    label      = "Weddell amplitude ~ Niño3.4 retreat season",
-    sector     = "SIE_Weddell",
-    apac_var   = "amplitude_anom",
-    raw_var    = "amplitude_raw_anom",
-    idx_col    = "Nino34_RET",
-    outfile    = file.path(FIG_DIR, "fig_gamlss_weddell_amp_nino34_ret.png")
-  )
+monthly_df <- bind_rows(monthly_rows)
+write.csv(monthly_df, file.path(DATA_DIR,"gamlss_expanded_monthly.csv"), row.names=FALSE)
+cat(sprintf("\nSaved → gamlss_expanded_monthly.csv (%d rows)\n", nrow(monthly_df)))
+
+# ── PART 3: Line figures ─────────────────────────────────────────────────────
+cat("\n=== PART 3: Rebuilding plot data for figures ===\n")
+
+# Re-run key pairs to get plot data (stored separately to avoid list-column issues)
+KEY_PAIRS <- list(
+  list(var="amplitude_raw",  idx="Nino34", title="Amplitude (raw) ~ Niño3.4"),
+  list(var="amplitude_apac", idx="Nino34", title="Amplitude (APAC) ~ Niño3.4"),
+  list(var="phase_raw",      idx="SAM",    title="Phase (raw) ~ SAM"),
+  list(var="phase_apac",     idx="SAM",    title="Phase (APAC) ~ SAM")
 )
 
-# ── Run ───────────────────────────────────────────────────────────────────────
-all_results <- list()
-
-for (pair in PAIRS) {
-  cat(sprintf("\n=== %s ===\n", pair$label))
-
-  df <- prepare_data(pair$sector, pair$apac_var,
-                     pair$raw_var, pair$idx_col)
-
-  cat("  Fitting GAMLSS — raw anomaly...\n")
-  res_raw  <- fit_gamlss(df, pair$raw_var,  pair$idx_col,
-                         pair$label, "raw")
-
-  cat("  Fitting GAMLSS — APAC anomaly...\n")
-  res_apac <- fit_gamlss(df, pair$apac_var, pair$idx_col,
-                         pair$label, "apac")
-
-  plot_gamlss_pair(res_raw, res_apac, pair$label, pair$outfile)
-
-  all_results[[pair$label]] <- list(raw = res_raw, apac = res_apac)
+for (kp in KEY_PAIRS) {
+  cat(sprintf("\nFigure: %s\n", kp$title))
+  plot_list <- list()
+  
+  for (sec_col in SECTORS) {
+    sec_label <- SECTOR_LABELS[sec_col]
+    sec       <- annual %>% filter(sector==sec_col) %>% arrange(Year)
+    
+    ice_var <- switch(kp$var,
+                      amplitude_raw  = "amplitude_raw_anom",
+                      amplitude_apac = "amplitude_anom",
+                      phase_raw      = "max_doy_raw_anom",
+                      phase_apac     = "max_doy_anom")
+    if (!ice_var %in% names(sec)) next
+    
+    idx_col <- paste0(kp$idx, "_annual")
+    if (!idx_col %in% names(idx)) next
+    idx_sub <- idx %>% select(Year, index_val=all_of(idx_col))
+    merged  <- sec %>% select(Year) %>% mutate(y=sec[[ice_var]]) %>%
+      left_join(idx_sub,by="Year") %>% filter(!is.na(y),!is.na(index_val))
+    if (nrow(merged)<15) next
+    
+    y   <- detrend_vec(merged$Year, merged$y)
+    x   <- merged$index_val
+    lbl <- sprintf("%s|%s|%s", sec_label, kp$var, kp$idx)
+    res <- fit_gamlss_pair(y, x, merged$Year, lbl)
+    if (is.null(res)) next
+    
+    # Get break year from annual_df
+    bk <- annual_df %>%
+      filter(sector==sec_label, var_type==kp$var, index==kp$idx) %>%
+      pull(break_year)
+    bk <- if (length(bk)>0 && !is.na(bk[1])) as.numeric(bk[1]) else NA_real_
+    
+    plot_list[[sec_label]] <- data.frame(
+      Year      = as.numeric(unlist(res$plot_Year)),
+      y         = as.numeric(unlist(res$plot_y)),
+      mu_fit    = as.numeric(unlist(res$plot_mu)),
+      sigma_fit = as.numeric(unlist(res$plot_sigma)),
+      sector    = sec_label,
+      break_year= bk,
+      stringsAsFactors=FALSE
+    )
+  }
+  
+  if (length(plot_list)==0) next
+  sub <- bind_rows(plot_list)
+  sub$sector <- factor(sub$sector, levels=names(SECTOR_COLORS))
+  
+  # Break year lines data
+  bk_df <- sub %>%
+    group_by(sector) %>%
+    summarise(break_year=first(break_year), .groups="drop") %>%
+    filter(!is.na(break_year)) %>%
+    mutate(break_year=as.numeric(break_year))
+  
+  p <- ggplot(sub, aes(x=Year)) +
+    geom_ribbon(aes(ymin=mu_fit-sigma_fit, ymax=mu_fit+sigma_fit,
+                    fill=sector), alpha=0.15) +
+    geom_line(aes(y=mu_fit, color=sector), linewidth=1.2) +
+    geom_point(aes(y=y, color=sector), size=1.8, alpha=0.7) +
+    { if (nrow(bk_df)>0)
+      geom_vline(data=bk_df,
+                 aes(xintercept=break_year, color=sector),
+                 linewidth=0.8, linetype="dashed", alpha=0.7)
+      else list() } +
+    geom_vline(xintercept=2016, color="#2C2C2A",
+               linewidth=0.6, linetype="dotted", alpha=0.5) +
+    scale_color_manual(values=SECTOR_COLORS) +
+    scale_fill_manual( values=SECTOR_COLORS) +
+    facet_wrap(~sector, ncol=2, scales="free_y") +
+    labs(title=kp$title,
+         subtitle="Fitted mean ± 1σ | dashed=structural break | dotted=2016",
+         x="Year", y="Anomaly") +
+    theme_classic(base_size=10) +
+    theme(strip.text=element_text(face="bold",size=10),
+          plot.title=element_text(face="bold",size=12),
+          plot.subtitle=element_text(size=8,color="#5F5E5A"),
+          legend.position="none",
+          panel.grid.major=element_line(color="#F5F5F5"))
+  
+  print(p)
+  
+  fname <- sprintf("fig_gamlss_%s_%s.png", gsub("\\+","_",kp$var), kp$idx)
+  ggsave(file.path(FIG_DIR,fname), p, width=10, height=8, dpi=300)
+  cat(sprintf("  Saved → %s\n", fname))
 }
 
-# ── Save summary table ────────────────────────────────────────────────────────
-cat("\nSaving summary table...\n")
-summary_rows <- lapply(all_results, function(x) {
-  bind_rows(
-    data.frame(pair=x$raw$pair,  type="raw",  x$raw[ setdiff(names(x$raw),  c("df_plot","pair","variable","response","index"))]),
-    data.frame(pair=x$apac$pair, type="apac", x$apac[setdiff(names(x$apac), c("df_plot","pair","variable","response","index"))])
-  )
-})
-summary_df <- bind_rows(summary_rows)
-out_csv    <- file.path(DATA_DIR, "gamlss_results.csv")
-write.csv(summary_df, out_csv, row.names = FALSE)
-cat(sprintf("Saved → %s\n", out_csv))
+# ── PART 4: Summaries ─────────────────────────────────────────────────────────
+cat("\n=== Break year summary ===\n")
+print(annual_df %>%
+        filter(!is.na(break_year)) %>%
+        select(sector,var_type,index,best_model,break_year,break_p,var_ratio) %>%
+        arrange(break_year))
 
-system(sprintf('rclone copy "%s" "%s"', out_csv, GDRIVE))
+cat("\n=== Volatility changes (var_ratio > 1.2) ===\n")
+print(annual_df %>%
+        filter(!is.na(var_ratio) & var_ratio>1.2) %>%
+        select(sector,var_type,index,best_model,break_year,var_ratio) %>%
+        arrange(desc(var_ratio)))
+
+cat("\n=== Monthly GAMLSS summary ===\n")
+print(monthly_df %>%
+        select(sector,index,best_model,break_year,var_ratio) %>%
+        arrange(sector,index))
 
 cat("\nDone.\n")
