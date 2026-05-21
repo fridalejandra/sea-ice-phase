@@ -224,6 +224,6 @@ fig.suptitle(
 )
 
 fig.tight_layout()
-save_fig(fig, "fig_case_study_2016_2023_c_combined.png", OUTPUT_DIR)
+save_fig(fig, "fig08_casestudy_2016_2023.png", OUTPUT_DIR)
 
 print("\nAll case study panels complete.")

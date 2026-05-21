@@ -150,7 +150,7 @@ fig.text(0.5, 0.01,
          ha="center", fontsize=8.5, color="#5F5E5A", style="italic")
 
 # ── Save + rclone ─────────────────────────────────────────────────────────────
-fpath = os.path.join(OUTPUT_DIR, "fig_prepost2016_variability.png")
+fpath = os.path.join(OUTPUT_DIR, "fig07_prepost2016_variability.png")
 fig.savefig(fpath, dpi=300, bbox_inches="tight")
 print(f"Saved → {fpath}")
 plt.close()

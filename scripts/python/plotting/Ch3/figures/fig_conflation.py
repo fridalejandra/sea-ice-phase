@@ -172,5 +172,5 @@ fig.legend(handles=[peak_patch], loc="lower center",
            fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.02))
 
 fig.tight_layout(rect=[0, 0.04, 1, 1])
-save_fig(fig, "fig_conflation_argument.png", OUTPUT_DIR)
+save_fig(fig, "fig01_conflation.png", OUTPUT_DIR)
 print("fig_conflation_argument.png saved.")

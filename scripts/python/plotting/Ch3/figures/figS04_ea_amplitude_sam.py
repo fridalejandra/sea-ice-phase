@@ -146,7 +146,7 @@ fig.suptitle(
     fontsize=11
 )
 
-outpath = os.path.join(OUTPUT_DIR, "ea_amplitude_sam_timeseries.png")
+outpath = os.path.join(OUTPUT_DIR, "figS04_ea_amplitude_sam.png")
 fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
 print(f"Figure saved: {outpath}")

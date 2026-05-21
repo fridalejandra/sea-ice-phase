@@ -128,7 +128,7 @@ fig.legend(handles, labels, loc="lower center", ncol=6,
 fig.subplots_adjust(bottom=0.12)
 
 # ── Save + rclone ─────────────────────────────────────────────────────────────
-fpath = os.path.join(OUTPUT_DIR, "fig_rolling_variance.png")
+fpath = os.path.join(OUTPUT_DIR, "fig06_rolling_variance.png")
 fig.savefig(fpath, dpi=300, bbox_inches="tight")
 print(f"Saved → {fpath}")
 plt.close()

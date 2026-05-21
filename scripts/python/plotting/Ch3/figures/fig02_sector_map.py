@@ -137,7 +137,7 @@ ax_rect.set_title("(b)  Southern Ocean view",
                    fontsize=11, fontweight="bold", pad=8)
 
 # ── Save ──────────────────────────────────────────────────────────────────────
-fpath = os.path.join(OUTPUT_DIR, "fig_sector_map.png")
+fpath = os.path.join(OUTPUT_DIR, "fig02_sector_map.png")
 fig.savefig(fpath, dpi=300, bbox_inches="tight", facecolor="white")
 plt.close()
 print(f"Saved → {fpath}")

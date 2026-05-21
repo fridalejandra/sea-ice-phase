@@ -184,26 +184,26 @@ print(f"  Amplitude columns: {list(r_amp.columns)}")
 draw_clustermap(
     var_type = "phase_apac",
     title    = "Shoulder season correlations — APAC phase anomaly vs atmospheric indices",
-    outfile  = os.path.join(OUTPUT_DIR, "fig_shoulder_clustermap_phase_apac.png")
+    outfile  = os.path.join(OUTPUT_DIR, "fig10_shoulder_clustermap_phase_apac.png")
 )
 
 draw_clustermap(
     var_type = "amplitude_apac",
     title    = "Shoulder season correlations — APAC amplitude anomaly vs atmospheric indices",
-    outfile  = os.path.join(OUTPUT_DIR, "fig_shoulder_clustermap_amp_apac.png")
+    outfile  = os.path.join(OUTPUT_DIR, "fig10_shoulder_clustermap_amp_apac.png")
 )
 
 print("\nBuilding raw clustermap...")
 draw_clustermap(
     var_type = "phase_raw",
     title    = "Shoulder season correlations — Raw phase anomaly vs atmospheric indices",
-    outfile  = os.path.join(OUTPUT_DIR, "fig_shoulder_clustermap_phase_raw.png")
+    outfile  = os.path.join(OUTPUT_DIR, "fig10_shoulder_clustermap_phase_raw.png")
 )
 
 draw_clustermap(
     var_type = "amplitude_raw",
     title    = "Shoulder season correlations — Raw amplitude anomaly vs atmospheric indices",
-    outfile  = os.path.join(OUTPUT_DIR, "fig_shoulder_clustermap_amp_raw.png")
+    outfile  = os.path.join(OUTPUT_DIR, "fig10_shoulder_clustermap_amp_raw.png")
 )
 
 print("\nDone.")
