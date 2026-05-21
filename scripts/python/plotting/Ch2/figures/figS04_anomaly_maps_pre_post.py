@@ -40,7 +40,7 @@ PLOTTING_ROOT = HERE.parent
 if str(PLOTTING_ROOT) not in sys.path:
     sys.path.insert(0, str(PLOTTING_ROOT))
 
-from ch2_fig_utils import (  # noqa: E402
+from utils.plot_utils import (  # noqa: E402
     set_mpl_defaults,
     get_fig_path,
     save_and_upload,
