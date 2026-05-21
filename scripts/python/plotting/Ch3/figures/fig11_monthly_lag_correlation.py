@@ -26,7 +26,7 @@ warnings.filterwarnings("ignore")
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures"
-GDRIVE     = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+GDRIVE     = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 
 LAG_CSV   = os.path.join(DATA_DIR, "lag_correlations.csv")
 CONT_CSV  = os.path.join(DATA_DIR, "contemporaneous_correlations.csv")
@@ -67,12 +67,13 @@ for var_label, var_col, outfile_suffix in [
     lag_sub  = lag[lag["var_type"]  == var_col] if var_col != "mean_sie" else pd.DataFrame()
     cont_sub = cont[cont["var_type"] == var_col]
 
-    if len(cont_sub) == 0:
+    if len(cont_sub) == 0 and var_col != "phase":
         continue
 
     # ── Figure ────────────────────────────────────────────────────────────────
     n_indices = len(INDICES)
-    fig, axes = plt.subplots(n_indices, 2,
+    n_cols = 1 if var_col == "phase" else 2
+    fig, axes = plt.subplots(n_indices, n_cols, squeeze=False,
                              figsize=(13, 3.2 * n_indices),
                              sharey=False, sharex=True)
 
@@ -85,12 +86,8 @@ for var_label, var_col, outfile_suffix in [
 
     for row, idx_name in enumerate(INDICES):
 
-        for col, (df_plot, col_title) in enumerate([
-            (lag_sub[lag_sub["index"] == idx_name]  if len(lag_sub) > 0 else pd.DataFrame(),
-             "Lag correlation\n(annual scalar ~ monthly index)"),
-            (cont_sub[cont_sub["index"] == idx_name],
-             "Contemporaneous\n(monthly ice ~ monthly index)"),
-        ]):
+        col_defs = [(lag_sub[lag_sub["index"] == idx_name] if len(lag_sub) > 0 else pd.DataFrame(), "Lag correlation\n(annual scalar ~ monthly index)")] if var_col == "phase" else [(lag_sub[lag_sub["index"] == idx_name] if len(lag_sub) > 0 else pd.DataFrame(), "Lag correlation\n(annual scalar ~ monthly index)"), (cont_sub[cont_sub["index"] == idx_name], "Contemporaneous\n(monthly ice ~ monthly index)")]
+        for col, (df_plot, col_title) in enumerate(col_defs):
             ax = axes[row, col]
 
             # Shoulder season shading

@@ -32,12 +32,12 @@ Input
 
 Output
 ------
-    figures/figS_monthly_lagged_heatmap.pdf  +  .png  (300 dpi)
+    figures/figS02_monthly_lagged_heatmap.pdf  +  .png  (300 dpi)
 
 Usage
 -----
-    python figS_monthly_lagged_heatmap.py
-    python figS_monthly_lagged_heatmap.py --input processed/monthly_cross_correlations.csv --outdir figures/
+    python figS02_monthly_lagged_heatmap.py
+    python figS02_monthly_lagged_heatmap.py --input processed/monthly_cross_correlations.csv --outdir figures/
 """
 
 import argparse
@@ -328,7 +328,7 @@ def make_figure(input_path, outdir):
 
     # ── Save ──────────────────────────────────────────────────────────────
     outdir.mkdir(parents=True, exist_ok=True)
-    stem  = "figS_monthly_lagged_heatmap"
+    stem  = "figS02_monthly_lagged_heatmap"
     fpath = outdir / f"{stem}.png"
     fig.savefig(fpath, dpi=300, bbox_inches="tight")
     print(f"Saved → {fpath}")

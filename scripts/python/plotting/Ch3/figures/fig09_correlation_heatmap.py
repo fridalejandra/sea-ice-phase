@@ -34,7 +34,7 @@ apply_style()
 
 DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 OUTPUT_DIR = DEFAULT_OUTPUT_DIR
-GDRIVE     = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+GDRIVE     = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 CORR_CSV   = os.path.join(DATA_DIR, "correlations_output.csv")
 
 INCLUDE_THRESHOLD = 0.05
@@ -198,7 +198,7 @@ print("\nFigure 1: APAC anomaly correlations")
 make_figure(
     phase_var = "phase_apac",
     amp_var   = "amplitude_apac",
-    outfile   = "fig_correlation_heatmap_apac.png",
+    outfile   = "fig09_correlation_heatmap_apac.png",
     suptitle  = "Correlation between atmospheric indices and APAC phase and amplitude anomalies",
 )
 
@@ -206,7 +206,7 @@ print("\nFigure 2: Raw anomaly correlations")
 make_figure(
     phase_var = "phase_raw",
     amp_var   = "amplitude_raw",
-    outfile   = "fig_correlation_heatmap_raw.png",
+    outfile   = "fig09_correlation_heatmap_raw.png",
     suptitle  = "Correlation between atmospheric indices and raw phase and amplitude anomalies",
 )
 

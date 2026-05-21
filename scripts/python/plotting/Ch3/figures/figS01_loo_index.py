@@ -15,8 +15,8 @@ Scenarios shown:
     Niño3.4_only  — Niño3.4 alone
 
 Two output figures:
-    fig_loo_amplitude.pdf/.png
-    fig_loo_phase.pdf/.png
+    figS01_loo_amplitude.pdf/.png
+    figS01_loo_phase.pdf/.png
 
 Input:
     loo_index_residuals.csv   (from compute_loo_index.py)
