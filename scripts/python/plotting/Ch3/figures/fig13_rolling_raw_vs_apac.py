@@ -307,7 +307,7 @@ fig.legend(handles=legend_elements,
            loc="lower center", bbox_to_anchor=(0.5, 0.01),
            ncol=6, fontsize=8.5, frameon=False)
 
-outpath = os.path.join(OUTPUT_DIR, "fig14_rolling_raw_vs_apac.png")
+outpath = os.path.join(OUTPUT_DIR, "fig13_rolling_raw_vs_apac.png")
 fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
 print(f"\nFigure saved: {outpath}")

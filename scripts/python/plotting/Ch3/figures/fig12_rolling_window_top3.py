@@ -248,7 +248,7 @@ for _, row in top_pairs.iterrows():
 
 # Save
 all_df = pd.concat(all_results)
-all_df.to_csv(os.path.join(OUTPUT_DIR, "fig13_rolling_window_top3.csv"), index=False)
+all_df.to_csv(os.path.join(OUTPUT_DIR, "fig12_rolling_window_top3.csv"), index=False)
 print(f"\nSaved rolling results: {len(all_df)} rows")
 
 # =============================================================================
@@ -397,7 +397,7 @@ fig.legend(handles=legend_elements,
            loc="lower center", bbox_to_anchor=(0.5, 0.01),
            ncol=6, fontsize=8.5, frameon=False)
 
-outpath = os.path.join(OUTPUT_DIR, "fig13_rolling_window_top3.png")
+outpath = os.path.join(OUTPUT_DIR, "fig12_rolling_window_top3.png")
 fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
 print(f"Figure saved: {outpath}")
@@ -430,8 +430,8 @@ for p in pair_data:
 
 GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
 figures = [
-    os.path.join(OUTPUT_DIR, "fig13_rolling_window_top3.png"),
-    os.path.join(OUTPUT_DIR, "fig13_rolling_window_top3.csv"),
+    os.path.join(OUTPUT_DIR, "fig12_rolling_window_top3.png"),
+    os.path.join(OUTPUT_DIR, "fig12_rolling_window_top3.csv"),
 ]
 
 print(f"\nSyncing to {GDRIVE_DEST}")

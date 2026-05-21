@@ -185,7 +185,7 @@ for var_label, var_col, outfile_suffix in [
 
     # ── Save ──────────────────────────────────────────────────────────────────
     outfile = os.path.join(OUTPUT_DIR,
-                           f"fig_monthly_lag_correlations_{outfile_suffix}.png")
+                           f"fig11_monthly_lag_correlations_{outfile_suffix}.png")
     fig.savefig(outfile, dpi=300, bbox_inches="tight", facecolor="white")
     print(f"Saved → {outfile}")
     plt.close()
