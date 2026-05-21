@@ -1,68 +1,127 @@
 """
-rolling_window_correlations.py
+rolling_window_correlations.py  (v2 — updated May 2026)
 
-Computes rolling window Pearson correlations between APAC phase/amplitude
-anomalies and atmospheric indices to test whether atmospheric sensitivity
-of the Antarctic sea ice seasonal cycle has changed over time.
+Computes 15-year rolling Pearson correlations between APAC phase/amplitude
+anomalies and atmospheric indices to test stationarity of atmosphere-ice
+relationships.
 
-This is the key analysis for Chapter 3, Option 3:
-"Has the sensitivity of the Antarctic sea ice seasonal cycle to
-atmospheric variability changed in recent decades?"
-
-APPROACH:
-- For a sliding window of W years, compute r between a chosen index and
-  a chosen APAC variable
-- Plot r as a function of the window centre year
-- A declining r after 2016 is evidence of weakening atmospheric control
-- The full-record r is shown as a horizontal reference line
+CHANGES FROM v1:
+- YEAR_MAX updated to 2025
+- Pairs now selected automatically: top 3 per sector from correlations_output.csv
+  ranked by: (1) survived any FDR method, then (2) absolute Pearson r
+- ADV/RET shoulder season indices included
+- 15 panels total (5 sectors × top 3)
 
 INPUTS:
-- master_index_detrended.csv  : detrended atmospheric indices (from main script)
-- annual_params.csv           : APAC phase and amplitude anomalies by sector
+  correlations_output.csv     — 700 pairs with FDR flags
+  annual_params.csv           — APAC phase and amplitude anomalies by sector
+  master_index_detrended.csv  — detrended indices including ADV/RET seasons
 
 OUTPUTS:
-- rolling_window_correlations.png  : main proposal figure (3 panels)
-- rolling_window_all.csv           : full rolling window results table
-
-Author: generated for Frida A. Perez dissertation Chapter 3
+  rolling_window_top3.png     — 15-panel figure (5 sectors × 3 pairs)
+  rolling_window_top3.csv     — full rolling window results
 """
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from scipy import stats
 import os
+import subprocess
 
 # =============================================================================
-# 0. PATHS — update these to match your directory structure
+# 0. PATHS
 # =============================================================================
 
 FIGURES_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures/"
-ANNUAL_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/annual_params.csv"
-INDEX_CSV   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/master_index_detrended.csv"
+DATA_DIR    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/"
 OUTPUT_DIR  = FIGURES_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-YEAR_MIN = 1979
-YEAR_MAX = 2023
-REGIME_SHIFT_YEAR = 2016  # vertical line marking the post-2016 period
+ANNUAL_CSV  = os.path.join(DATA_DIR, "annual_params.csv")
+INDEX_CSV   = os.path.join(DATA_DIR, "master_index_detrended.csv")
+CORR_CSV    = os.path.join(DATA_DIR, "correlations_output.csv")
+
+YEAR_MIN          = 1979
+YEAR_MAX          = 2025
+REGIME_SHIFT_YEAR = 2016
+WINDOW            = 15
+TOP_N             = 3   # pairs per sector
 
 # =============================================================================
 # 1. LOAD DATA
 # =============================================================================
 
 print("Loading data...")
-
-# Detrended atmospheric indices (saved by main correlations script)
-idx = pd.read_csv(INDEX_CSV)
-print(f"  Index table: {idx.shape} — years {idx['Year'].min()}–{idx['Year'].max()}")
-
-# APAC annual parameters — phase and amplitude anomalies by sector
+idx    = pd.read_csv(INDEX_CSV)
 annual = pd.read_csv(ANNUAL_CSV)
-annual = annual[annual["Year"].between(YEAR_MIN, YEAR_MAX)]
+corrs  = pd.read_csv(CORR_CSV)
 
-# Map sector column names to readable labels
+annual = annual[annual["Year"].between(YEAR_MIN, YEAR_MAX)]
+print(f"  Index:   {idx.shape}  years {idx['Year'].min()}–{idx['Year'].max()}")
+print(f"  Annual:  {annual.shape}")
+print(f"  Corrs:   {corrs.shape}")
+
+# =============================================================================
+# 2. SELECT TOP-3 PAIRS PER SECTOR
+# =============================================================================
+# Ranking logic:
+#   1. Survived any FDR method (boot_sig OR perm_sig OR pearson_sig) — True first
+#   2. Within each tier, rank by absolute Pearson r descending
+#   Take top 3 per sector
+
+print("\nSelecting top-3 pairs per sector...")
+
+# Derive any_fdr flag (sig column is empty in the CSV)
+for col in ["boot_sig", "perm_sig", "pearson_sig"]:
+    corrs[col] = corrs[col].astype(str).str.strip().str.lower() == "true"
+
+corrs["any_fdr"]  = corrs["boot_sig"] | corrs["perm_sig"] | corrs["pearson_sig"]
+corrs["abs_r"]    = corrs["pearson_r"].abs()
+
+# Sort: any_fdr descending (True=1 > False=0), then abs_r descending
+corrs_sorted = corrs.sort_values(
+    ["sector_label", "any_fdr", "abs_r"],
+    ascending=[True, False, False]
+)
+
+top_pairs = (
+    corrs_sorted
+    .groupby("sector_label", sort=False)
+    .head(TOP_N)
+    .reset_index(drop=True)
+)
+
+print(f"\nSelected {len(top_pairs)} pairs:")
+print(top_pairs[["sector_label", "variable", "var_type", "index", "season",
+                  "pearson_r", "any_fdr"]].to_string(index=False))
+
+# =============================================================================
+# 3. SECTOR COLOURS
+# =============================================================================
+
+SECTOR_COLORS = {
+    "Weddell":         "#2196F3",
+    "ABS":             "#F44336",
+    "Ross":            "#4CAF50",
+    "East Antarctica": "#FF9800",
+    "King Haakon":     "#9C27B0",
+}
+
+# =============================================================================
+# 4. DETREND APAC VARIABLES
+# =============================================================================
+
+def detrend_series(x, y):
+    mask = ~np.isnan(y)
+    if mask.sum() < 5:
+        return y
+    slope, intercept, _, _, _ = stats.linregress(x[mask], y[mask])
+    return y - (slope * x + intercept)
+
 SECTORS = {
     "SIE_Weddell":                 "Weddell",
     "SIE_Amundsen_Bellingshausen": "ABS",
@@ -71,287 +130,262 @@ SECTORS = {
     "SIE_King_Haakon":             "King Haakon",
 }
 
-# =============================================================================
-# 2. DETREND APAC VARIABLES
-# =============================================================================
-# We detrend here as well to match what the main script does.
-# Even though the master index CSV is already detrended, the APAC annual
-# params need to be detrended separately.
-
-def detrend_series(x, y):
-    """
-    Remove linear trend from y as a function of x.
-    Returns detrended y values.
-
-    This isolates interannual variability by removing the long-term
-    linear drift — necessary so that shared trends don't produce
-    spurious correlations.
-    """
-    mask = ~np.isnan(y)
-    if mask.sum() < 5:
-        return y
-    slope, intercept, _, _, _ = stats.linregress(x[mask], y[mask])
-    return y - (slope * x + intercept)
-
-
-# Detrend phase and amplitude for each sector
 annual_dt = []
 for sec_col, sec_label in SECTORS.items():
     sec = annual[annual["sector"] == sec_col].copy().sort_values("Year")
-    x = sec["Year"].values.astype(float)
-    for var in ["max_doy_anom", "amplitude_anom"]:
-        sec[var] = detrend_series(x, sec[var].values.astype(float))
+    x   = sec["Year"].values.astype(float)
+    for var in ["max_doy_anom", "amplitude_anom",
+                "max_doy_raw_anom", "amplitude_raw_anom"]:
+        if var in sec.columns:
+            sec[var] = detrend_series(x, sec[var].values.astype(float))
     annual_dt.append(sec)
-annual_dt = pd.concat(annual_dt)
 
-print("Detrending complete")
+annual_dt = pd.concat(annual_dt)
+print("\nDetrending complete")
 
 # =============================================================================
-# 3. ROLLING WINDOW CORRELATION FUNCTION
+# 5. ROLLING CORRELATION FUNCTIONS
 # =============================================================================
 
 def rolling_corr(apac_df, sector_col, apac_var, idx_df, idx_col,
-                 window=15, year_min=YEAR_MIN, year_max=YEAR_MAX):
-    """
-    Compute Pearson r in a sliding window of W years.
-
-    HOW IT WORKS:
-    For each centre year t, we take years [t - W//2, t + W//2] and compute
-    the correlation between the APAC variable and the atmospheric index
-    within that window. The result is a time series of r values showing
-    how the relationship has evolved.
-
-    Parameters:
-        apac_df    : DataFrame with APAC annual parameters (detrended)
-        sector_col : sector column name e.g. "SIE_East_Antarctica"
-        apac_var   : "max_doy_anom" (phase) or "amplitude_anom"
-        idx_df     : DataFrame with detrended atmospheric indices
-        idx_col    : index column name e.g. "SAM_annual"
-        window     : number of years in each window (default 15)
-
-    Returns:
-        DataFrame with columns: centre_year, r, p, n
-    """
-    half = window // 2
+                 window=WINDOW):
+    half     = window // 2
     sec_data = apac_df[apac_df["sector"] == sector_col][["Year", apac_var]].dropna()
 
     results = []
-    for centre in range(year_min + half, year_max - half + 1):
-        yr_start = centre - half
-        yr_end   = centre + half
-
-        # Slice the window
-        sec_win = sec_data[sec_data["Year"].between(yr_start, yr_end)]
-        idx_win = idx_df[idx_df["Year"].between(yr_start, yr_end)][["Year", idx_col]].dropna()
-
-        # Merge on year — only keep years where both variables have data
-        merged = sec_win.merge(idx_win, on="Year", how="inner").dropna()
-
+    for centre in range(YEAR_MIN + half, YEAR_MAX - half + 1):
+        sec_win = sec_data[sec_data["Year"].between(centre - half, centre + half)]
+        idx_win = idx_df[idx_df["Year"].between(centre - half, centre + half)][["Year", idx_col]].dropna()
+        merged  = sec_win.merge(idx_win, on="Year", how="inner").dropna()
         if len(merged) < 8:
-            # Skip windows with too few data points for a meaningful test
             continue
-
         r, p = stats.pearsonr(merged[idx_col].values, merged[apac_var].values)
         results.append({
             "centre_year": centre,
-            "r":           round(r, 3),
-            "p":           round(p, 4),
-            "n":           len(merged),
-            "sig":         "*" if p < 0.05 else ("." if p < 0.10 else ""),
+            "r":  round(r, 3),
+            "p":  round(p, 4),
+            "n":  len(merged),
+            "sig": "*" if p < 0.05 else ("." if p < 0.10 else ""),
         })
-
     return pd.DataFrame(results)
 
 
 def full_record_corr(apac_df, sector_col, apac_var, idx_df, idx_col):
-    """
-    Compute the full-record Pearson r for reference on the rolling plot.
-    Returns (r, p).
-    """
     sec_data = apac_df[apac_df["sector"] == sector_col][["Year", apac_var]].dropna()
-    merged = sec_data.merge(idx_df[["Year", idx_col]].dropna(), on="Year", how="inner").dropna()
+    merged   = sec_data.merge(idx_df[["Year", idx_col]].dropna(), on="Year", how="inner").dropna()
     if len(merged) < 5:
         return np.nan, np.nan
     r, p = stats.pearsonr(merged[idx_col].values, merged[apac_var].values)
     return round(r, 3), round(p, 4)
 
-
 # =============================================================================
-# 4. DEFINE PAIRS TO PLOT
-# =============================================================================
-# These are the three physically motivated pairs from the main analysis:
-#
-# Panel 1: SAM annual ~ EA amplitude (r=0.47 full record)
-#   → SAM+ strengthens westerlies → Ekman transport → more ice grows
-#   → If sensitivity is weakening, this r should decline post-2016
-#
-# Panel 2: ZW3R annual ~ Ross amplitude (r=-0.41 full record)
-#   → ZW3 controls cold air export from Ross → sets amplitude
-#   → Ross amplitude most affected by post-2016 ocean warming
-#
-# Panel 3: ASL DJF ~ ABS phase (r=-0.36 full record)
-#   → Deep ASL drives early retreat timing in ABS
-#   → Phase is still atmospherically forced — expect r to remain stable
-
-PAIRS = [
-    {
-        "sector_col":  "SIE_East_Antarctica",
-        "sector_label": "East Antarctica",
-        "apac_var":    "amplitude_anom",
-        "apac_label":  "Amplitude anomaly",
-        "idx_col":     "SAM_annual",
-        "idx_label":   "SAM annual",
-        "color":       "#185FA5",   # blue
-        "hypothesis":  "Expect decline post-2016 if amplitude decoupling",
-    },
-    {
-        "sector_col":  "SIE_Ross",
-        "sector_label": "Ross",
-        "apac_var":    "amplitude_anom",
-        "apac_label":  "Amplitude anomaly",
-        "idx_col":     "ZW3R_annual",
-        "idx_label":   "ZW3 annual",
-        "color":       "#1D9E75",   # teal
-        "hypothesis":  "Expect decline post-2016 if ocean dominates Ross",
-    },
-    {
-        "sector_col":  "SIE_Amundsen_Bellingshausen",
-        "sector_label": "ABS",
-        "apac_var":    "max_doy_anom",
-        "apac_label":  "Phase anomaly",
-        "idx_col":     "ASL_DJF",
-        "idx_label":   "ASL DJF",
-        "color":       "#D85A30",   # coral
-        "hypothesis":  "Expect stability — phase still atmospherically forced",
-    },
-]
-
-WINDOW = 15  # 15 years — tighter CI bands, last window centre at 2016
-
-# =============================================================================
-# 5. COMPUTE ROLLING CORRELATIONS
+# 6. COMPUTE ROLLING CORRELATIONS FOR ALL TOP PAIRS
 # =============================================================================
 
-print(f"\nComputing rolling window correlations (window = {WINDOW} years)...")
+# Map var_type from corrs CSV to actual column in annual_params
+VAR_MAP = {
+    "amplitude_apac": "amplitude_anom",
+    "amplitude_raw":  "amplitude_raw_anom",
+    "phase_apac":     "max_doy_anom",
+    "phase_raw":      "max_doy_raw_anom",
+}
+
+# Build index column name from index + season
+# e.g. index="SAM", season="ADV" → "SAM_ADV"
+#      index="Nino34", season="annual" → "Nino34_annual"
+def make_idx_col(index, season):
+    return f"{index}_{season}"
+
+print(f"\nComputing rolling correlations (window={WINDOW} yr, YEAR_MAX={YEAR_MAX})...")
 all_results = []
+pair_data   = []
 
-for pair in PAIRS:
-    df = rolling_corr(
-        annual_dt, pair["sector_col"], pair["apac_var"],
-        idx, pair["idx_col"], window=WINDOW
-    )
-    df["sector"]     = pair["sector_label"]
-    df["apac_var"]   = pair["apac_label"]
-    df["index"]      = pair["idx_col"]
-    df["idx_label"]  = pair["idx_label"]
-    df["color"]      = pair["color"]
-    pair["rolling"]  = df
+for _, row in top_pairs.iterrows():
+    sec_col    = row["sector"]
+    sec_label  = row["sector_label"]
+    apac_var   = VAR_MAP.get(row["var_type"], "amplitude_anom")
+    idx_col    = make_idx_col(row["index"], row["season"])
+    r_full_csv = row["pearson_r"]
+    any_fdr    = row["any_fdr"]
 
-    r_full, p_full = full_record_corr(
-        annual_dt, pair["sector_col"], pair["apac_var"],
-        idx, pair["idx_col"]
-    )
-    pair["r_full"] = r_full
-    pair["p_full"] = p_full
+    if idx_col not in idx.columns:
+        print(f"  SKIP — {idx_col} not in index CSV")
+        continue
+    if apac_var not in annual_dt.columns:
+        print(f"  SKIP — {apac_var} not in annual CSV")
+        continue
+
+    df = rolling_corr(annual_dt, sec_col, apac_var, idx, idx_col)
+    if df.empty:
+        print(f"  SKIP — no windows for {sec_label} {apac_var} ~ {idx_col}")
+        continue
+
+    r_full, p_full = full_record_corr(annual_dt, sec_col, apac_var, idx, idx_col)
+
+    df["sector"]    = sec_label
+    df["apac_var"]  = apac_var
+    df["idx_col"]   = idx_col
     all_results.append(df)
 
-    print(f"  {pair['sector_label']} {pair['apac_label']} ~ {pair['idx_label']}: "
-          f"full r={r_full}, p={p_full}, {len(df)} windows")
+    pair_data.append({
+        "sec_col":    sec_col,
+        "sec_label":  sec_label,
+        "apac_var":   apac_var,
+        "idx_col":    idx_col,
+        "var_type":   row["var_type"],
+        "season":     row["season"],
+        "r_full":     r_full,
+        "p_full":     p_full,
+        "r_full_csv": r_full_csv,
+        "any_fdr":    any_fdr,
+        "color":      SECTOR_COLORS.get(sec_label, "#666666"),
+        "rolling":    df,
+    })
 
-# Save full results
+    fdr_tag = "FDR✓" if any_fdr else "    "
+    print(f"  {fdr_tag} {sec_label:<18} {apac_var:<22} ~ {idx_col:<18}  "
+          f"full r={r_full:+.3f}  {len(df)} windows")
+
+# Save
 all_df = pd.concat(all_results)
-all_df.to_csv(os.path.join(OUTPUT_DIR, "rolling_window_all.csv"), index=False)
-print(f"\nRolling window results saved: {len(all_df)} rows")
+all_df.to_csv(os.path.join(OUTPUT_DIR, "rolling_window_top3.csv"), index=False)
+print(f"\nSaved rolling results: {len(all_df)} rows")
 
 # =============================================================================
-# 6. FIGURE
+# 7. FIGURE — 15 panels arranged as 5 rows × 3 columns (one row per sector)
 # =============================================================================
-# Three-panel figure showing rolling window r over time for each pair.
-# Layout:
-#   - Each panel: rolling r (coloured line) + full-record r (dashed)
-#   - Shaded region: post-2016 period (the new regime)
-#   - Horizontal zero line for reference
-#   - Significance markers where p < 0.05
+# Layout: rows = sectors (Weddell, ABS, Ross, EA, KH)
+#         cols = rank 1, 2, 3 within sector
+# Each panel: rolling r line + CI band + full-record dashed + 2016 marker
 
 print("\nGenerating figure...")
 
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
+sector_order = ["Weddell", "ABS", "Ross", "East Antarctica", "King Haakon"]
+n_rows = len(sector_order)
+n_cols = TOP_N
 
-n_panels = len(PAIRS)
-fig, axes = plt.subplots(n_panels, 1, figsize=(11, 3.2 * n_panels), sharex=True)
-fig.subplots_adjust(hspace=0.12, top=0.94, bottom=0.08, left=0.08, right=0.97)
+fig, axes = plt.subplots(n_rows, n_cols,
+                          figsize=(5.5 * n_cols, 3.2 * n_rows),
+                          sharex=True)
+fig.subplots_adjust(hspace=0.18, wspace=0.12,
+                    top=0.94, bottom=0.09, left=0.07, right=0.98)
 
-for ax, pair in zip(axes, PAIRS):
-    df     = pair["rolling"]
-    r_full = pair["r_full"]
-    color  = pair["color"]
-    n_win  = df["n"].values  # number of data points in each window
+# Index pair_data by sector for easy lookup
+from collections import defaultdict
+sector_pairs = defaultdict(list)
+for p in pair_data:
+    sector_pairs[p["sec_label"]].append(p)
 
-    # --- Post-2016 shaded region ---
-    ax.axvspan(REGIME_SHIFT_YEAR, YEAR_MAX + 1, alpha=0.08,
-               color="#E24B4A", zorder=0)
+for row_i, sec_label in enumerate(sector_order):
+    pairs_this_sector = sector_pairs.get(sec_label, [])
 
-    # --- Zero reference line ---
-    ax.axhline(0, color="#888780", linewidth=0.5,
-               linestyle="-", alpha=0.4, zorder=1)
+    for col_i in range(n_cols):
+        ax = axes[row_i, col_i]
 
-    # --- Full-record r (horizontal dashed line) ---
-    ax.axhline(r_full, color=color, linewidth=1.2, linestyle="--",
-               alpha=0.55, zorder=2)
+        if col_i >= len(pairs_this_sector):
+            ax.set_visible(False)
+            continue
 
-    # --- Confidence interval band around rolling r ---
-    # Formula: 95% CI for r = tanh(arctanh(r) ± 1.96 / sqrt(n-3))
-    # This uses the Fisher z-transformation which stabilises the variance of r
-    # and makes the CI approximately normal.
-    # n here is the effective window size — we use actual n per window.
-    r_vals = df["r"].values
-    ci_lower = np.full_like(r_vals, np.nan)
-    ci_upper = np.full_like(r_vals, np.nan)
-    for i, (r_i, n_i) in enumerate(zip(r_vals, n_win)):
-        if n_i > 4 and not np.isnan(r_i):
-            # Fisher z-transform
-            z_i = np.arctanh(np.clip(r_i, -0.9999, 0.9999))
-            se  = 1.0 / np.sqrt(n_i - 3)
-            ci_lower[i] = np.tanh(z_i - 1.96 * se)
-            ci_upper[i] = np.tanh(z_i + 1.96 * se)
+        pair   = pairs_this_sector[col_i]
+        df     = pair["rolling"]
+        r_full = pair["r_full"]
+        color  = pair["color"]
+        n_win  = df["n"].values
 
-    ax.fill_between(df["centre_year"], ci_lower, ci_upper,
-                    color=color, alpha=0.12, zorder=2, label="95% CI")
+        # Post-2016 shade
+        ax.axvspan(REGIME_SHIFT_YEAR, YEAR_MAX + 1,
+                   alpha=0.08, color="#E24B4A", zorder=0)
 
-    # --- Rolling r line ---
-    ax.plot(df["centre_year"], df["r"], color=color, linewidth=2.0,
-            zorder=3)
+        # Zero line
+        ax.axhline(0, color="#888780", linewidth=0.5,
+                   linestyle="-", alpha=0.4, zorder=1)
 
-    # --- Significance markers ---
-    sig    = df[df["sig"] == "*"]
-    nonsig = df[df["sig"] != "*"]
-    ax.scatter(sig["centre_year"], sig["r"], color=color, s=30,
-               zorder=4, alpha=0.85)
-    ax.scatter(nonsig["centre_year"], nonsig["r"], color=color, s=20,
-               zorder=4, alpha=0.4, facecolors="none",
-               edgecolors=color, linewidths=0.8)
+        # Full-record r
+        if not np.isnan(r_full):
+            ax.axhline(r_full, color=color, linewidth=1.2,
+                       linestyle="--", alpha=0.55, zorder=2)
 
-    # --- Axis formatting ---
-    ax.set_ylim(-0.90, 0.90)
-    ax.set_yticks([-0.6, -0.3, 0, 0.3, 0.6])
-    ax.set_ylabel("Pearson r", fontsize=10)
-    ax.tick_params(labelsize=9)
-    ax.spines[["top", "right"]].set_visible(False)
+        # 95% CI band (Fisher z)
+        r_vals   = df["r"].values
+        ci_lower = np.full_like(r_vals, np.nan)
+        ci_upper = np.full_like(r_vals, np.nan)
+        for i, (r_i, n_i) in enumerate(zip(r_vals, n_win)):
+            if n_i > 4 and not np.isnan(r_i):
+                z_i        = np.arctanh(np.clip(r_i, -0.9999, 0.9999))
+                se         = 1.0 / np.sqrt(n_i - 3)
+                ci_lower[i] = np.tanh(z_i - 1.96 * se)
+                ci_upper[i] = np.tanh(z_i + 1.96 * se)
 
-    # --- Panel label — bottom left, clear of data in most panels ---
-    panel_title = (f"{pair['sector_label']} {pair['apac_label'].lower()} "
-                   f"~ {pair['idx_label']}")
-    ax.text(0.01, 0.05, panel_title, transform=ax.transAxes,
-            fontsize=9, fontweight="bold", va="bottom",
-            color=color, clip_on=False)
+        ax.fill_between(df["centre_year"], ci_lower, ci_upper,
+                        color=color, alpha=0.12, zorder=2)
 
-# --- Legend on last panel, outside axes at bottom ---
+        # Rolling r line
+        ax.plot(df["centre_year"], df["r"],
+                color=color, linewidth=2.0, zorder=3)
+
+        # Significance markers
+        sig    = df[df["sig"] == "*"]
+        nonsig = df[df["sig"] != "*"]
+        ax.scatter(sig["centre_year"],    sig["r"],
+                   color=color, s=28, zorder=4, alpha=0.85)
+        ax.scatter(nonsig["centre_year"], nonsig["r"],
+                   color=color, s=18, zorder=4, alpha=0.4,
+                   facecolors="none", edgecolors=color, linewidths=0.8)
+
+        # FDR badge
+        if pair["any_fdr"]:
+            ax.text(0.98, 0.95, "FDR✓",
+                    transform=ax.transAxes, fontsize=7,
+                    color=color, alpha=0.7, ha="right", va="top",
+                    fontweight="bold")
+
+        # Panel label
+        season_tag = f" [{pair['season']}]" if pair["season"] != "annual" else ""
+        var_short  = "amp" if "amplitude" in pair["apac_var"] else "phase"
+        panel_lbl  = f"{sec_label} {var_short} ~ {pair['idx_col']}{season_tag}"
+        ax.text(0.02, 0.05, panel_lbl,
+                transform=ax.transAxes, fontsize=8,
+                fontweight="bold", va="bottom",
+                color=color, clip_on=False)
+
+        # Full-record r annotation
+        if not np.isnan(r_full):
+            ax.text(0.98, 0.05, f"r={r_full:+.2f}",
+                    transform=ax.transAxes, fontsize=7.5,
+                    ha="right", va="bottom", color=color, alpha=0.8)
+
+        # Axes formatting
+        ax.set_ylim(-0.95, 0.95)
+        ax.set_yticks([-0.6, -0.3, 0, 0.3, 0.6])
+        ax.tick_params(labelsize=8)
+        ax.spines[["top", "right"]].set_visible(False)
+
+        if col_i == 0:
+            ax.set_ylabel("Pearson r", fontsize=9)
+        if row_i == n_rows - 1:
+            ax.set_xlabel("Window centre year", fontsize=9)
+            ax.set_xticks(range(1990, 2022, 5))
+            ax.set_xlim(YEAR_MIN + WINDOW // 2 - 1,
+                        YEAR_MAX - WINDOW // 2 + 1)
+
+        # Column header (rank label) on top row
+        if row_i == 0:
+            ax.set_title(f"Rank {col_i + 1}", fontsize=9,
+                         color="#5F5E5A", pad=4)
+
+# Overall title
+fig.suptitle(
+    f"Stationarity of atmosphere–sea ice relationships: "
+    f"top-{TOP_N} pairs per sector ({WINDOW}-yr rolling Pearson r, {YEAR_MIN}–{YEAR_MAX})",
+    fontsize=11, fontweight="bold", y=0.97
+)
+
+# Shared legend
 legend_elements = [
     Line2D([0], [0], color="gray", linewidth=2,
            label=f"{WINDOW}-yr rolling r"),
-    Line2D([0], [0], color="gray", linewidth=1.2, linestyle="--",
-           label="Full-record r"),
+    Line2D([0], [0], color="gray", linewidth=1.2,
+           linestyle="--", label="Full-record r"),
     Patch(facecolor="gray", alpha=0.2, label="95% CI"),
     Line2D([0], [0], marker="o", color="gray", markersize=5,
            linewidth=0, label="p < 0.05"),
@@ -359,59 +393,45 @@ legend_elements = [
            linewidth=0, markerfacecolor="none", label="p ≥ 0.05"),
     Patch(facecolor="#E24B4A", alpha=0.15, label="Post-2016"),
 ]
-axes[-1].legend(handles=legend_elements,
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.22),
-                ncol=3, fontsize=8.5, frameon=False)
+fig.legend(handles=legend_elements,
+           loc="lower center", bbox_to_anchor=(0.5, 0.01),
+           ncol=6, fontsize=8.5, frameon=False)
 
-# --- X axis ---
-axes[-1].set_xlabel("Window centre year", fontsize=10)
-axes[-1].set_xlim(YEAR_MIN + WINDOW // 2 - 1, YEAR_MAX - WINDOW // 2 + 1)
-axes[-1].set_xticks(range(1990, 2020, 5))
-
-# --- Overall title ---
-fig.suptitle("", fontsize=11)
-
-# Output to Ch3/figures
-outpath = os.path.join(OUTPUT_DIR, "rolling_window_correlations.png")
+outpath = os.path.join(OUTPUT_DIR, "rolling_window_top3.png")
 fig.savefig(outpath, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
 print(f"Figure saved: {outpath}")
 
 # =============================================================================
-# 7. SUMMARY TABLE — pre vs post 2016
+# 8. SUMMARY TABLE — pre vs post 2016 mean r
 # =============================================================================
-# For each pair, compare the mean rolling r before and after 2016
-# This gives a quantitative summary of how much each relationship has changed
 
-print("\n=== Rolling window summary: pre vs post 2016 ===")
-print(f"  Using window end year (centre + {WINDOW//2}) to define pre/post 2016")
-print(f"{'Pair':<45} {'Pre-2016 mean r':>15} {'Post-2016 mean r':>16} {'Change':>8}")
-print("-" * 90)
+print(f"\n=== Pre vs post-{REGIME_SHIFT_YEAR} rolling r ===")
+half = WINDOW // 2
+print(f"{'Pair':<55} {'Pre mean r':>10} {'Post mean r':>11} {'Change':>8} {'FDR':>5}")
+print("-" * 95)
 
-for pair in PAIRS:
-    df = pair["rolling"].copy()
-    # Use window end year = centre + half window
-    df["end_year"] = df["centre_year"] + WINDOW // 2
-    pre  = df[df["end_year"] <= REGIME_SHIFT_YEAR]["r"].mean()
-    post = df[df["end_year"] >  REGIME_SHIFT_YEAR]["r"].mean()
-    label = (f"{pair['sector_label']} {pair['apac_label'].lower()[:3]} "
-             f"~ {pair['idx_label']}")
-    change_str = f"{post-pre:+.3f}" if not np.isnan(post) else "  n/a"
-    pre_str  = f"{pre:+.3f}"  if not np.isnan(pre)  else "   n/a"
-    post_str = f"{post:+.3f}" if not np.isnan(post) else "    n/a"
-    print(f"  {label:<43} {pre_str:>15} {post_str:>16} {change_str:>8}")
+for p in pair_data:
+    df       = p["rolling"].copy()
+    df["end_year"] = df["centre_year"] + half
+    pre      = df[df["end_year"] <= REGIME_SHIFT_YEAR]["r"].mean()
+    post     = df[df["end_year"] >  REGIME_SHIFT_YEAR]["r"].mean()
+    season_t = f"[{p['season']}]" if p["season"] != "annual" else ""
+    label    = f"{p['sec_label']} {p['apac_var'][:3]} ~ {p['idx_col']} {season_t}"
+    fdr_t    = "✓" if p["any_fdr"] else ""
+    pre_s    = f"{pre:+.3f}"  if not np.isnan(pre)  else "  n/a"
+    post_s   = f"{post:+.3f}" if not np.isnan(post) else "   n/a"
+    chg_s    = f"{post-pre:+.3f}" if (not np.isnan(pre) and not np.isnan(post)) else "  n/a"
+    print(f"  {label:<53} {pre_s:>10} {post_s:>11} {chg_s:>8} {fdr_t:>5}")
 
 # =============================================================================
-# SYNC TO GOOGLE DRIVE
+# 9. SYNC TO GOOGLE DRIVE
 # =============================================================================
-import subprocess
 
 GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
-
 figures = [
-    os.path.join(OUTPUT_DIR, "rolling_window_correlations.png"),
-    os.path.join(OUTPUT_DIR, "rolling_window_all.csv"),
+    os.path.join(OUTPUT_DIR, "rolling_window_top3.png"),
+    os.path.join(OUTPUT_DIR, "rolling_window_top3.csv"),
 ]
 
 print(f"\nSyncing to {GDRIVE_DEST}")
@@ -422,8 +442,7 @@ for fpath in figures:
             capture_output=True, text=True
         )
         fname = os.path.basename(fpath)
-        if result.returncode == 0:
-            print(f"  ✓ {fname}")
-        else:
-            print(f"  ✗ {fname}: {result.stderr.strip()}")
-print("Sync complete.")
+        status = "✓" if result.returncode == 0 else f"✗ {result.stderr.strip()}"
+        print(f"  {status} {fname}")
+
+print("\nDone.")
