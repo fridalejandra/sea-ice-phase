@@ -280,10 +280,17 @@ for ax in axes[-1, :]:
 
 # Title
 fig.suptitle(
-    f"Raw vs APAC rolling correlations: selected pairs ({WINDOW}-yr Pearson r, {YEAR_MIN}–{YEAR_MAX})\n"
-    f"For advisor review — phase decomposition effect on atmosphere–ice relationships",
+    f"Raw vs APAC rolling correlations: selected pairs ({WINDOW}-yr Pearson r, {YEAR_MIN}–{YEAR_MAX})",
     fontsize=10, fontweight="bold", y=0.97
 )
+
+# Panel letters
+letters = "abcdefghij"
+for idx_ax, ax in enumerate(axes.flat):
+    ax.text(-0.01, 1.02, f"({letters[idx_ax]})",
+            transform=ax.transAxes, fontsize=9,
+            fontweight="bold", va="bottom", ha="right",
+            color="#333333")
 
 # Legend
 legend_elements = [
@@ -331,3 +338,19 @@ for pair in PAIRS:
     print()
 
 print("Done.")
+
+# =============================================================================
+# 7. SYNC TO GOOGLE DRIVE
+# =============================================================================
+import subprocess
+
+GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
+print(f"\nSyncing to {GDRIVE_DEST}")
+result = subprocess.run(
+    ["rclone", "copy", outpath, GDRIVE_DEST],
+    capture_output=True, text=True
+)
+if result.returncode == 0:
+    print(f"  ✓ fig_rolling_raw_vs_apac.png")
+else:
+    print(f"  ✗ {result.stderr.strip()}")
