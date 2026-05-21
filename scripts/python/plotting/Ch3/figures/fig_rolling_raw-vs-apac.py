@@ -39,7 +39,7 @@ INDEX_CSV  = os.path.join(DATA_DIR, "master_index_detrended.csv")
 YEAR_MIN          = 1979
 YEAR_MAX          = 2023
 REGIME_SHIFT_YEAR = 2016
-WINDOW            = 11
+WINDOW            = 10
 
 # =============================================================================
 # 1. PAIRS TO PLOT
