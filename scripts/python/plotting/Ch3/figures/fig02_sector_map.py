@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore")
 import subprocess
 
 OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures"
-GDRIVE     = "gdrive:results/Ch3_Figures/"
+GDRIVE     = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 SECTORS = {

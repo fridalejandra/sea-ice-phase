@@ -150,7 +150,7 @@ plot_single_year(
     year     = 2016,
     suptitle = ("2016 — Anomalous Decay: Phase or Amplitude?\n"
                 "Z-scored anomalies by sector  |  pre-2016 baseline"),
-    outfile  = "fig_case_study_2016_2023_a_2016.png",
+    outfile  = "fig08_case_study_2016_2023_a_2016.png",
 )
 
 print("Panel b: 2023 case study")
@@ -158,7 +158,7 @@ plot_single_year(
     year     = 2023,
     suptitle = ("2023 — Record Minimum\n"
                 "Z-scored anomalies by sector  |  pre-2016 baseline"),
-    outfile  = "fig_case_study_2016_2023_b_2023.png",
+    outfile  = "fig08_case_study_2016_2023_b_2023.png",
 )
 
 

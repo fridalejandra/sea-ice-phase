@@ -36,7 +36,7 @@ import pandas as pd
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_INPUT  = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/monthly_cross_correlations.csv")
 DEFAULT_OUTDIR = pathlib.Path("/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures")
-GDRIVE_DEST    = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+GDRIVE_DEST    = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 
 # ── Display order & styling ───────────────────────────────────────────────────
 INDEX_ORDER  = ["SAM", "ZW3R", "ASL", "Nino34"]

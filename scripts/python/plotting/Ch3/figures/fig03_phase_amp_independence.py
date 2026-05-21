@@ -151,7 +151,7 @@ print("\nFigure 1: all 5 sectors")
 draw_scatter_grid(
     sectors = SECTORS_NO_CIRC,
     figsize = (6.5, 11.0),
-    outfile = "fig_phase_amplitude_independence_all.png",
+    outfile = "fig03_phase_amplitude_independence_all.png",
 )
 
 # --- Figure 2: 3 key sectors -----------------------------------------------
@@ -164,7 +164,7 @@ KEY_SECTORS = [
 draw_scatter_grid(
     sectors = KEY_SECTORS,
     figsize = (6.5, 7.0),
-    outfile = "fig_phase_amplitude_independence_key.png",
+    outfile = "fig03_phase_amplitude_independence_key.png",
 )
 
 print("\nBoth independence figures saved.")

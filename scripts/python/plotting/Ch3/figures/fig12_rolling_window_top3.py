@@ -428,7 +428,7 @@ for p in pair_data:
 # 9. SYNC TO GOOGLE DRIVE
 # =============================================================================
 
-GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
+GDRIVE_DEST = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 figures = [
     os.path.join(OUTPUT_DIR, "fig12_rolling_window_top3.png"),
     os.path.join(OUTPUT_DIR, "fig12_rolling_window_top3.csv"),

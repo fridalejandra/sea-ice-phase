@@ -187,7 +187,7 @@ make_side_by_side_figure(
     ylabel_fitted = "Phase anomaly — APAC (days)\n← Ahead  |  Behind →",
     title_raw    = "(a)  Raw observed",
     title_fitted = "(b)  APAC fitted",
-    outfile  = "fig_phase_timeseries.png",
+    outfile  = "fig04_phase_timeseries.png",
     is_days  = True,
 )
 
@@ -200,7 +200,7 @@ make_side_by_side_figure(
     ylabel_fitted = "Amplitude anomaly — APAC (million km²)\n← Smaller  |  Larger →",
     title_raw    = "(a)  Raw observed",
     title_fitted = "(b)  APAC fitted",
-    outfile  = "fig_amplitude_timeseries.png",
+    outfile  = "fig05_amplitude_timeseries.png",
     is_days  = False,
 )
 

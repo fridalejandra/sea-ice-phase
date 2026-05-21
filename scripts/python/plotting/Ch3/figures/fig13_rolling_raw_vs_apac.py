@@ -344,7 +344,7 @@ print("Done.")
 # =============================================================================
 import subprocess
 
-GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
+GDRIVE_DEST = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 print(f"\nSyncing to {GDRIVE_DEST}")
 result = subprocess.run(
     ["rclone", "copy", outpath, GDRIVE_DEST],

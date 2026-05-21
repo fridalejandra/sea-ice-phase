@@ -29,7 +29,7 @@ warnings.filterwarnings("ignore")
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
 OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures"
-GDRIVE     = "gdrive:My Drive/sea-ice-phase/results/Ch3_Figures"
+GDRIVE     = "gdrive:sea-ice-phase/results/Ch3_Figures/"
 CORR_CSV   = os.path.join(DATA_DIR, "correlations_output.csv")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
