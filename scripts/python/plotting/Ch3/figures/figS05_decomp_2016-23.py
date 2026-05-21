@@ -55,12 +55,8 @@ PEAK_WINDOW      = 30
 # Generate panel letters (a)-(z) then (aa) etc — 30 panels max
 def make_letters(n):
     import string
-    base = list(string.ascii_lowercase)
-    extended = base + [a+b for a in base for b in base]
-    import string
-
-    letters += [a+b for a in letters for b in letters]
-    return [f"({l})" for l in extended[:n]]
+    letters = list(string.ascii_lowercase)
+    return [f"({l})" for l in letters[:n]]
 
 LETTERS_FLAT = make_letters(len(PANELS) * 3)
 
