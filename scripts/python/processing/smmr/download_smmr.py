@@ -1,33 +1,37 @@
-"""
-download_smmr.py  –  for future incremental updates only
-Downloads NSIDC-0079 granules from BASE_NC_END_DATE to TODAY.
-Before running, update BASE_NC_END_DATE in config.py to the day
-after your last downloaded granule to avoid re-downloading.
-"""
+# download_smmr.py
 
-import sys
 import earthaccess
-from config import GRANULE_DIR, BASE_NC_END_DATE, TODAY
+from datetime import datetime
 
-GRANULE_DIR.mkdir(parents=True, exist_ok=True)
-
-print(f"Downloading NSIDC-0079 granules: {BASE_NC_END_DATE} → {TODAY}")
-print(f"   Saving to: {GRANULE_DIR}\n")
-
+# === AUTHENTICATION ===
 earthaccess.login()
 
+# === CONFIG ===
+
+# Date range
+# For a full redownload from scratch use 1978-10-01
+# For incremental updates change start_date to day after last granule
+start_date = "1978-10-01"
+end_date   = datetime.today().strftime("%Y-%m-%d")
+
+# Output directory
+output_dir = "/user/geog/falejandraperez/sea-ice-phase/data/smmr/raw/"
+
+# === SEARCH ===
+
+print(f"Searching for NSIDC-0079 granules from {start_date} to {end_date}...")
 results = earthaccess.search_data(
     short_name="NSIDC-0079",
-    temporal=(BASE_NC_END_DATE, TODAY),
-    bounding_box=(-180, -90, 180, -50),
+    temporal=(start_date, end_date),
+    bounding_box=(-180, -90, 180, -50)  # Southern Hemisphere
 )
 
-if not results:
-    print(" No granules found. Check date range or earthaccess credentials.")
-    sys.exit(1)
+print(f"Found {len(results)} granules.")
 
-print(f"Found {len(results)} granules. Starting download...")
-downloaded_files = earthaccess.download(results, str(GRANULE_DIR))
+# === DOWNLOAD ===
 
-print(f"\nDownload complete. {len(downloaded_files)} files saved.")
-print(f"Update BASE_NC_END_DATE in config.py for next time!")
+import os
+os.makedirs(output_dir, exist_ok=True)
+
+downloaded = earthaccess.download(results, output_dir)
+print(f"Downloaded {len(downloaded)} granules to: {output_dir}")
