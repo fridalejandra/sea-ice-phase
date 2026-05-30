@@ -43,7 +43,7 @@ from tqdm import tqdm
 
 SENSOR_CONFIGS = {
     "SMMR": {
-        "input_file":  "/user/geog/falejandraperez/sea-ice-phase/data/merged/merged_bootstrap_SH_latest.nc",
+        "input_file":  "/user/geog/falejandraperez/sea-ice-phase/data/merged/SMMR_merged_19781101_20251231.nc",
         "conc_var":    "N07_ICECON",
         "units":       "fraction",       # 0-1
         "mask_above":  1.1,
