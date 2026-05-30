@@ -108,6 +108,7 @@ def load_sic(sensor: str) -> tuple[xr.DataArray, xr.Dataset]:
     if cfg["units"] == "percent":
         ice = ice / 100.0
     ice365 = standardize_calendar(ice, mode=FEB29_MODE)
+    ice365 = ice365.sortby("time")   # ← add this line
     return ice365, ds
 
 
