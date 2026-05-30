@@ -71,7 +71,7 @@ FS_END_MMDD    = "-09-30"
 FEB29_MODE     = "drop"
 
 # Static defaults
-THRESHOLD_LIST = [0.10, 0.15, 0.30]
+THRESHOLD_LIST = [0.15, 0.20, 0.30]   # 15% is the baseline minimum
 WINDOW_LIST    = [3, 5, 7]
 BASELINE_THR   = 0.15
 BASELINE_K     = 5
