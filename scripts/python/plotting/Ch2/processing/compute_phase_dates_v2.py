@@ -157,17 +157,15 @@ def first_run_start_vectorized(ts: xr.DataArray,
     # boolean condition: (time, y, x)
     cond = (ts >= threshold) if above else (ts <= threshold)
 
-    # trailing rolling all-True: True at position t means days [t-k+1 .. t] all meet condition
+    # trailing rolling all-True: True at position t means days [t-k+1..t] all meet condition
     roll = cond.rolling(time=k, min_periods=k).construct("window")
     sustained = roll.all("window")   # (time, y, x)
 
-    # any qualifying run?
-    any_hit = sustained.any("time")   # (y, x) bool
-
-    # argmax finds the FIRST True along time — this is the END of the first run
-    # subtract (k-1) to get the START (onset) of that run
-    end_idx = sustained.argmax("time")   # (y, x) int, 0 where no hit
-    onset_idx = (end_idx - (k - 1)).clip(min=0)
+    # shift backward by k-1 so True aligns with run START not end
+    # e.g. k=5: sustained True at index 4 (end), shift -4 -> True at index 0 (start)
+    sustained_shifted = sustained.shift(time=-(k - 1), fill_value=False)
+    any_hit   = sustained_shifted.any("time")   # (y, x) bool
+    onset_idx = sustained_shifted.argmax("time")  # directly the run start
 
     # get DOY at onset index
     time_vals = ts.time.values
@@ -295,12 +293,13 @@ def first_run_with_slope_vectorized(ts: xr.DataArray,
     else:
         slope_ok = slope < -slope_min
 
-    # valid = sustained crossing AND slope condition at that day
-    valid = sustained & slope_ok   # (time, y, x)
+    # valid = sustained crossing AND slope condition at run START
+    # shift sustained backward by k-1 so True aligns with run start not end
+    sustained_shifted = sustained.shift(time=-(k - 1), fill_value=False)
+    valid = sustained_shifted & slope_ok   # (time, y, x)
 
     any_hit   = valid.any("time")
-    end_idx   = valid.argmax("time")
-    onset_idx = (end_idx - (k - 1)).clip(min=0)
+    onset_idx = valid.argmax("time")  # directly the run start
 
     time_vals = ts.time.values
     doys = np.array([int(np.datetime64(t, 'D').astype(object).timetuple().tm_yday)
