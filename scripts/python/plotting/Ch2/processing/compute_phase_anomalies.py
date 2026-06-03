@@ -1,272 +1,210 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-Compute FS/MS climatologies and anomalies for static and dynamic methods.
+compute_phase_anomalies.py
 
-Static:
-  /results/SMMR_phase/seaice_phases_SMMR_YYYY.nc
-    - advance_YYYY -> FS_static
-    - retreat_YYYY -> MS_static
+Computes climatologies and anomalies for FS and MS phase dates,
+for both static and dynamic methods, for both SMMR and AMSR-E.
 
-Dynamic:
-  /results/static_v2_slopeH/dynamic/quantile_k5/FS/p0.7/FS_YYYY.nc
-  /results/static_v2_slopeH/dynamic/quantile_k5/MS/p0.7/MS_YYYY.nc
-    - FS or MS variable inside
+Expects input structure under data/:
+    data/
+        SMMR_phase/
+            static/thr15_k5/FS/FS_YYYY.nc
+            static/thr15_k5/MS/MS_YYYY.nc
+            dynamic/k5_q70/FS/FS_YYYY.nc
+            dynamic/k5_q70/MS/MS_YYYY.nc
+        AMSRE_phase/
+            static/thr15_k5/FS/FS_YYYY.nc
+            ...
 
-Outputs (under results/anomalies/):
+Outputs under data/anomalies/{sensor}/:
+    FS_static_thr15_k5_climatology.nc
+    FS_static_thr15_k5_anomalies.nc
+    MS_static_thr15_k5_climatology.nc
+    MS_static_thr15_k5_anomalies.nc
+    FS_dynamic_k5_q70_climatology.nc
+    ...
 
-  FS_static_climatology.nc     (FS_static_clim[y,x])
-  MS_static_climatology.nc     (MS_static_clim[y,x])  + MS_static_clim_dsa[y,x]
-  FS_dynamic_climatology.nc
-  MS_dynamic_climatology.nc    (MS_dynamic_clim[y,x]) + MS_dynamic_clim_dsa[y,x]
-
-  FS_static_anomalies.nc       (FS_static_anom[year,y,x])
-  MS_static_anomalies.nc       (MS_static_anom[year,y,x]) + MS_static_anom_dsa[year,y,x]
-  FS_dynamic_anomalies.nc
-  MS_dynamic_anomalies.nc      (MS_dynamic_anom[year,y,x]) + MS_dynamic_anom_dsa[year,y,x]
-
-Notes:
-- FS climatologies/anomalies are computed in calendar DOY space (fine).
-- MS crosses the year boundary, so we additionally compute MS in a continuous
-  "days since Aug 15" coordinate to avoid calendar wrap artifacts.
+Usage:
+    python compute_phase_anomalies.py                        # SMMR baseline only
+    python compute_phase_anomalies.py --sensor AMSRE
+    python compute_phase_anomalies.py --sensor all
+    python compute_phase_anomalies.py --thr 15 20 30         # multiple thresholds
 """
 
 from __future__ import annotations
-
+import argparse
 from pathlib import Path
-from typing import Callable, Tuple
-
 import numpy as np
 import xarray as xr
 
-# ---------------------------------------------------------------------
+# =============================================================================
 # CONFIG
-# ---------------------------------------------------------------------
+# =============================================================================
 
-PROJECT_ROOT = Path("/user/geog/falejandraperez/sea-ice-phase")
+DATA_ROOT = Path("/user/geog/falejandraperez/sea-ice-phase/data")
 
-STATIC_DIR = PROJECT_ROOT / "results" / "SMMR_phase"
-DYN_ROOT = (
-    PROJECT_ROOT
-    / "results"
-    / "static_v2_slopeH"
-    / "dynamic"
-    / "quantile_k5"
-)
-DYN_DIR_FS = DYN_ROOT / "FS" / "p0.7"
-DYN_DIR_MS = DYN_ROOT / "MS" / "p0.7"
+SENSOR_YEARS = {
+    "SMMR":  (1979, 2025),
+    "AMSRE": (2012, 2025),
+}
 
-OUT_DIR = PROJECT_ROOT / "results" / "anomalies"
+# Static parameter combinations to process
+THRESHOLDS = [15, 20, 30]   # integer percent e.g. 15 = thr15
+WINDOWS    = [3, 5, 7]
+BASELINE_THR = 15
+BASELINE_K   = 5
 
-YEAR_START = 1980
-YEAR_END = 2023
+# Dynamic settings
+DYN_K  = 5
+DYN_Q  = 70   # 70th percentile
 
-# MS wrap anchor
-AUG15_DOY = 227  # Aug 15 (non-leap)
+# MS wrap anchor — Aug 15
+AUG15_DOY = 227
 
-# ---------------------------------------------------------------------
+# =============================================================================
 # HELPERS
-# ---------------------------------------------------------------------
+# =============================================================================
 
-def ms_to_days_since_aug15(ms_da: xr.DataArray, aug15_doy: int = AUG15_DOY) -> xr.DataArray:
-    """
-    Convert MS calendar DOY to continuous 'days since Aug 15'.
-
-    Aug 15 -> 0, Dec 31 -> ~138, Jan 1 -> ~139, Feb 28 -> ~197.
-
-    Assumes ms_da contains calendar DOY values in [1, 366] with NaNs for no-event.
-    """
-    ms_wrapped = xr.where(ms_da < aug15_doy, ms_da + 365, ms_da)
-    return ms_wrapped - aug15_doy
+def ms_to_days_since_aug15(da: xr.DataArray) -> xr.DataArray:
+    """Convert MS calendar DOY to continuous days-since-Aug-15."""
+    return xr.where(da < AUG15_DOY, da + 365, da) - AUG15_DOY
 
 
-# ---------------------------------------------------------------------
-# LOADERS
-# ---------------------------------------------------------------------
-
-def load_static_year(phase: str, year: int) -> xr.DataArray | None:
-    fpath = STATIC_DIR / f"seaice_phases_SMMR_{year}.nc"
+def load_phase_year(path: Path, varname: str, year: int) -> xr.DataArray | None:
+    fpath = path / f"{varname}_{year}.nc"
     if not fpath.exists():
-        print(f"[static] Missing file for {year}: {fpath}")
         return None
-
     ds = xr.open_dataset(fpath)
-
-    if phase == "FS":
-        var_prefix = "advance"
-    elif phase == "MS":
-        var_prefix = "retreat"
-    else:
-        ds.close()
-        raise ValueError("phase must be 'FS' or 'MS'")
-
-    varname = f"{var_prefix}_{year}"
     if varname not in ds:
-        print(f"[static] {varname} not in {fpath}; vars={list(ds.data_vars)}")
         ds.close()
         return None
-
     da = ds[varname].load()
     ds.close()
-
     if not np.any(np.isfinite(da.values)):
-        print(f"[static] All-NaN {varname} in {fpath}, skipping year {year}")
         return None
-
-    return da
-
-
-def load_dynamic_year(phase: str, year: int) -> xr.DataArray | None:
-    if phase == "FS":
-        ddir = DYN_DIR_FS
-    elif phase == "MS":
-        ddir = DYN_DIR_MS
-    else:
-        raise ValueError("phase must be 'FS' or 'MS'")
-
-    fpath = ddir / f"{phase}_{year}.nc"
-    if not fpath.exists():
-        print(f"[dynamic] Missing file for {phase} {year}: {fpath}")
-        return None
-
-    ds = xr.open_dataset(fpath)
-    if phase not in ds:
-        print(f"[dynamic] {phase} not in {fpath}; vars={list(ds.data_vars)}")
-        ds.close()
-        return None
-
-    da = ds[phase].load()
-    ds.close()
-
-    if not np.any(np.isfinite(da.values)):
-        print(f"[dynamic] All-NaN {phase} in {fpath}, skipping year {year}")
-        return None
-
-    return da
+    return da.transpose("y", "x")
 
 
-# ---------------------------------------------------------------------
-# CORE COMPUTATION
-# ---------------------------------------------------------------------
-
-def compute_series_clim_anom(
-    phase: str,
-    loader: Callable[[str, int], xr.DataArray | None],
-    year_start: int,
-    year_end: int,
-) -> Tuple[xr.DataArray, xr.DataArray, xr.DataArray | None, xr.DataArray | None]:
-    """
-    Compute climatology and anomalies for a phase.
-
-    Returns:
-      clim, anom, clim_dsa, anom_dsa
-
-    Where:
-      - clim/anom are in calendar DOY space for both FS and MS (backward compatible)
-      - clim_dsa/anom_dsa are only computed for MS (days since Aug 15), else None
-    """
-    years = list(range(year_start, year_end + 1))
-
-    arrays = []
-    valid_years = []
-
-    for y in years:
-        da = loader(phase, y)
-        if da is None:
-            continue
-
-        if "y" in da.dims and "x" in da.dims:
-            da = da.transpose("y", "x")
-
-        arrays.append(da.expand_dims(year=[y]))
-        valid_years.append(y)
-
+def build_series(path: Path, varname: str,
+                 year_start: int, year_end: int) -> xr.DataArray | None:
+    """Stack annual arrays into a (year, y, x) DataArray."""
+    arrays, years = [], []
+    for y in range(year_start, year_end + 1):
+        da = load_phase_year(path, varname, y)
+        if da is not None:
+            arrays.append(da.expand_dims(year=[y]))
+            years.append(y)
     if not arrays:
-        raise ValueError(f"No valid years found for phase={phase} with given loader.")
-
-    all_da = xr.concat(arrays, dim="year").assign_coords(year=("year", valid_years))
-
-    # Calendar DOY climatology/anomaly (kept as-is)
-    clim = all_da.mean("year", skipna=True)
-    anom = all_da - clim
-
-    # For MS only: compute continuous season-relative version
-    clim_dsa = None
-    anom_dsa = None
-    if phase == "MS":
-        all_da_dsa = ms_to_days_since_aug15(all_da)
-        clim_dsa = all_da_dsa.mean("year", skipna=True)
-        anom_dsa = all_da_dsa - clim_dsa
-
-    return clim, anom, clim_dsa, anom_dsa
+        return None
+    return xr.concat(arrays, dim="year").assign_coords(year=("year", years))
 
 
-def write_clim_anom(
-    phase: str,
-    method: str,
-    clim: xr.DataArray,
-    anom: xr.DataArray,
-    clim_dsa: xr.DataArray | None = None,
-    anom_dsa: xr.DataArray | None = None,
-) -> None:
-    """
-    Save climatology + anomalies to NetCDF in OUT_DIR.
+def compute_clim_anom(series: xr.DataArray, phase: str, tag: str,
+                      out_dir: Path) -> None:
+    """Compute and save climatology + anomalies. For MS also compute dsa version."""
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    For MS, also writes *_dsa variables (days since Aug 15).
-    """
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    clim = series.mean("year", skipna=True)
+    anom = series - clim
 
-    clim_name = f"{phase}_{method}_clim"
-    anom_name = f"{phase}_{method}_anom"
+    clim_name = f"{phase}_{tag}_clim"
+    anom_name = f"{phase}_{tag}_anom"
 
     clim_ds = clim.to_dataset(name=clim_name)
     anom_ds = anom.to_dataset(name=anom_name)
 
-    if phase == "MS" and clim_dsa is not None and anom_dsa is not None:
+    # MS: also compute days-since-Aug-15 version
+    if phase == "MS":
+        series_dsa = ms_to_days_since_aug15(series)
+        clim_dsa   = series_dsa.mean("year", skipna=True)
+        anom_dsa   = series_dsa - clim_dsa
+
         clim_ds[f"{clim_name}_dsa"] = clim_dsa
-        clim_ds[f"{clim_name}_dsa"].attrs["units"] = "days since Aug 15"
-        clim_ds[f"{clim_name}_dsa"].attrs["description"] = (
-            "Melt start in a continuous seasonal coordinate to avoid calendar year wrap artifacts"
-        )
-
+        clim_ds[f"{clim_name}_dsa"].attrs = {
+            "units": "days since Aug 15",
+            "description": "MS in continuous seasonal coordinate, avoids year-boundary wrap"
+        }
         anom_ds[f"{anom_name}_dsa"] = anom_dsa
-        anom_ds[f"{anom_name}_dsa"].attrs["units"] = "days"
-        anom_ds[f"{anom_name}_dsa"].attrs["description"] = (
-            "Anomalies of melt start computed in days-since-Aug15 space"
-        )
+        anom_ds[f"{anom_name}_dsa"].attrs = {
+            "units": "days",
+            "description": "MS anomalies in days-since-Aug-15 space"
+        }
 
-    clim_path = OUT_DIR / f"{phase}_{method}_climatology.nc"
-    anom_path = OUT_DIR / f"{phase}_{method}_anomalies.nc"
+    clim_path = out_dir / f"{phase}_{tag}_climatology.nc"
+    anom_path = out_dir / f"{phase}_{tag}_anomalies.nc"
 
-    print(f"Saving climatology -> {clim_path}")
+    print(f"  saving {clim_path.name}")
     clim_ds.to_netcdf(clim_path)
-
-    print(f"Saving anomalies   -> {anom_path}")
+    print(f"  saving {anom_path.name}")
     anom_ds.to_netcdf(anom_path)
 
 
-# ---------------------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------------------
+# =============================================================================
+# RUNNERS
+# =============================================================================
 
-def main():
-    print(f"Project root: {PROJECT_ROOT}")
-    print(f"Output dir  : {OUT_DIR}")
-    print(f"Years       : {YEAR_START}–{YEAR_END}")
-    print(f"MS wrap     : days since Aug 15 (DOY {AUG15_DOY})")
+def run_static(sensor: str, thresholds: list[int], windows: list[int]) -> None:
+    year_start, year_end = SENSOR_YEARS[sensor]
+    base = DATA_ROOT / f"{sensor}_phase" / "static"
+    out_base = DATA_ROOT / "anomalies" / sensor
 
-    for method, loader in [("static", load_static_year), ("dynamic", load_dynamic_year)]:
-        for phase in ["FS", "MS"]:
-            print(f"\n=== {phase} ({method}) ===")
-            clim, anom, clim_dsa, anom_dsa = compute_series_clim_anom(
-                phase=phase,
-                loader=loader,
-                year_start=YEAR_START,
-                year_end=YEAR_END,
-            )
-            write_clim_anom(phase, method, clim, anom, clim_dsa, anom_dsa)
+    for thr in thresholds:
+        for k in windows:
+            tag = f"static_thr{thr:02d}_k{k}"
+            print(f"\n=== {sensor} {tag} ===")
+            for phase in ["FS", "MS"]:
+                path = base / f"thr{thr:02d}_k{k}" / phase
+                series = build_series(path, phase, year_start, year_end)
+                if series is None:
+                    print(f"  no data found at {path} — skipping")
+                    continue
+                compute_clim_anom(series, phase, tag, out_base)
+
+
+def run_dynamic(sensor: str) -> None:
+    year_start, year_end = SENSOR_YEARS[sensor]
+    base = DATA_ROOT / f"{sensor}_phase" / "dynamic" / f"k{DYN_K}_q{DYN_Q}"
+    out_base = DATA_ROOT / "anomalies" / sensor
+    tag = f"dynamic_k{DYN_K}_q{DYN_Q}"
+
+    print(f"\n=== {sensor} {tag} ===")
+    for phase in ["FS", "MS"]:
+        path = base / phase
+        series = build_series(path, phase, year_start, year_end)
+        if series is None:
+            print(f"  no data found at {path} — skipping")
+            continue
+        compute_clim_anom(series, phase, tag, out_base)
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Compute FS/MS climatologies and anomalies.")
+    p.add_argument("--sensor", default="SMMR", choices=["SMMR", "AMSRE", "all"])
+    p.add_argument("--thr", type=int, nargs="+", default=THRESHOLDS)
+    p.add_argument("--windows", type=int, nargs="+", default=WINDOWS)
+    p.add_argument("--baseline-only", action="store_true",
+                   help=f"Baseline only: thr={BASELINE_THR} k={BASELINE_K}")
+    p.add_argument("--method", default="all", choices=["static", "dynamic", "all"])
+    return p.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args    = parse_args()
+    sensors = ["SMMR", "AMSRE"] if args.sensor == "all" else [args.sensor]
+    thrs    = [BASELINE_THR] if args.baseline_only else args.thr
+    wins    = [BASELINE_K]   if args.baseline_only else args.windows
+    methods = ["static", "dynamic"] if args.method == "all" else [args.method]
+
+    for sensor in sensors:
+        for method in methods:
+            if method == "static":
+                run_static(sensor, thrs, wins)
+            else:
+                run_dynamic(sensor)
+
+    print("\nDone.")
