@@ -8,6 +8,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 import os
+import subprocess
+GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
 
 # =============================================================================
 # SETTINGS
@@ -162,3 +164,12 @@ fig.subplots_adjust(hspace=0.35, wspace=0.15)
 fig.savefig(os.path.join(OUTPUT_DIR, "fig01_concept_manuscript.png"))
 plt.close(fig)
 print(f"Manuscript figure saved to {OUTPUT_DIR}fig1_concept_manuscript.png")
+
+result = subprocess.run(
+    ["rclone", "copy", os.path.join(OUTPUT_DIR, "fig1_concept_manuscript.png"), GDRIVE_DEST],
+    capture_output=True, text=True
+)
+if result.returncode == 0:
+    print("Synced to Google Drive")
+else:
+    print(f"Sync failed: {result.stderr.strip()}")
