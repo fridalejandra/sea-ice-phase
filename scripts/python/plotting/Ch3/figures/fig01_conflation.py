@@ -157,7 +157,8 @@ fig.suptitle(
     fontsize=13, fontweight="bold", y=1.01, x=0.02, ha="left"
 )
 
-fig.tight_layout(hspace=0.35, wspace=0.15)
+fig.tight_layout()
+fig.subplots_adjust(hspace=0.35, wspace=0.15)
 fig.savefig(os.path.join(OUTPUT_DIR, "fig01_concept_manuscript.png"))
 plt.close(fig)
 print(f"Manuscript figure saved to {OUTPUT_DIR}fig1_concept_manuscript.png")
