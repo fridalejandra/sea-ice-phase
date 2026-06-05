@@ -103,7 +103,7 @@ fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=True, sharey=True)
 axes = axes.flatten()
 
 YMIN = vals_c.min() - 0.1
-YMAX = vals_c.max() + 0.3
+YMAX = vals_c.max() + 0.6
 panel_labels = ["(a)", "(b)", "(c)", "(d)"]
 titles = [
     "Invariant annual cycle",
@@ -160,8 +160,8 @@ ax.annotate("",
     xytext=(peak_inv, vals_c.max() * 0.97),
     arrowprops=dict(arrowstyle="<->", color=C_ANNOT, lw=1.1)
 )
-ax.text((peak_phase + peak_inv) / 2, vals_c.max() * 0.99,
-        f"~{PHASE_SHIFT} days\nearlier",
+ax.text((peak_phase + peak_inv) / 2, vals_c.max() * 1.03,
+        f"~{PHASE_SHIFT} days earlier",
         ha="center", va="bottom", fontsize=8, color=C_ANNOT)
 
 ax.legend(fontsize=9, frameon=False, loc="lower left")
@@ -217,10 +217,10 @@ ax.annotate("",
     arrowprops=dict(arrowstyle="<->", color=C_ANNOT, lw=1.1)
 )
 ax.text((min_phase + min_amp) / 2, y_annot - 0.15,
-        "Similar minimum SIE\ndespite different mechanisms",
+        "Similar minimum SIE",
         ha="center", va="top", fontsize=8, color=C_ANNOT, style="italic")
 
-ax.legend(fontsize=9, frameon=False, loc="upper left")
+ax.legend(fontsize=9, frameon=False, loc="lower left")
 
 fig.tight_layout()
 fig.subplots_adjust(hspace=0.38, wspace=0.18)
