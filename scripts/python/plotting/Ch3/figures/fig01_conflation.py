@@ -1,38 +1,46 @@
 """
-fig01_concept_manuscript.py
+fig_concept_manuscript.py
 2x2 manuscript figure illustrating APAC phase vs amplitude decomposition.
 """
 
+import os
+import subprocess
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
-import os
-import subprocess
+
+# =============================================================================
+# PATHS
+# =============================================================================
+
+DATA_DIR    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
+OUTPUT_DIR  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures"
 GDRIVE_DEST = "gdrive:results/Ch3_Figures/"
+DAILY_CSV   = os.path.join(DATA_DIR, "daily_fitted.csv")
 
-# =============================================================================
-# SETTINGS
-# =============================================================================
-
-DAILY_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/daily_fitted.csv"
-OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/Ch3/figures/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# =============================================================================
+# STYLE
+# =============================================================================
+
 plt.rcParams.update({
-    "font.family":       "Nimbus Sans",
-    "axes.spines.top":   False,
+    "font.family"      : "Nimbus Sans",
+    "font.size"        : 11,
+    "axes.spines.top"  : False,
     "axes.spines.right": False,
-    "axes.linewidth":    1.0,
-    "xtick.major.width": 1.0,
-    "ytick.major.width": 1.0,
-    "xtick.major.size":  4,
-    "ytick.major.size":  4,
-    "xtick.direction":   "out",
-    "ytick.direction":   "out",
-    "figure.dpi":        150,
-    "savefig.dpi":       300,
-    "savefig.bbox":      "tight",
+    "axes.linewidth"   : 0.8,
+    "axes.labelsize"   : 12,
+    "axes.titlesize"   : 13,
+    "axes.titleweight" : "bold",
+    "xtick.labelsize"  : 10,
+    "ytick.labelsize"  : 10,
+    "legend.fontsize"  : 10,
+    "legend.frameon"   : False,
+    "figure.dpi"       : 150,
+    "savefig.dpi"      : 300,
+    "savefig.bbox"     : "tight",
     "savefig.facecolor": "white",
 })
 
@@ -45,12 +53,14 @@ PHASE_SHIFT = 12
 AMP_CHANGE  = -0.18
 
 MONTH_DAYS   = [0, 28, 59, 89, 120, 150, 181, 212, 242, 273, 303, 334]
-MONTH_LABELS = ["Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan"]
+MONTH_LABELS = ["Feb","Mar","Apr","May","Jun","Jul",
+                "Aug","Sep","Oct","Nov","Dec","Jan"]
 
 # =============================================================================
-# BUILD INVARIANT CYCLE
+# BUILD INVARIANT CYCLE CENTRED ON MINIMUM
 # =============================================================================
 
+print("Loading data...")
 daily      = pd.read_csv(DAILY_CSV)
 inv_by_doy = daily.groupby("DOY")["fitted_invariant"].mean()
 min_doy    = int(inv_by_doy.idxmin())
@@ -71,8 +81,10 @@ def find_right_min(v, start=280):
     return start + int(np.argmin(v[start:]))
 
 # =============================================================================
-# 2x2 FIGURE
+# 2x2 MANUSCRIPT FIGURE
 # =============================================================================
+
+print("Building 2x2 concept figure...")
 
 fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=True, sharey=True)
 axes = axes.flatten()
@@ -94,7 +106,8 @@ for ax, label, title in zip(axes, panel_labels, titles):
     ax.set_xticklabels(MONTH_LABELS, fontsize=10)
     ax.tick_params(labelsize=10)
     ax.set_yticks(np.arange(0.5, YMAX, 0.5))
-    ax.set_yticklabels([f"{y:.1f}" for y in np.arange(0.5, YMAX, 0.5)], fontsize=10)
+    ax.set_yticklabels(
+        [f"{y:.1f}" for y in np.arange(0.5, YMAX, 0.5)], fontsize=10)
     ax.text(0.02, 0.97, label, transform=ax.transAxes,
             fontsize=12, fontweight="bold", va="top")
     ax.set_title(title, fontsize=11, pad=8, loc="left", color=C_ANNOT)
@@ -102,8 +115,12 @@ for ax, label, title in zip(axes, panel_labels, titles):
 # Y labels
 axes[0].set_ylabel("SIE (million km²)", fontsize=11)
 axes[2].set_ylabel("SIE (million km²)", fontsize=11)
-axes[2].set_xlabel("Month  (day 0 = annual minimum, late February)", fontsize=10, color=C_ANNOT)
-axes[3].set_xlabel("Month  (day 0 = annual minimum, late February)", fontsize=10, color=C_ANNOT)
+axes[2].set_xlabel(
+    "Month  (day 0 = annual minimum, late February)",
+    fontsize=10, color=C_ANNOT)
+axes[3].set_xlabel(
+    "Month  (day 0 = annual minimum, late February)",
+    fontsize=10, color=C_ANNOT)
 
 # --- Panel A: Invariant cycle ---
 ax = axes[0]
@@ -112,8 +129,10 @@ ax.fill_between(days, vals_c, YMIN, color=C_INV, alpha=0.07)
 
 # --- Panel B: Phase shift ---
 ax = axes[1]
-ax.plot(days, vals_c,     color=C_INV,   lw=2.0, alpha=0.5, zorder=4, label="Invariant cycle")
-ax.plot(days, phase_vals, color=C_PHASE, lw=2.5, zorder=5, linestyle="--", label="Phase shifted")
+ax.plot(days, vals_c,     color=C_INV,   lw=2.0, alpha=0.5,
+        zorder=4, label="Invariant cycle")
+ax.plot(days, phase_vals, color=C_PHASE, lw=2.5, zorder=5,
+        linestyle="--", label="Phase shifted (earlier)")
 peak_inv   = int(np.argmax(vals_c))
 peak_phase = int(np.argmax(phase_vals))
 ax.axvline(peak_inv,   color=C_INV,   lw=1.0, linestyle=":", alpha=0.5)
@@ -122,25 +141,30 @@ ax.legend(fontsize=9, frameon=False, loc="upper left")
 
 # --- Panel C: Amplitude change ---
 ax = axes[2]
-ax.plot(days, vals_c,   color=C_INV, lw=2.0, alpha=0.5, zorder=4, label="Invariant cycle")
-ax.plot(days, amp_vals, color=C_AMP, lw=2.5, zorder=5, linestyle="--", label="Reduced amplitude")
+ax.plot(days, vals_c,   color=C_INV, lw=2.0, alpha=0.5,
+        zorder=4, label="Invariant cycle")
+ax.plot(days, amp_vals, color=C_AMP, lw=2.5, zorder=5,
+        linestyle="--", label="Reduced amplitude")
 peak_inv = int(np.argmax(vals_c))
 ax.axvline(peak_inv, color=C_ANNOT, lw=0.8, linestyle=":", alpha=0.5)
 ax.legend(fontsize=9, frameon=False, loc="upper left")
 
 # --- Panel D: Both — same minimum, different mechanisms ---
 ax = axes[3]
-ax.plot(days, vals_c,     color=C_INV,   lw=2.0, alpha=0.5, zorder=4, label="Invariant cycle")
-ax.plot(days, phase_vals, color=C_PHASE, lw=2.5, zorder=5, linestyle="--", label="Phase shifted")
-ax.plot(days, amp_vals,   color=C_AMP,   lw=2.5, zorder=5, linestyle="--", label="Reduced amplitude")
+ax.plot(days, vals_c,     color=C_INV,   lw=2.0, alpha=0.5,
+        zorder=4, label="Invariant cycle")
+ax.plot(days, phase_vals, color=C_PHASE, lw=2.5, zorder=5,
+        linestyle="--", label="Phase shifted")
+ax.plot(days, amp_vals,   color=C_AMP,   lw=2.5, zorder=5,
+        linestyle="--", label="Reduced amplitude")
 
-# Mark the summer minima
+# Mark summer minima
 for v, color in [(vals_c, C_INV), (phase_vals, C_PHASE), (amp_vals, C_AMP)]:
     d = find_right_min(v)
     ax.scatter(d, v[d], color=color, s=70, zorder=7,
                edgecolors="white", linewidth=1.5)
 
-# Add annotation showing minima converge
+# Annotate convergence of minima
 min_phase = find_right_min(phase_vals)
 min_amp   = find_right_min(amp_vals)
 ax.annotate("",
@@ -148,12 +172,15 @@ ax.annotate("",
     xytext=(min_amp, amp_vals[min_amp] + 0.05),
     arrowprops=dict(arrowstyle="<->", color=C_ANNOT, lw=1.2),
 )
-ax.text((min_phase + min_amp) / 2, max(phase_vals[min_phase], amp_vals[min_amp]) + 0.12,
-        "Similar\nminimum SIE", ha="center", fontsize=8, color=C_ANNOT)
-
+ax.text(
+    (min_phase + min_amp) / 2,
+    max(phase_vals[min_phase], amp_vals[min_amp]) + 0.12,
+    "Similar\nminimum SIE",
+    ha="center", fontsize=8, color=C_ANNOT
+)
 ax.legend(fontsize=9, frameon=False, loc="upper left")
 
-# Overall title
+# Overall figure title
 fig.suptitle(
     "Figure 1. The traditional SIE anomaly conflates timing and magnitude",
     fontsize=13, fontweight="bold", y=1.01, x=0.02, ha="left"
@@ -161,15 +188,24 @@ fig.suptitle(
 
 fig.tight_layout()
 fig.subplots_adjust(hspace=0.35, wspace=0.15)
-fig.savefig(os.path.join(OUTPUT_DIR, "fig01_concept_manuscript.png"))
-plt.close(fig)
-print(f"Manuscript figure saved to {OUTPUT_DIR}fig1_concept_manuscript.png")
 
+outpath = os.path.join(OUTPUT_DIR, "fig01_concept_manuscript.png")
+fig.savefig(outpath)
+plt.close(fig)
+print(f"  -> fig01_concept_manuscript.png")
+
+# =============================================================================
+# SYNC TO GOOGLE DRIVE
+# =============================================================================
+
+print(f"\nSyncing to {GDRIVE_DEST}")
 result = subprocess.run(
-    ["rclone", "copy", os.path.join(OUTPUT_DIR, "fig1_concept_manuscript.png"), GDRIVE_DEST],
+    ["rclone", "copy", outpath, GDRIVE_DEST],
     capture_output=True, text=True
 )
 if result.returncode == 0:
-    print("Synced to Google Drive")
+    print("  ✓ fig01_concept_manuscript.png")
 else:
-    print(f"Sync failed: {result.stderr.strip()}")
+    print(f"  ✗ fig01_concept_manuscript.png: {result.stderr.strip()}")
+
+print("Done.")
