@@ -164,9 +164,8 @@ ax.text((peak_phase + peak_inv) / 2, vals_c.max() * 1.03,
         f"~{PHASE_SHIFT} days earlier",
         ha="center", va="bottom", fontsize=8, color=C_ANNOT)
 
-ax.legend(fontsize=9, frameon=False, loc="lower left")
-
-# --- Panel C: Amplitude change ---
+ax.legend(fontsize=9, frameon=False, loc="upper left",
+          bbox_to_anchor=(0.02, 0.88))
 ax = axes[2]
 ax.plot(days, vals_c,   color=C_INV, lw=2.0, alpha=0.5,
         zorder=4, label="Invariant cycle")
@@ -187,9 +186,8 @@ ax.text(peak_inv + 18, (amp_vals.max() + vals_c.max()) / 2,
         "smaller\namplitude",
         ha="left", va="center", fontsize=8, color=C_ANNOT)
 
-ax.legend(fontsize=9, frameon=False, loc="lower left")
-
-# --- Panel D: Both — same minimum, different mechanisms ---
+ax.legend(fontsize=9, frameon=False, loc="upper left",
+          bbox_to_anchor=(0.02, 0.88))
 ax = axes[3]
 ax.plot(days, vals_c,     color=C_INV,   lw=2.0, alpha=0.5,
         zorder=4, label="Invariant cycle")
@@ -209,18 +207,20 @@ min_inv   = find_right_min(vals_c)
 min_phase = find_right_min(phase_vals)
 min_amp   = find_right_min(amp_vals)
 
-# horizontal brace showing all three minima are similar
-y_annot = min(vals_c[min_inv], phase_vals[min_phase], amp_vals[min_amp]) - 0.18
+# annotation above the dots
+y_dots = max(vals_c[min_inv], phase_vals[min_phase], amp_vals[min_amp])
+y_annot = y_dots + 0.25
 ax.annotate("",
     xy=(min_phase, y_annot),
     xytext=(min_amp, y_annot),
     arrowprops=dict(arrowstyle="<->", color=C_ANNOT, lw=1.1)
 )
-ax.text((min_phase + min_amp) / 2, y_annot - 0.15,
+ax.text((min_phase + min_amp) / 2, y_annot + 0.08,
         "Similar minimum SIE",
-        ha="center", va="top", fontsize=8, color=C_ANNOT, style="italic")
+        ha="center", va="bottom", fontsize=8, color=C_ANNOT, style="italic")
 
-ax.legend(fontsize=9, frameon=False, loc="lower left")
+ax.legend(fontsize=9, frameon=False, loc="upper left",
+          bbox_to_anchor=(0.02, 0.88))
 
 fig.tight_layout()
 fig.subplots_adjust(hspace=0.38, wspace=0.18)
