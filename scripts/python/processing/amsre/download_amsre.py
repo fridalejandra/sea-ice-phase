@@ -14,7 +14,7 @@ end_date = datetime.today().strftime("%Y-%m-%d")
 
 # Output directory
 # LOCAL:
-output_dir = "/data/processed/amsre/raw/"
+output_dir = "/user/geog/falejandraperez/sea-ice-phase/data/amsre/raw/"
 
 # CLUSTER substitute:
 # output_dir = "/user/geog/falejandraperez/sea-ice-phase/data/amsre/raw/"

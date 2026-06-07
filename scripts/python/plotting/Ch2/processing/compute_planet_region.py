@@ -33,7 +33,7 @@ from pyproj import Transformer
 DATA_ROOT    = "/user/geog/falejandraperez/sea-ice-phase/data"
 METRICS_DIR  = f"{DATA_ROOT}/transition_metrics/SMMR"
 PHASE_DIR    = f"{DATA_ROOT}/SMMR_phase"
-MERGED_FILE  = f"{DATA_ROOT}/merged/SMMR_merged_19781101_20251231.nc"
+MERGED_FILE  = f"{DATA_ROOT}/merged/SMMR_merged_19781101_20251231_complete.nc"
 
 # Sector lat/lon bounds (approximate)
 SECTORS = {

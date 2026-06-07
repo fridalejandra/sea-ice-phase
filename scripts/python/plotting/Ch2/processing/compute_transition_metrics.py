@@ -43,7 +43,7 @@ OUT_ROOT  = DATA_ROOT / "transition_metrics"
 
 SENSOR_CONFIGS = {
     "SMMR": {
-        "input_file": DATA_ROOT / "merged" / "SMMR_merged_19781101_20251231.nc",
+        "input_file": DATA_ROOT / "merged" / "SMMR_merged_19781101_20251231_complete.nc",
         "conc_var":   "N07_ICECON",
         "units":      "fraction",
         "mask_above": 1.1,
