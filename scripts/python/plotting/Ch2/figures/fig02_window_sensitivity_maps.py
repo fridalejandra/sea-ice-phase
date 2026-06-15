@@ -54,7 +54,7 @@ SENSOR     = "SMMR"
 THRESH_PCT = 15
 WINDOWS    = [3, 5, 7]   # day windows
 
-INPUT_ROOT = PROJECT_ROOT / "results" / f"{SENSOR}_phase"
+INPUT_ROOT = PROJECT_ROOT / "data" / f"{SENSOR}_phase" / "static"
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
 SUBFOLDER   = "sensitivity/window"
@@ -85,8 +85,8 @@ def load_window_dict(metric: str, kdays: int) -> dict[int, xr.DataArray]:
     Looks under:
       results/SMMR_phase/<metric>_thr15_k<kdays>/<metric>_YYYY.nc
     """
-    subdir = f"{metric}_thr{THRESH_PCT}_k{kdays}"
-    folder = INPUT_ROOT / subdir
+    subdir = f"thr{THRESH_PCT}_k{kdays}"
+    folder = INPUT_ROOT / subdir / metric
     files = sorted(Path(folder).glob(f"{metric}_*.nc"))
     out = {}
 

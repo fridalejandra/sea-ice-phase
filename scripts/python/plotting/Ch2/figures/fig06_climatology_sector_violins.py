@@ -53,17 +53,17 @@ sns.set_style("whitegrid")
 YEAR_MIN = 1980
 YEAR_MAX = 2023
 
-STATIC_DIR = PROJECT_ROOT_CLUSTER / "results" / "SMMR_phase"
+STATIC_DIR = PROJECT_ROOT_CLUSTER / "data" / "SMMR_phase" / "static"
 DYN_ROOT = (
     PROJECT_ROOT_CLUSTER
-    / "results"
-    / "static_v2_slopeH"
+    / "data"
+    / "SMMR_phase"
     / "dynamic"
-    / "quantile_k5"
+    / "k5_q70"
 )
 
-DYN_DIR_FS = DYN_ROOT / "FS" / "p0.7"
-DYN_DIR_MS = DYN_ROOT / "MS" / "p0.7"
+DYN_DIR_FS = DYN_ROOT / "FS"
+DYN_DIR_MS = DYN_ROOT / "MS"
 
 SECTOR_FILE = PROJECT_ROOT_CLUSTER / "data" / "canonical_sectors.nc"
 
@@ -102,29 +102,20 @@ def ms_to_days_since_aug15(ms_da: xr.DataArray, aug15_doy: int = AUG15_DOY) -> x
 def _load_static_year(phase: str, year: int) -> xr.DataArray | None:
     """
     phase: 'FS' or 'MS'
-    static file: seaice_phases_SMMR_YYYY.nc
-    variables: advance_YYYY, retreat_YYYY
+    static file: data/SMMR_phase/static/thr15_k5/<phase>/<phase>_YYYY.nc
+    variable: <phase> (y, x)
     """
-    fpath = STATIC_DIR / f"seaice_phases_SMMR_{year}.nc"
+    fpath = STATIC_DIR / "thr15_k5" / phase / f"{phase}_{year}.nc"
     if not fpath.exists():
         return None
 
     ds = xr.open_dataset(fpath)
 
-    if phase == "FS":
-        var_prefix = "advance"
-    elif phase == "MS":
-        var_prefix = "retreat"
-    else:
-        ds.close()
-        raise ValueError("phase must be 'FS' or 'MS'")
-
-    varname = f"{var_prefix}_{year}"
-    if varname not in ds:
+    if phase not in ds:
         ds.close()
         return None
 
-    da = ds[varname].load()
+    da = ds[phase].load()
     ds.close()
 
     if not np.any(np.isfinite(da.values)):

@@ -47,26 +47,24 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
 # PATH CONFIG
 # ---------------------------------------------------------------------
 
-STATIC_ROOT = PROJECT_ROOT / "results" / "SMMR_phase"
+STATIC_ROOT = PROJECT_ROOT / "data" / "SMMR_phase" / "static"
 
 DYN_FS_DIR = (
     PROJECT_ROOT
-    / "results"
-    / "static_v2_slopeH"
+    / "data"
+    / "SMMR_phase"
     / "dynamic"
-    / "quantile_k5"
+    / "k5_q70"
     / "FS"
-    / "p0.7"
 )
 
 DYN_MS_DIR = (
     PROJECT_ROOT
-    / "results"
-    / "static_v2_slopeH"
+    / "data"
+    / "SMMR_phase"
     / "dynamic"
-    / "quantile_k5"
+    / "k5_q70"
     / "MS"
-    / "p0.7"
 )
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
@@ -97,7 +95,7 @@ def load_phase_climatology(
     Assumes variable is named <phase> in each file.
     """
     if mode == "static":
-        phase_dir = STATIC_ROOT / f"{phase}_thr15_k5"
+        phase_dir = STATIC_ROOT / "thr15_k5" / phase
     elif mode == "dynamic":
         if phase == "FS":
             phase_dir = DYN_FS_DIR
@@ -170,7 +168,7 @@ def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.D
       - MS_static_clim_dsa in results/anomalies/MS_static_climatology.nc
       - MS_dynamic_clim_dsa in results/anomalies/MS_dynamic_climatology.nc
     """
-    clim_path = PROJECT_ROOT / "results" / "anomalies" / f"MS_{method}_climatology.nc"
+    clim_path = PROJECT_ROOT / "data" / "anomalies" / "SMMR" / f"MS_{method}_climatology.nc"
     if not clim_path.exists():
         raise FileNotFoundError(f"Missing MS climatology file: {clim_path}")
 
