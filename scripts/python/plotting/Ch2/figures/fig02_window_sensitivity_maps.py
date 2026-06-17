@@ -35,7 +35,7 @@ import cartopy.feature as cfeature
 # ---------------------------------------------------------------------
 # Ensure project root on sys.path so "scripts.*" imports work
 # ---------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parents[4]  # -> sea-ice-phase
+PROJECT_ROOT = Path(__file__).resolve().parents[5]  # -> sea-ice-phase
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -216,6 +216,14 @@ def plot_window_diff_maps():
     fs_7v5_abs = np.abs(fs_d75)
     ms_3v5_abs = np.abs(ms_d35)
     ms_7v5_abs = np.abs(ms_d75)
+    # Mask sentinel pixels (open ocean / perennial ice assigned window-start DOY)
+    from scripts.python.plotting.Ch2.utils.plot_utils import get_sentinel_mask
+    fs_mask = get_sentinel_mask(PROJECT_ROOT, "FS")
+    ms_mask = get_sentinel_mask(PROJECT_ROOT, "MS")
+    fs_3v5_abs = fs_3v5_abs.where(~fs_mask)
+    fs_7v5_abs = fs_7v5_abs.where(~fs_mask)
+    ms_3v5_abs = ms_3v5_abs.where(~ms_mask)
+    ms_7v5_abs = ms_7v5_abs.where(~ms_mask)
 
     # Native stereographic x,y grid
     example = next(iter(load_window_dict("FS", 5).values()))
