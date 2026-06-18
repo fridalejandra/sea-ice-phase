@@ -842,3 +842,23 @@ def plot_sector_time_series(
     fig.tight_layout(rect=[0, 0.05, 1, 0.96])
 
     return fig, axes
+
+
+def get_sentinel_mask(project_root, phase: str, method: str = "static",
+                      thr: int = 15, k: int = 5) -> "xr.DataArray":
+    """
+    Returns a boolean mask (y, x) — True where pixels should be masked out
+    because they were assigned the window-start sentinel DOY (no real transition).
+    FS sentinel = 46 (Feb 15), MS sentinel = 227 (Aug 15).
+    """
+    import xarray as xr
+    import numpy as np
+    from pathlib import Path
+    SENTINEL = {"FS": 46, "MS": 227}
+    clim_file = (Path(project_root) / "data" / "anomalies" / "SMMR"
+                 / f"{phase}_{method}_thr{thr}_k{k}_climatology.nc")
+    ds = xr.open_dataset(clim_file, decode_times=False)
+    varname = f"{phase}_{method}_thr{thr}_k{k}_clim"
+    clim = ds[varname].load()
+    ds.close()
+    return np.abs(clim - SENTINEL[phase]) < 1.5
