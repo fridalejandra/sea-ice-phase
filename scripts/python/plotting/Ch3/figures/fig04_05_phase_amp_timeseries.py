@@ -49,6 +49,7 @@ for col in ["min_doy_anom", "max_doy_anom", "amplitude_anom",
         annual[col] = pd.to_numeric(annual[col], errors="coerce")
 
 yr_min = int(annual["Year"].min())
+## Here we have
 yr_max = int(annual["Year"].max())
 print(f"  {len(annual)} rows | {yr_min}–{yr_max}")
 
