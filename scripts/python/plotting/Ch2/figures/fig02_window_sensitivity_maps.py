@@ -19,7 +19,7 @@ Input (existing static products):
 
 Output:
     results/Ch2_Figures/sensitivity/window/Fig02_window_FS_MS_static_SMMR_thr15.png
-    (also mirrored to gdrive:sea-ice-phase/Results/Ch2_Figures/sensitivity/window/)
+    (also mirrored to gdrive:sea-ice-phase/results/Ch2_Figures/sensitivity/window/)
 """
 
 import sys
@@ -56,7 +56,7 @@ WINDOWS    = [3, 5, 7]   # day windows
 
 INPUT_ROOT = PROJECT_ROOT / "data" / f"{SENSOR}_phase" / "static"
 
-REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
+REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
 SUBFOLDER   = "sensitivity/window"
 
 PERIOD = 366.0   # DOY wrap
@@ -298,7 +298,7 @@ def plot_window_diff_maps():
         fig,
         out_path,
         remote_root=REMOTE_ROOT,
-        remote_subdir=SUBFOLDER,
+        remote_subdir="",
     )
 
 # ---------------------------------------------------------------------

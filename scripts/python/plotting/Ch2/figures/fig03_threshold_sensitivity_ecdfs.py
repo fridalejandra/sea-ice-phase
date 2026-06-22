@@ -44,14 +44,14 @@ set_mpl_defaults()
 # ---------------------------------------------------------------------
 SENSOR      = "SMMR"
 K_DAYS      = 5          # window for these threshold tests
-THR_LOW     = 10
+THR_LOW     = 20
 THR_REF     = 15
 THR_HIGH    = 30
 PERIOD      = 366.0      # DOY wrap
 YEAR_MIN    = 1979
 YEAR_MAX    = 2023
 
-INPUT_ROOT = PROJECT_ROOT_CLUSTER / "results" / f"{SENSOR}_phase"
+INPUT_ROOT = PROJECT_ROOT_CLUSTER / "data" / f"{SENSOR}_phase" / "static"
 
 # ---------------------------------------------------------------------
 # HELPERS: loading + wrapped differences
@@ -72,8 +72,8 @@ def load_thr_dict(metric: str, thr_pct: int, kdays: int) -> dict[int, xr.DataArr
     Looks under:
       results/SMMR_phase/<metric>_thr<thr_pct>_k<kdays>/<metric>_YYYY.nc
     """
-    subdir = f"{metric}_thr{thr_pct}_k{kdays}"
-    folder = INPUT_ROOT / subdir
+    subdir = f"thr{thr_pct:02d}_k{kdays}"
+    folder = INPUT_ROOT / subdir / metric
     files = sorted(folder.glob(f"{metric}_*.nc"))
     out = {}
 
@@ -200,15 +200,15 @@ def main():
 
     out_path = get_fig_path(
         PROJECT_ROOT_CLUSTER,
-        subfolder="sensitivity/threshold",
+        subfolder="",
         fig_name="Fig3_FS_MS_threshold_sensitivity_static_ecdf_allcurves.png",
     )
 
     save_and_upload(
         fig,
         out_path,
-        remote_root="gdrive:sea-ice-phase/Results/Ch2_Figures",
-        remote_subdir="sensitivity/threshold",
+        remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
+        remote_subdir="",
     )
 
 

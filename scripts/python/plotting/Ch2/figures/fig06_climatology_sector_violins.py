@@ -332,13 +332,13 @@ fig.subplots_adjust(right=0.82)
 # ---------------------------------------------------------------------
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
-    subfolder="climatology",
+    subfolder="",
     fig_name="Fig6_FS_MS_climatology_static_vs_dynamic_violins.png",
 )
 
 save_and_upload(
     fig,
     out_path,
-    remote_root="gdrive:sea-ice-phase/Results/Ch2_Figures",
-    remote_subdir="climatology",
+    remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
+    remote_subdir="",
 )

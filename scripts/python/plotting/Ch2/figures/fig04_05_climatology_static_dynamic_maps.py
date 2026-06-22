@@ -68,7 +68,7 @@ DYN_MS_DIR = (
 )
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
-SUBFOLDER = "climatology"
+SUBFOLDER = ""
 
 PHASES = ["FS", "MS"]
 YEAR_START = 1979
@@ -168,12 +168,13 @@ def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.D
       - MS_static_clim_dsa in results/anomalies/MS_static_climatology.nc
       - MS_dynamic_clim_dsa in results/anomalies/MS_dynamic_climatology.nc
     """
-    clim_path = PROJECT_ROOT / "data" / "anomalies" / "SMMR" / f"MS_{method}_climatology.nc"
+    suffix = "thr15_k5" if method == "static" else "k5_q70"
+    clim_path = PROJECT_ROOT / "data" / "anomalies" / "SMMR" / f"MS_{method}_{suffix}_climatology.nc"
     if not clim_path.exists():
         raise FileNotFoundError(f"Missing MS climatology file: {clim_path}")
 
     ds = xr.open_dataset(clim_path, decode_times=False)
-    var = f"MS_{method}_clim_dsa"
+    var = f"MS_{method}_{suffix}_clim_dsa"
     if var not in ds:
         raise KeyError(
             f"{var} not found in {clim_path}. "
@@ -252,7 +253,7 @@ def main():
             fig,
             out_path,
             remote_root=REMOTE_ROOT,
-            remote_subdir=SUBFOLDER,
+            remote_subdir="",
         )
 
 
