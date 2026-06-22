@@ -58,7 +58,7 @@ ANOM_DIR = PROJECT_ROOT / "results" / "anomalies"
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
-SUBFOLDER = "trends"
+SUBFOLDER = ""
 
 # Pre/post definition
 PRE_START, PRE_END = 1980, 2017
@@ -519,7 +519,7 @@ def main():
     )
     out_path = get_fig_path(PROJECT_ROOT, subfolder=SUBFOLDER, fig_name=fig_name)
 
-    save_and_upload(fig, out_path, remote_root=REMOTE_ROOT, remote_subdir=SUBFOLDER)
+    save_and_upload(fig, out_path, remote_root=REMOTE_ROOT, remote_subdir="")
 
 
 if __name__ == "__main__":

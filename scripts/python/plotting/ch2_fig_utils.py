@@ -4,6 +4,8 @@ from scripts.python.plotting.Ch2.utils.plot_utils import (
     format_fig_name,
     get_fig_path,
     save_and_upload,
+    plot_phase_comparison_map,
+    get_sentinel_mask,
 )
 
-__all__ = ["set_mpl_defaults", "format_fig_name", "get_fig_path", "save_and_upload"]
+__all__ = ["set_mpl_defaults", "format_fig_name", "get_fig_path", "save_and_upload", "plot_phase_comparison_map", "get_sentinel_mask"]

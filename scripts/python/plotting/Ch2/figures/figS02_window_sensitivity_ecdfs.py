@@ -118,13 +118,13 @@ fig.tight_layout()
 
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
-    subfolder="sensitivity/window",
+    subfolder="",
     fig_name="Fig_FS_MS_window_sensitivity_static_ecdf_allcurves.png",
 )
 
 save_and_upload(
     fig,
     out_path,
-    remote_root="gdrive:sea-ice-phase/Results/Ch2_Figures",
-    remote_subdir="sensitivity/window",
+    remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
+    remote_subdir="",
 )

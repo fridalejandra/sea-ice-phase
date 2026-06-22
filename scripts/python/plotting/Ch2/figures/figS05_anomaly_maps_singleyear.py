@@ -44,11 +44,11 @@ from utils.plot_utils import (  # noqa: E402
 set_mpl_defaults()
 
 PROJECT_ROOT = PROJECT_ROOT_CLUSTER
-ANOM_DIR = PROJECT_ROOT / "results" / "anomalies"
+ANOM_DIR = PROJECT_ROOT / "data" / "anomalies" / "SMMR"
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
-REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
-SUBFOLDER   = "anomalies/spatial"
+REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
+SUBFOLDER   = ""
 
 # year to plot
 TARGET_YEAR = 2015  # change as needed
@@ -61,17 +61,17 @@ VMAX = 40.0  # days, symmetric range for anomalies/diffs
 # ---------------------------------------------------------------------
 def load_fs_ms_clim_anom():
     """Load FS/MS climatology & anomalies for static and dynamic + valid_ocean."""
-    fs_dyn_clim = xr.open_dataset(ANOM_DIR / "FS_dynamic_climatology.nc")["FS_dynamic_clim"]
-    fs_dyn_anom = xr.open_dataset(ANOM_DIR / "FS_dynamic_anomalies.nc")["FS_dynamic_anom"]
+    fs_dyn_clim = xr.open_dataset(ANOM_DIR / "FS_dynamic_k5_q70_climatology.nc", decode_times=False)["FS_dynamic_k5_q70_clim"]
+    fs_dyn_anom = xr.open_dataset(ANOM_DIR / "FS_dynamic_k5_q70_anomalies.nc", decode_times=False)["FS_dynamic_k5_q70_anom"]
 
-    ms_dyn_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_climatology.nc")["MS_dynamic_clim"]
-    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_anomalies.nc")["MS_dynamic_anom"]
+    ms_dyn_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_k5_q70_climatology.nc", decode_times=False)["MS_dynamic_k5_q70_clim"]
+    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_k5_q70_anomalies.nc", decode_times=False)["MS_dynamic_k5_q70_anom"]
 
-    fs_sta_clim = xr.open_dataset(ANOM_DIR / "FS_static_climatology.nc")["FS_static_clim"]
-    fs_sta_anom = xr.open_dataset(ANOM_DIR / "FS_static_anomalies.nc")["FS_static_anom"]
+    fs_sta_clim = xr.open_dataset(ANOM_DIR / "FS_static_thr15_k5_climatology.nc", decode_times=False)["FS_static_thr15_k5_clim"]
+    fs_sta_anom = xr.open_dataset(ANOM_DIR / "FS_static_thr15_k5_anomalies.nc", decode_times=False)["FS_static_thr15_k5_anom"]
 
-    ms_sta_clim = xr.open_dataset(ANOM_DIR / "MS_static_climatology.nc")["MS_static_clim"]
-    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_anomalies.nc")["MS_static_anom"]
+    ms_sta_clim = xr.open_dataset(ANOM_DIR / "MS_static_thr15_k5_climatology.nc", decode_times=False)["MS_static_thr15_k5_clim"]
+    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_thr15_k5_anomalies.nc", decode_times=False)["MS_static_thr15_k5_anom"]
 
     try:
         ds_mask = xr.open_dataset(SECTOR_FILE)
@@ -185,7 +185,7 @@ def make_single_year_maps(year: int, fields: dict) -> None:
         fig,
         out_path,
         remote_root=REMOTE_ROOT,
-        remote_subdir=SUBFOLDER,
+        remote_subdir="",
     )
 
 

@@ -44,14 +44,14 @@ set_mpl_defaults()
 # ---------------------------------------------------------------------
 SENSOR      = "SMMR"
 K_DAYS      = 5
-THR_LOW     = 10
+THR_LOW     = 20
 THR_REF     = 15
 THR_HIGH    = 30
 PERIOD      = 366.0
 YEAR_MIN    = 1979
 YEAR_MAX    = 2023
 
-INPUT_ROOT = PROJECT_ROOT_CLUSTER / "results" / f"{SENSOR}_phase"
+INPUT_ROOT = PROJECT_ROOT_CLUSTER / "data" / f"{SENSOR}_phase" / "static"
 
 VMAX = 10.0  # 0–10 day colour scale
 
@@ -67,8 +67,8 @@ def _year_from_fname(path: Path) -> int | None:
 
 
 def load_thr_dict(metric: str, thr_pct: int, kdays: int) -> dict[int, xr.DataArray]:
-    subdir = f"{metric}_thr{thr_pct}_k{kdays}"
-    folder = INPUT_ROOT / subdir
+    subdir = f"thr{thr_pct:02d}_k{kdays}"
+    folder = INPUT_ROOT / subdir / metric
     files = sorted(folder.glob(f"{metric}_*.nc"))
     out = {}
 
@@ -244,15 +244,15 @@ def plot_threshold_maps():
 
     out_path = get_fig_path(
         project_root=PROJECT_ROOT_CLUSTER,
-        subfolder="sensitivity/threshold",
+        subfolder="",
         fig_name=fig_name,
     )
 
     save_and_upload(
         fig,
         out_path,
-        remote_root="gdrive:sea-ice-phase/Results/Ch2_Figures",
-        remote_subdir="sensitivity/threshold",
+        remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
+        remote_subdir="",
     )
 
 

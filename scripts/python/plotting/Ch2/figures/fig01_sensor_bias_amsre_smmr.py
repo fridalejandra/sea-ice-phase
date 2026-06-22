@@ -52,8 +52,8 @@ SMMR_DIR = PROJECT_ROOT / "results" / "SMMR_phase"
 AMSRE_DIR = PROJECT_ROOT / "results" / "AMSRE_phase"
 
 # where to put figures (relative to PROJECT_ROOT and your rclone remote)
-SUBFOLDER = "sensor/advance_retreat"
-REMOTE_ROOT = "gdrive:sea-ice-phase/Results/Ch2_Figures"
+SUBFOLDER = ""
+REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
 
 
 # ---------------------------------------------------------------------
@@ -278,7 +278,7 @@ def main():
         fig,
         fig_path,
         remote_root=REMOTE_ROOT,
-        remote_subdir=SUBFOLDER,
+        remote_subdir="",
     )
 
 
