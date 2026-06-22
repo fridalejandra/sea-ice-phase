@@ -3,15 +3,13 @@
 """
 fig04_crossing_frequency_maps.py
 
-2x3 figure showing threshold crossing frequency for FS and MS.
+Pre/post-2016 change in threshold crossing frequency for FS and MS.
 
 Panels:
-  (a) FS climatological mean crossing frequency (smoothed)
-  (b) MS climatological mean crossing frequency (smoothed)
-  (c) FS pre/post-2016 difference (smoothed)
-  (d) MS pre/post-2016 difference (smoothed)
-  (e) FS sector bar chart — mean crossing freq pre vs post 2016
-  (f) MS sector bar chart — mean crossing freq pre vs post 2016
+  (a) FS — mean crossing frequency post-2016 minus pre-2016 (smoothed)
+  (b) MS — mean crossing frequency post-2016 minus pre-2016 (smoothed)
+
+Sector-mean statistics printed to stdout for caption/table use.
 
 Inputs:
   data/transition_metrics/SMMR/crossing_freq_FS_thr15.nc  (year, y, x)
@@ -19,7 +17,7 @@ Inputs:
   data/canonical_sectors.nc
 
 Output:
-  results/Ch2_Figures/Fig04_crossing_frequency_FS_MS_SMMR_thr15.png
+  results/Ch2_Figures/Fig04_crossing_frequency_FS_MS_SMMR_thr15_prepost2016.png
 """
 
 import sys
@@ -60,9 +58,8 @@ METRICS_DIR = PROJECT_ROOT / "data" / "transition_metrics" / SENSOR
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
 SUBFOLDER   = ""
-VMAX_CLIM   = 6.0    # crossings — cap at p95
-VMAX_DIFF   = 2.0    # crossings difference
-SMOOTH_SIZE = 5      # spatial smoothing kernel (pixels)
+VMAX_DIFF   = 2.0
+SMOOTH_SIZE = 5
 
 SECTOR_NAMES = {
     1: "AB",
@@ -70,10 +67,6 @@ SECTOR_NAMES = {
     3: "KH VII",
     4: "E. Antarctica",
     5: "Ross",
-}
-SECTOR_COLORS = {
-    "pre":  "#4A90C4",
-    "post": "#C0392B",
 }
 
 
@@ -90,29 +83,24 @@ def load_crossing_freq(phase: str) -> xr.DataArray:
 
 
 def smooth(arr: np.ndarray, size: int) -> np.ndarray:
-    """Spatial smoothing with NaN handling."""
-    out = arr.copy()
-    nan_mask = np.isnan(arr)
-    arr_filled = np.where(nan_mask, 0.0, arr)
-    weight = np.where(nan_mask, 0.0, 1.0)
-    smoothed = uniform_filter(arr_filled, size=size)
-    weight_s = uniform_filter(weight, size=size)
-    with np.errstate(invalid="ignore"):
-        out = np.where(weight_s > 0.1, smoothed / weight_s, np.nan)
-    out[nan_mask & (weight_s < 0.1)] = np.nan
+    nan_mask  = np.isnan(arr)
+    filled    = np.where(nan_mask, 0.0, arr)
+    weight    = np.where(nan_mask, 0.0, 1.0)
+    s_filled  = uniform_filter(filled, size=size)
+    s_weight  = uniform_filter(weight, size=size)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(s_weight > 0.1, s_filled / s_weight, np.nan)
     return out
 
 
-def make_polar_ax(fig, pos):
+def make_polar_ax(fig, row, col, nrows=1, ncols=2):
     proj = ccrs.SouthPolarStereo()
-    ax   = fig.add_subplot(pos, projection=proj)
+    ax   = fig.add_subplot(nrows, ncols, (row - 1) * ncols + col,
+                           projection=proj)
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
     ax.add_feature(
         cfeature.LAND.with_scale("110m"),
-        facecolor="0.85",
-        edgecolor="0.6",
-        linewidth=0.4,
-        zorder=3,
+        facecolor="0.85", edgecolor="0.6", linewidth=0.4, zorder=3,
     )
     ax.coastlines(linewidth=0.4, color="0.4", zorder=4)
     gl = ax.gridlines(draw_labels=False)
@@ -122,32 +110,26 @@ def make_polar_ax(fig, pos):
     return ax
 
 
-def sector_means(cf: xr.DataArray, sector_id: np.ndarray,
-                 sentinel: np.ndarray) -> dict:
-    """
-    Compute pre/post mean crossing frequency per sector.
-    Returns {sector_id: (pre_mean, post_mean)}.
-    """
+def print_sector_stats(cf: xr.DataArray, phase: str,
+                        sector_id: np.ndarray, sentinel: np.ndarray) -> None:
     pre  = cf.sel(year=slice(YEAR_MIN, PRE_END)).mean("year", skipna=True).values
     post = cf.sel(year=slice(POST_START, YEAR_MAX)).mean("year", skipna=True).values
     pre[sentinel]  = np.nan
     post[sentinel] = np.nan
-
-    result = {}
-    for sid in range(1, 6):
+    print(f"\n{phase} sector means (crossings/season):")
+    print(f"  {'Sector':<16} {'Pre':>6} {'Post':>6} {'Δ':>6}")
+    for sid, name in SECTOR_NAMES.items():
         mask = (sector_id == sid) & ~sentinel
-        result[sid] = (
-            float(np.nanmean(pre[mask])),
-            float(np.nanmean(post[mask])),
-        )
-    return result
+        p1 = float(np.nanmean(pre[mask]))
+        p2 = float(np.nanmean(post[mask]))
+        print(f"  {name:<16} {p1:>6.3f} {p2:>6.3f} {p2-p1:>+6.3f}")
 
 
 # ---------------------------------------------------------------------
 # MAIN PLOT
 # ---------------------------------------------------------------------
 
-def plot_crossing_freq() -> None:
+def plot_crossing_freq_diff() -> None:
     set_mpl_defaults()
 
     print("Loading data...")
@@ -163,12 +145,6 @@ def plot_crossing_freq() -> None:
     sent_fs = sentinel_fs.values if hasattr(sentinel_fs, "values") else sentinel_fs
     sent_ms = sentinel_ms.values if hasattr(sentinel_ms, "values") else sentinel_ms
 
-    # climatological means
-    clim_fs = cf_fs.mean("year", skipna=True).values
-    clim_ms = cf_ms.mean("year", skipna=True).values
-    clim_fs[sent_fs] = np.nan
-    clim_ms[sent_ms] = np.nan
-
     # pre/post difference
     pre_fs  = cf_fs.sel(year=slice(YEAR_MIN, PRE_END)).mean("year", skipna=True).values
     post_fs = cf_fs.sel(year=slice(POST_START, YEAR_MAX)).mean("year", skipna=True).values
@@ -182,40 +158,31 @@ def plot_crossing_freq() -> None:
 
     # smooth
     print("Smoothing...")
-    clim_fs_s = smooth(clim_fs, SMOOTH_SIZE)
-    clim_ms_s = smooth(clim_ms, SMOOTH_SIZE)
     diff_fs_s = smooth(diff_fs, SMOOTH_SIZE)
     diff_ms_s = smooth(diff_ms, SMOOTH_SIZE)
 
-    # sector means
-    sec_fs = sector_means(cf_fs, sector_id, sent_fs)
-    sec_ms = sector_means(cf_ms, sector_id, sent_ms)
+    # print sector stats for caption
+    print_sector_stats(cf_fs, "FS", sector_id, sent_fs)
+    print_sector_stats(cf_ms, "MS", sector_id, sent_ms)
 
-    x = cf_fs["x"].values
-    y = cf_fs["y"].values
+    x    = cf_fs["x"].values
+    y    = cf_fs["y"].values
     proj = ccrs.SouthPolarStereo()
 
-    cmap_clim  = plt.cm.YlOrRd
-    norm_clim  = mcolors.Normalize(vmin=0, vmax=VMAX_CLIM)
-    cmap_diff  = plt.cm.RdBu_r
-    norm_diff  = mcolors.Normalize(vmin=-VMAX_DIFF, vmax=VMAX_DIFF)
+    cmap = plt.cm.RdBu_r
+    norm = mcolors.Normalize(vmin=-VMAX_DIFF, vmax=VMAX_DIFF)
 
-    fig = plt.figure(figsize=(14.0, 10.0))
+    fig = plt.figure(figsize=(10.0, 5.5))
 
-    # --- map panels ---
-    map_panels = [
-        ("(a) FS — climatological mean", clim_fs_s, (3, 4, 1),  cmap_clim,  norm_clim),
-        ("(b) MS — climatological mean", clim_ms_s, (3, 4, 2),  cmap_clim,  norm_clim),
-        ("(c) FS — post minus pre 2016", diff_fs_s, (3, 4, 5),  cmap_diff,  norm_diff),
-        ("(d) MS — post minus pre 2016", diff_ms_s, (3, 4, 6),  cmap_diff,  norm_diff),
+    panels = [
+        ("(a) FS — post minus pre 2016", diff_fs_s, 1),
+        ("(b) MS — post minus pre 2016", diff_ms_s, 2),
     ]
 
-    im_clim = None
-    im_diff = None
-
-    for title, data, pos, cmap, norm in map_panels:
-        ax = make_polar_ax(fig, pos)
-        im = ax.pcolormesh(
+    im_last = None
+    for title, data, col in panels:
+        ax = make_polar_ax(fig, 1, col)
+        im_last = ax.pcolormesh(
             x, y, data,
             transform=proj,
             cmap=cmap,
@@ -223,61 +190,23 @@ def plot_crossing_freq() -> None:
             shading="auto",
             zorder=1,
         )
-        ax.set_title(title, fontsize=9, pad=3)
-        if cmap == cmap_clim:
-            im_clim = im
-        else:
-            im_diff = im
+        ax.set_title(title, fontsize=10, pad=4)
 
-    # colorbars for map rows
-    cax1 = fig.add_axes([0.13, 0.645, 0.30, 0.018])
-    cb1  = fig.colorbar(im_clim, cax=cax1, orientation="horizontal", extend="max")
-    cb1.set_label(f"Mean crossings/season ({YEAR_MIN}–{YEAR_MAX})", fontsize=7)
-    cb1.ax.tick_params(labelsize=6)
-    cb1.outline.set_visible(False)
-
-    cax2 = fig.add_axes([0.13, 0.355, 0.30, 0.018])
-    cb2  = fig.colorbar(im_diff, cax=cax2, orientation="horizontal", extend="both")
-    cb2.set_label(f"Δ crossings/season (post {POST_START} − pre)", fontsize=7)
-    cb2.ax.tick_params(labelsize=6)
-    cb2.outline.set_visible(False)
-
-    # --- bar chart panels (e) and (f) ---
-    sector_ids   = list(range(1, 6))
-    sector_labels = [SECTOR_NAMES[s] for s in sector_ids]
-    x_pos        = np.arange(len(sector_ids))
-    width        = 0.35
-
-    for idx, (phase, sec_data, subplot_pos, panel_label) in enumerate([
-        ("FS", sec_fs, (3, 4, 9),  "(e) FS — sector means"),
-        ("MS", sec_ms, (3, 4, 10), "(f) MS — sector means"),
-    ]):
-        ax = fig.add_subplot(subplot_pos)
-        pre_vals  = [sec_data[s][0] for s in sector_ids]
-        post_vals = [sec_data[s][1] for s in sector_ids]
-
-        ax.bar(x_pos - width/2, pre_vals,  width, label=f"{YEAR_MIN}–{PRE_END}",
-               color=SECTOR_COLORS["pre"],  alpha=0.85, edgecolor="none")
-        ax.bar(x_pos + width/2, post_vals, width, label=f"{POST_START}–{YEAR_MAX}",
-               color=SECTOR_COLORS["post"], alpha=0.85, edgecolor="none")
-
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(sector_labels, fontsize=7, rotation=20, ha="right")
-        ax.set_ylabel("Mean crossings/season", fontsize=7)
-        ax.set_title(panel_label, fontsize=9, pad=3)
-        ax.tick_params(axis="y", labelsize=7)
-        ax.spines[["top", "right"]].set_visible(False)
-        if idx == 0:
-            ax.legend(fontsize=7, frameon=False)
-
-    fig.suptitle(
-        f"Threshold crossing frequency — {SENSOR} thr={THRESH_PCT}%",
-        fontsize=11, y=0.99
+    # shared colorbar
+    cax = fig.add_axes([0.2, 0.06, 0.6, 0.03])
+    cb  = fig.colorbar(im_last, cax=cax, orientation="horizontal", extend="both")
+    cb.set_label(
+        f"Δ mean crossings/season (post {POST_START}–{YEAR_MAX} minus pre {YEAR_MIN}–{PRE_END})",
+        fontsize=9
     )
+    cb.ax.tick_params(labelsize=8)
+    cb.outline.set_visible(False)
+
+    fig.tight_layout(rect=[0, 0.12, 1, 1.0])
 
     fig_name = format_fig_name(
         num=4,
-        short=f"crossing_frequency_FS_MS_{SENSOR}_thr{THRESH_PCT}",
+        short=f"crossing_frequency_FS_MS_{SENSOR}_thr{THRESH_PCT}_prepost2016",
     )
     out_path = get_fig_path(
         project_root=PROJECT_ROOT,
@@ -292,4 +221,4 @@ def plot_crossing_freq() -> None:
 
 
 if __name__ == "__main__":
-    plot_crossing_freq()
+    plot_crossing_freq_diff()
