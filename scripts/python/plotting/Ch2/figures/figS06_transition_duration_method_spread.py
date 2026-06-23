@@ -57,7 +57,7 @@ YEAR_MAX    = 2023
 METRICS_DIR = PROJECT_ROOT / "data" / "transition_metrics" / SENSOR
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
 SUBFOLDER   = ""
-SMOOTH_SIZE = 5
+SMOOTH_SIZE = 9
 VMAX_SPREAD = 15.0   # days — method spread colorscale cap
 
 
@@ -158,7 +158,7 @@ def plot_figS06() -> None:
     cmap_spr   = plt.cm.plasma
     norm_spr   = mcolors.Normalize(vmin=0, vmax=VMAX_SPREAD)
 
-    fig = plt.figure(figsize=(12.0, 10.0))
+    fig = plt.figure(figsize=(12.0, 12.0))
 
     panels = [
         ("(a) FS — fraction of years\nwith ambiguous transition", frac_fs,    1, cmap_frac, norm_frac),
@@ -187,14 +187,14 @@ def plot_figS06() -> None:
             im_spr = im
 
     # colorbar for fraction panels
-    cax1 = fig.add_axes([0.08, 0.52, 0.38, 0.02])
+    cax1 = fig.add_axes([0.08, 0.50, 0.38, 0.013])
     cb1  = fig.colorbar(im_frac, cax=cax1, orientation="horizontal")
     cb1.set_label(f"Fraction of years with transition duration > 0 ({YEAR_MIN}–{YEAR_MAX})", fontsize=8)
     cb1.ax.tick_params(labelsize=7)
     cb1.outline.set_visible(False)
 
     # colorbar for spread panels
-    cax2 = fig.add_axes([0.08, 0.04, 0.38, 0.02])
+    cax2 = fig.add_axes([0.08, 0.04, 0.38, 0.013])
     cb2  = fig.colorbar(im_spr, cax=cax2, orientation="horizontal", extend="max")
     cb2.set_label("Mean method spread across static thr/k combinations (days)", fontsize=8)
     cb2.ax.tick_params(labelsize=7)
@@ -204,7 +204,7 @@ def plot_figS06() -> None:
         f"Transition ambiguity and method sensitivity — {SENSOR} {YEAR_MIN}–{YEAR_MAX}",
         fontsize=11, y=0.99,
     )
-    fig.tight_layout(rect=[0, 0.08, 1, 0.97])
+    fig.subplots_adjust(left=0.05, right=0.95, top=0.94, bottom=0.10, hspace=0.35, wspace=0.05)
 
     fig_name = f"FigS06_transition_duration_method_spread_{SENSOR}.png"
 
