@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fig04_crossing_frequency_maps.py
+fig06_crossing_frequency_maps.py
 
 Pre/post-2016 change in threshold crossing frequency for FS and MS.
 
