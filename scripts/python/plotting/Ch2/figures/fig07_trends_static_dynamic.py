@@ -54,7 +54,7 @@ from utils.plot_utils import (  # noqa: E402
 set_mpl_defaults()
 
 PROJECT_ROOT = PROJECT_ROOT_CLUSTER
-ANOM_DIR = PROJECT_ROOT / "results" / "anomalies"
+ANOM_DIR = PROJECT_ROOT / "data" / "anomalies" / "SMMR"
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
@@ -102,18 +102,18 @@ def load_fs_ms_clim_anom() -> dict[str, xr.DataArray]:
     Load FS/MS climatology + anomaly fields for static + dynamic,
     and the sector/ocean mask.
     """
-    fs_dyn_clim = _open_da(ANOM_DIR / "FS_dynamic_climatology.nc", ["FS_dynamic_clim"], decode_times=True)
-    fs_dyn_anom = _open_da(ANOM_DIR / "FS_dynamic_anomalies.nc", ["FS_dynamic_anom"], decode_times=True)
+    fs_dyn_clim = _open_da(ANOM_DIR / "FS_dynamic_k5_q70_climatology.nc", ["FS_dynamic_k5_q70_clim"], decode_times=False)
+    fs_dyn_anom = _open_da(ANOM_DIR / "FS_dynamic_k5_q70_anomalies.nc", ["FS_dynamic_k5_q70_anom"], decode_times=False)
 
     # MS NetCDFs may have a time-units attr xarray tries to decode -> decode_times=False
-    ms_dyn_clim = _open_da(ANOM_DIR / "MS_dynamic_climatology.nc", ["MS_dynamic_clim_dsa", "MS_dynamic_clim"], decode_times=False)
-    ms_dyn_anom = _open_da(ANOM_DIR / "MS_dynamic_anomalies.nc", ["MS_dynamic_anom_dsa", "MS_dynamic_anom"], decode_times=False)
+    ms_dyn_clim = _open_da(ANOM_DIR / "MS_dynamic_k5_q70_climatology.nc", ["MS_dynamic_k5_q70_clim_dsa", "MS_dynamic_k5_q70_clim"], decode_times=False)
+    ms_dyn_anom = _open_da(ANOM_DIR / "MS_dynamic_k5_q70_anomalies.nc", ["MS_dynamic_k5_q70_anom_dsa", "MS_dynamic_k5_q70_anom"], decode_times=False)
 
-    fs_sta_clim = _open_da(ANOM_DIR / "FS_static_climatology.nc", ["FS_static_clim"], decode_times=True)
-    fs_sta_anom = _open_da(ANOM_DIR / "FS_static_anomalies.nc", ["FS_static_anom"], decode_times=True)
+    fs_sta_clim = _open_da(ANOM_DIR / "FS_static_thr15_k5_climatology.nc", ["FS_static_thr15_k5_clim"], decode_times=False)
+    fs_sta_anom = _open_da(ANOM_DIR / "FS_static_thr15_k5_anomalies.nc", ["FS_static_thr15_k5_anom"], decode_times=False)
 
-    ms_sta_clim = _open_da(ANOM_DIR / "MS_static_climatology.nc", ["MS_static_clim_dsa", "MS_static_clim"], decode_times=False)
-    ms_sta_anom = _open_da(ANOM_DIR / "MS_static_anomalies.nc", ["MS_static_anom_dsa", "MS_static_anom"], decode_times=False)
+    ms_sta_clim = _open_da(ANOM_DIR / "MS_static_thr15_k5_climatology.nc", ["MS_static_thr15_k5_clim_dsa", "MS_static_thr15_k5_clim"], decode_times=False)
+    ms_sta_anom = _open_da(ANOM_DIR / "MS_static_thr15_k5_anomalies.nc", ["MS_static_thr15_k5_anom_dsa", "MS_static_thr15_k5_anom"], decode_times=False)
 
     ds_mask = xr.open_dataset(SECTOR_FILE)
     valid_ocean = ds_mask["valid_ocean"].astype(bool)
