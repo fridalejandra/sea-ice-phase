@@ -53,7 +53,7 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
 SENSOR      = "SMMR"
 THRESH_PCT  = 15
 YEAR_MIN    = 1979
-YEAR_MAX    = 2023
+YEAR_MAX    = 2024
 METRICS_DIR = PROJECT_ROOT / "data" / "transition_metrics" / SENSOR
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
 SUBFOLDER   = ""

@@ -63,7 +63,7 @@ PERIOD = 366.0   # DOY wrap
 VMAX   = 15.0    # colorbar half-range in days
 
 YEAR_MIN = 1979
-YEAR_MAX = 2023
+YEAR_MAX = 2024
 
 # ---------------------------------------------------------------------
 # HELPERS: loading + wrapped differences

@@ -15,7 +15,7 @@ Col 3: Trend agreement (linear): both methods have negative slope (earlier over 
 
 Periods:
   pre  = 1980–2017
-  post = 2018–2023
+  post = 2018–2024
 
 IMPORTANT:
 - FS is calendar day-of-year (days)
@@ -62,7 +62,7 @@ SUBFOLDER = ""
 
 # Pre/post definition
 PRE_START, PRE_END = 1980, 2017
-POST_START, POST_END = 2018, 2023
+POST_START, POST_END = 2018, 2024
 
 # Canonical sectors
 sector_ids = [1, 2, 3, 4, 5]
@@ -446,7 +446,7 @@ def main():
     fig = plt.figure(figsize=(12, 8))
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], width_ratios=[1.25, 1.0, 1.25])
 
-    fig.suptitle("Post-2017 timing shift (2018–2023 minus 1980–2017)", y=0.985, fontsize=11)
+    fig.suptitle("Post-2017 timing shift (2018–2024 minus 1980–2017)", y=0.985, fontsize=11)
 
     # Short panel titles (no bleeding)
     t_a = "(a) FS sign (post−pre)"

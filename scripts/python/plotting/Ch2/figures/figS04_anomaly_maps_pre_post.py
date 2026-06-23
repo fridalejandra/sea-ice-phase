@@ -64,19 +64,19 @@ PERIOD_CONFIGS = {
         "pre_start": 1980,
         "pre_end":   2016,
         "post_start": 2017,
-        "post_end":   2023,
+        "post_end":   2024,
     },
     "B_pre1980-2015_post2016-2023": {
         "pre_start": 1980,
         "pre_end":   2015,
         "post_start": 2016,
-        "post_end":   2023,
+        "post_end":   2024,
     },
     "D_pre1980-2017_post2018-2023": {
         "pre_start": 1980,
         "pre_end":   2017,
         "post_start": 2018,
-        "post_end":   2023,
+        "post_end":   2024,
     },
 }
 

@@ -49,7 +49,7 @@ THR_REF     = 15
 THR_HIGH    = 30
 PERIOD      = 366.0
 YEAR_MIN    = 1979
-YEAR_MAX    = 2023
+YEAR_MAX    = 2024
 
 INPUT_ROOT = PROJECT_ROOT_CLUSTER / "data" / f"{SENSOR}_phase" / "static"
 

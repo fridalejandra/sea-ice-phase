@@ -51,7 +51,7 @@ sns.set_style("whitegrid")
 # CONFIG
 # ---------------------------------------------------------------------
 YEAR_MIN = 1980
-YEAR_MAX = 2023
+YEAR_MAX = 2024
 
 STATIC_DIR = PROJECT_ROOT_CLUSTER / "data" / "SMMR_phase" / "static"
 DYN_ROOT = (

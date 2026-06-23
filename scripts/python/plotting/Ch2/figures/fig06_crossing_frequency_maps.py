@@ -33,7 +33,7 @@ from scripts.python.plotting.ch2_fig_utils import (
 SENSOR      = "SMMR"
 THRESH_PCT  = 15
 YEAR_MIN    = 1979
-YEAR_MAX    = 2023
+YEAR_MAX    = 2024
 PRE_END     = 2015
 POST_START  = 2016
 METRICS_DIR = PROJECT_ROOT / "data" / "transition_metrics" / SENSOR
