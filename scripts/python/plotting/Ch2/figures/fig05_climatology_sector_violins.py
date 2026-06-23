@@ -333,7 +333,7 @@ fig.subplots_adjust(right=0.82)
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
     subfolder="",
-    fig_name="Fig6_FS_MS_climatology_static_vs_dynamic_violins.png",
+    fig_name="Fig06_FS_MS_climatology_static_vs_dynamic_violins.png",
 )
 
 save_and_upload(

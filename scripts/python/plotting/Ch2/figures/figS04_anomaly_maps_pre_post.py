@@ -260,7 +260,7 @@ def make_anomaly_map_for_period(period_key, cfg, fields):
 
     fig.tight_layout(rect=[0.02, 0.14, 0.98, 0.95])
 
-    fig_name = f"Fig_FS_MS_duration_anomaly_maps_static_vs_dynamic_{period_key}.png"
+    fig_name = f"FigS04_FS_MS_anomaly_maps_static_vs_dynamic_{period_key}.png"
     out_path = get_fig_path(
         project_root=PROJECT_ROOT,
         subfolder=SUBFOLDER,

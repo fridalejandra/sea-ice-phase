@@ -217,7 +217,7 @@ fig.tight_layout(rect=[0.06, 0.06, 1, 0.97])
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
     subfolder="",
-    fig_name="Fig_FS_MS_window_sensitivity_static_ecdfs_by_sector.png",
+    fig_name="FigS03_FS_MS_window_sensitivity_static_ecdfs_by_sector.png",
 )
 
 save_and_upload(

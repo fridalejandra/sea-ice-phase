@@ -57,7 +57,7 @@ WINDOWS    = [3, 5, 7]   # day windows
 INPUT_ROOT = PROJECT_ROOT / "data" / f"{SENSOR}_phase" / "static"
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
-SUBFOLDER   = "sensitivity/window"
+SUBFOLDER   = ""
 
 PERIOD = 366.0   # DOY wrap
 VMAX   = 15.0    # colorbar half-range in days

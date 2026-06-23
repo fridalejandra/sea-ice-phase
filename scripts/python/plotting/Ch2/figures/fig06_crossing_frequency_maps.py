@@ -143,7 +143,7 @@ def plot_crossing_freq_diff():
     fig.tight_layout(rect=[0, 0.12, 1, 1.0])
 
     fig_name = format_fig_name(
-        num=4,
+        num=7,
         short=f"crossing_frequency_FS_MS_{SENSOR}_thr{THRESH_PCT}_prepost2016",
     )
     out_path = get_fig_path(project_root=PROJECT_ROOT, subfolder=SUBFOLDER, fig_name=fig_name)

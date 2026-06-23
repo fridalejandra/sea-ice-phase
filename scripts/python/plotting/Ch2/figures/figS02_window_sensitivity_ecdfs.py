@@ -119,7 +119,7 @@ fig.tight_layout()
 out_path = get_fig_path(
     PROJECT_ROOT_CLUSTER,
     subfolder="",
-    fig_name="Fig_FS_MS_window_sensitivity_static_ecdf_allcurves.png",
+    fig_name="FigS02_FS_MS_window_sensitivity_static_ecdf_allcurves.png",
 )
 
 save_and_upload(
