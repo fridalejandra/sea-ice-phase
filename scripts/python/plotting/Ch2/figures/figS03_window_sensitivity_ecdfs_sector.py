@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+figS03_window_sensitivity_ecdfs_sector.py
+
+Window sensitivity ECDFs by sector — FS and MS separately.
+Static method, thr=15%, k=3,7 vs k=5. SMMR 1979-2024.
+
+Layout: 2 rows (FS, MS) x 5 cols (one per sector)
+"""
 
 import sys
 from pathlib import Path
@@ -9,12 +17,8 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# -----------------------------------------------------------
-# Make ch2_fig_utils importable
-# -----------------------------------------------------------
-HERE = Path(__file__).resolve().parent
+HERE          = Path(__file__).resolve().parent
 PLOTTING_ROOT = HERE.parent
-
 if str(PLOTTING_ROOT) not in sys.path:
     sys.path.insert(0, str(PLOTTING_ROOT))
 
@@ -23,206 +27,158 @@ from utils.plot_utils import (
     get_fig_path,
     save_and_upload,
     PROJECT_ROOT_CLUSTER,
+    get_sentinel_mask,
 )
 
 set_mpl_defaults()
 
-# -----------------------------------------------------------
-# Paths
-# -----------------------------------------------------------
-WINDOW_DIFF_DIR = (
-    PROJECT_ROOT_CLUSTER
-    / "results"
-    / "sensitivity"
-    / "SMMR_phase"
-    / "SMMR_window_comparison"
-)
+# ---------------------------------------------------------------------
+# CONFIG
+# ---------------------------------------------------------------------
+SENSOR     = "SMMR"
+THRESH_PCT = 15
+YEAR_MIN   = 1979
+YEAR_MAX   = 2024
+PERIOD     = 366.0
+CLIP       = 30.0
 
-SECTOR_MASK_PATH = (
-    PROJECT_ROOT_CLUSTER
-    / "data"
-    / "canonical_sectors.nc"
-)
+INPUT_ROOT   = PROJECT_ROOT_CLUSTER / "data" / f"{SENSOR}_phase" / "static"
+SECTOR_FILE  = PROJECT_ROOT_CLUSTER / "data" / "canonical_sectors.nc"
 
-sector_ds = xr.open_dataset(SECTOR_MASK_PATH)
-print("Variables in sector file:", list(sector_ds.data_vars))
-
-# Use sector_id as the mask
-sector_mask = sector_ds["sector_id"].values          # 2D [y,x]
-
-# Valid ocean mask (optional but sensible)
-if "valid_ocean" in sector_ds:
-    valid_ocean = sector_ds["valid_ocean"].values.astype(bool)
-    sector_mask = np.where(valid_ocean, sector_mask, np.nan)
-else:
-    valid_ocean = ~np.isnan(sector_mask)
-
-# Derive sector IDs from the mask (excluding NaNs/zeros if present)
-sector_ids = sorted(
-    int(s) for s in np.unique(sector_mask[valid_ocean])
-    if np.isfinite(s) and s != 0
-)
-
-# Build labels from the name variables if you like
-sector_labels = {}
-for sid in sector_ids:
-    name_var = f"sector_{sid}_name"
-    if name_var in sector_ds:
-        # these are probably 0-D string DataArrays
-        sector_labels[sid] = str(sector_ds[name_var].values)
-    else:
-        sector_labels[sid] = f"Sector {sid}"
-
-# -----------------------------------------------------------
-# Load diff fields as |Δ|, keeping spatial structure
-# -----------------------------------------------------------
-def load_abs_diff_field(pattern: str) -> xr.DataArray:
-    """
-    Load |ΔDOY| as a DataArray [year, y, x] for a diff field.
-
-    pattern: e.g. 'diff_advance_3minus5_*.nc'
-    Assumes data variable has same base name, e.g. 'diff_advance_3minus5'.
-    """
-    fpaths = sorted(WINDOW_DIFF_DIR.glob(pattern))
-    if not fpaths:
-        raise FileNotFoundError(f"No files matching {pattern} in {WINDOW_DIFF_DIR}")
-
-    ds = xr.open_mfdataset(fpaths, concat_dim="year", combine="nested")
-
-    base = pattern.split("_*.nc")[0]  # "diff_advance_3minus5"
-    if base not in ds.data_vars:
-        raise KeyError(
-            f"Variable '{base}' not found in dataset. "
-            f"Available: {list(ds.data_vars)}"
-        )
-
-    da = ds[base]       # [year, y, x]
-    return np.abs(da)   # keep as DataArray
+SECTOR_IDS = [1, 2, 3, 4, 5]
+SECTOR_LABELS = {
+    1: "AB",
+    2: "Weddell",
+    3: "KH VII",
+    4: "E. Antarctica",
+    5: "Ross",
+}
 
 
-adv_3v5_da = load_abs_diff_field("diff_advance_3minus5_*.nc")
-adv_7v5_da = load_abs_diff_field("diff_advance_7minus5_*.nc")
-ret_3v5_da = load_abs_diff_field("diff_retreat_3minus5_*.nc")
-ret_7v5_da = load_abs_diff_field("diff_retreat_7minus5_*.nc")
+# ---------------------------------------------------------------------
+# HELPERS
+# ---------------------------------------------------------------------
+def _year_from_fname(path):
+    try:
+        return int(path.name.split("_")[1].split(".")[0])
+    except Exception:
+        return None
 
-# sanity: share y,x with sector mask
-assert adv_3v5_da.sizes["y"] == sector_mask.shape[0]
-assert adv_3v5_da.sizes["x"] == sector_mask.shape[1]
 
-# -----------------------------------------------------------
-# Sector-wise ECDF data
-# -----------------------------------------------------------
-def sector_values(da: xr.DataArray, sec_id: int) -> np.ndarray:
-    """Flatten values for given sector over year,y,x."""
+def load_window_dict(metric, kdays):
+    subdir = f"thr{THRESH_PCT:02d}_k{kdays}"
+    folder = INPUT_ROOT / subdir / metric
+    files  = sorted(folder.glob(f"{metric}_*.nc"))
+    out    = {}
+    for f in files:
+        yr = _year_from_fname(f)
+        if yr is None or yr < YEAR_MIN or yr > YEAR_MAX:
+            continue
+        ds = xr.open_dataset(f)
+        out[yr] = ds[metric].load()
+        ds.close()
+    return out
+
+
+def align_years(*dicts):
+    return sorted(set.intersection(*[set(d.keys()) for d in dicts]))
+
+
+def stack_years(d, years):
+    return xr.concat([d[y].expand_dims(year=[y]) for y in years], dim="year")
+
+
+def wrapped_diff(arr, period=PERIOD):
+    return (arr + period / 2.0) % period - period / 2.0
+
+
+def compute_diff_stack(metric, k_test, sentinel):
+    """Returns |diff| array (year, y, x) with sentinel masked."""
+    d_test = load_window_dict(metric, k_test)
+    d_ref  = load_window_dict(metric, 5)
+    years  = align_years(d_test, d_ref)
+    A_test = stack_years(d_test, years)
+    A_ref  = stack_years(d_ref,  years)
+    diff   = np.abs(wrapped_diff((A_test - A_ref).values))
+    diff[:, sentinel] = np.nan
+    return diff  # (year, y, x)
+
+
+def sector_vals(diff_stack, sector_mask, sec_id):
     mask = (sector_mask == sec_id)
-    vals = da.values[:, mask]   # [year, n_pixels_in_sector]
-    vals = vals.ravel()
+    vals = diff_stack[:, mask].ravel()
     vals = vals[np.isfinite(vals)]
-    return vals
+    return vals[(vals >= 0) & (vals <= CLIP)]
 
 
-def sector_combined_fsms(sec_id: int) -> tuple[np.ndarray, np.ndarray]:
-    """
-    For a sector ID, return combined FS+MS |Δ| values
-    for 3v5 and 7v5 windows.
-    """
-    fs_3v5 = sector_values(adv_3v5_da, sec_id)
-    fs_7v5 = sector_values(adv_7v5_da, sec_id)
-    ms_3v5 = sector_values(ret_3v5_da, sec_id)
-    ms_7v5 = sector_values(ret_7v5_da, sec_id)
+# ---------------------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------------------
+def main():
+    ds_sec      = xr.open_dataset(SECTOR_FILE)
+    sector_mask = ds_sec["sector_id"].values.astype(float)
+    ocean_mask  = ds_sec["valid_ocean"].values.astype(bool)
+    ds_sec.close()
+    sector_mask[~ocean_mask] = np.nan
 
-    vals_3v5 = np.concatenate([fs_3v5, ms_3v5])
-    vals_7v5 = np.concatenate([fs_7v5, ms_7v5])
+    sent_fs = get_sentinel_mask(PROJECT_ROOT_CLUSTER, "FS")
+    sent_ms = get_sentinel_mask(PROJECT_ROOT_CLUSTER, "MS")
+    sent_fs = sent_fs.values if hasattr(sent_fs, "values") else sent_fs
+    sent_ms = sent_ms.values if hasattr(sent_ms, "values") else sent_ms
 
-    # Optional: clip extreme outliers (e.g. >30 days)
-    vals_3v5 = vals_3v5[(vals_3v5 >= 0) & (vals_3v5 <= 30)]
-    vals_7v5 = vals_7v5[(vals_7v5 >= 0) & (vals_7v5 <= 30)]
+    print("Computing FS diffs...")
+    fs_3v5 = compute_diff_stack("FS", 3, sent_fs)
+    fs_7v5 = compute_diff_stack("FS", 7, sent_fs)
+    print("Computing MS diffs...")
+    ms_3v5 = compute_diff_stack("MS", 3, sent_ms)
+    ms_7v5 = compute_diff_stack("MS", 7, sent_ms)
 
-    return vals_3v5, vals_7v5
+    nsec  = len(SECTOR_IDS)
+    fig, axes = plt.subplots(2, nsec, figsize=(3.0 * nsec, 5.5),
+                             dpi=300, sharex=True, sharey=True)
 
+    for col, sec_id in enumerate(SECTOR_IDS):
+        for row, (phase, d3, d7) in enumerate([
+            ("FS", fs_3v5, fs_7v5),
+            ("MS", ms_3v5, ms_7v5),
+        ]):
+            ax = axes[row, col]
+            v3 = sector_vals(d3, sector_mask, sec_id)
+            v7 = sector_vals(d7, sector_mask, sec_id)
 
-# -----------------------------------------------------------
-# Plot sector ECDFs
-# -----------------------------------------------------------
-# -----------------------------------------------------------
-# FS and MS separate ECDFs by sector
-# -----------------------------------------------------------
+            sns.ecdfplot(x=v3, ax=ax, label="3 vs 5")
+            sns.ecdfplot(x=v7, ax=ax, label="7 vs 5")
 
-nsec = len(sector_ids)
-ncols = 3
-nrows = 2 * int(np.ceil(nsec / ncols))  # FS rows first, MS rows second
+            ax.set_xlim(0, CLIP)
+            ax.grid(True, alpha=0.3)
 
-fig, axes = plt.subplots(
-    nrows,
-    ncols,
-    figsize=(3.2 * ncols, 2.8 * nrows),
-    dpi=300,
-    sharex=True,
-    sharey=True,
-)
+            if row == 0:
+                ax.set_title(SECTOR_LABELS[sec_id], fontsize=9, fontweight="bold")
+            if col == 0:
+                ax.set_ylabel(f"{phase}\nCumul. fraction", fontsize=8)
+            else:
+                ax.set_ylabel("")
+            if row == 1:
+                ax.set_xlabel("|Δ date| (days)", fontsize=8)
+            else:
+                ax.set_xlabel("")
 
-axes = axes.ravel()
-xmax = 30
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2,
+               frameon=False, fontsize=9, title="Window comparison")
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
 
-# Row 1 → FS, Row 2 → MS
-# Loop sectors twice: first FS then MS
-plot_order = []
-for phase in ["FS", "MS"]:
-    for sec_id in sector_ids:
-        plot_order.append((phase, sec_id))
-
-for ax, (phase, sec_id) in zip(axes, plot_order):
-    if phase == "FS":
-        vals_3v5 = sector_values(adv_3v5_da, sec_id)
-        vals_7v5 = sector_values(adv_7v5_da, sec_id)
-    else:
-        vals_3v5 = sector_values(ret_3v5_da, sec_id)
-        vals_7v5 = sector_values(ret_7v5_da, sec_id)
-
-    # Remove outliers > 30 days
-    vals_3v5 = vals_3v5[(vals_3v5 >= 0) & (vals_3v5 <= 30)]
-    vals_7v5 = vals_7v5[(vals_7v5 >= 0) & (vals_7v5 <= 30)]
-
-    sns.ecdfplot(x=vals_3v5, ax=ax, label="3 vs 5 days")
-    sns.ecdfplot(x=vals_7v5, ax=ax, label="7 vs 5 days")
-
-    ax.set_xlim(0, xmax)
-    title = f"{sector_labels[sec_id]} — {phase}"
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
-
-# Hide any extra blank panels
-for ax in axes[len(plot_order):]:
-    ax.set_visible(False)
-
-# Shared x labels only on bottom row
-for ax in axes[-ncols:]:
-    ax.set_xlabel("Absolute timing difference (days)")
-
-# Remove all y labels, add one shared label
-for ax in axes:
-    ax.set_ylabel("")
-fig.text(0.04, 0.5, "Cumulative fraction of pixels",
-         va="center", rotation="vertical", fontsize=10)
-
-# Legend
-handles, labels = axes[0].get_legend_handles_labels()
-fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False)
-
-fig.tight_layout(rect=[0.06, 0.06, 1, 0.97])
+    out_path = get_fig_path(
+        PROJECT_ROOT_CLUSTER,
+        subfolder="",
+        fig_name="FigS03_FS_MS_window_sensitivity_static_ecdfs_by_sector.png",
+    )
+    save_and_upload(
+        fig, out_path,
+        remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
+        remote_subdir="",
+    )
 
 
-
-
-out_path = get_fig_path(
-    PROJECT_ROOT_CLUSTER,
-    subfolder="",
-    fig_name="FigS03_FS_MS_window_sensitivity_static_ecdfs_by_sector.png",
-)
-
-save_and_upload(
-    fig,
-    out_path,
-    remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
-    remote_subdir="",
-)
+if __name__ == "__main__":
+    main()
