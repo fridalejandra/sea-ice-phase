@@ -154,8 +154,8 @@ def main():
                 ha="left", va="top", fontsize=12, fontweight="bold")
 
     title_years = f"{YEARS.start}–{YEARS.stop - 1}"
-    ax_ms.set_title(f"Melt Start ({title_years})", fontsize=9)
-    ax_fs.set_title(f"Freeze Start ({title_years})", fontsize=9)
+    ax_ms.set_title(f"Melt Start ({title_years})", fontsize=9, fontweight="bold")
+    ax_fs.set_title(f"Freeze Start ({title_years})", fontsize=9, fontweight="bold")
 
     im_ms = plot_bias_map(ax_ms, bias_clim_ms)
     im_fs = plot_bias_map(ax_fs, bias_clim_fs)

@@ -258,7 +258,7 @@ def plot_window_diff_maps():
             vmax=vmax,
             shading="auto",
         )
-        ax.set_title(title, fontsize=9)
+        ax.set_title(title, fontsize=9, fontweight="bold")
 
     # Shared colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])

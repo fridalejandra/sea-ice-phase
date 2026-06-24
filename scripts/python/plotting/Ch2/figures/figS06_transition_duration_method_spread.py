@@ -161,10 +161,10 @@ def plot_figS06() -> None:
     fig = plt.figure(figsize=(12.0, 12.0))
 
     panels = [
-        ("(a) FS — fraction of years\nwith ambiguous transition", frac_fs,    1, cmap_frac, norm_frac),
-        ("(b) MS — fraction of years\nwith ambiguous transition", frac_ms,    2, cmap_frac, norm_frac),
-        ("(c) FS — mean method spread\nacross static thr/k",      mean_spr_fs, 3, cmap_spr,  norm_spr),
-        ("(d) MS — mean method spread\nacross static thr/k",      mean_spr_ms, 4, cmap_spr,  norm_spr),
+        ("(a) FS — how often does freeze onset\nflicker before committing? (fraction of years)", frac_fs,    1, cmap_frac, norm_frac),
+        ("(b) MS — how often does melt onset\nflicker before committing? (fraction of years)", frac_ms,    2, cmap_frac, norm_frac),
+        ("(c) FS — parameter uncertainty\nin detected freeze date",      mean_spr_fs, 3, cmap_spr,  norm_spr),
+        ("(d) MS — parameter uncertainty\nin detected melt date",      mean_spr_ms, 4, cmap_spr,  norm_spr),
     ]
 
     im_frac = None
@@ -180,23 +180,23 @@ def plot_figS06() -> None:
             shading="auto",
             zorder=1,
         )
-        ax.set_title(title, fontsize=9, pad=3)
+        ax.set_title(title, fontsize=9, pad=3, fontweight="bold")
         if cmap == cmap_frac:
             im_frac = im
         else:
             im_spr = im
 
     # colorbar for fraction panels
-    cax1 = fig.add_axes([0.08, 0.50, 0.38, 0.013])
-    cb1  = fig.colorbar(im_frac, cax=cax1, orientation="horizontal")
-    cb1.set_label(f"Fraction of years with transition duration > 0 ({YEAR_MIN}–{YEAR_MAX})", fontsize=8)
+    cax1 = fig.add_axes([0.92, 0.55, 0.015, 0.35])
+    cb1  = fig.colorbar(im_frac, cax=cax1, orientation="vertical")
+    cb1.set_label("Fraction of years\nwith ambiguous transition", fontsize=8, rotation=270, labelpad=15)
     cb1.ax.tick_params(labelsize=7)
     cb1.outline.set_visible(False)
 
     # colorbar for spread panels
-    cax2 = fig.add_axes([0.08, 0.04, 0.38, 0.013])
-    cb2  = fig.colorbar(im_spr, cax=cax2, orientation="horizontal", extend="max")
-    cb2.set_label("Mean method spread across static thr/k combinations (days)", fontsize=8)
+    cax2 = fig.add_axes([0.92, 0.10, 0.015, 0.35])
+    cb2  = fig.colorbar(im_spr, cax=cax2, orientation="vertical", extend="max")
+    cb2.set_label("Spread across thr/k combinations (days)", fontsize=8, rotation=270, labelpad=15)
     cb2.ax.tick_params(labelsize=7)
     cb2.outline.set_visible(False)
 

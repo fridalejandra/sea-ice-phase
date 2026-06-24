@@ -131,7 +131,7 @@ def plot_crossing_freq_diff():
         ax = make_polar_ax(fig, col)
         im_last = ax.pcolormesh(x, y, data, transform=proj,
                                 cmap=cmap, norm=norm, shading="auto", zorder=1)
-        ax.set_title(title, fontsize=10, pad=4)
+        ax.set_title(title, fontsize=10, pad=4, fontweight="bold")
 
     cax = fig.add_axes([0.2, 0.06, 0.6, 0.03])
     cb  = fig.colorbar(im_last, cax=cax, orientation="horizontal", extend="both")
