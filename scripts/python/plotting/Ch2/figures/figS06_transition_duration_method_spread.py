@@ -206,7 +206,7 @@ def plot_figS06() -> None:
     )
     fig.subplots_adjust(left=0.05, right=0.95, top=0.94, bottom=0.10, hspace=0.35, wspace=0.05)
 
-    fig_name = f"FigS06_transition_duration_method_spread_{SENSOR}.png"
+    fig_name = f"FigS05_transition_duration_method_spread_{SENSOR}.png"
 
     out_path = get_fig_path(
         project_root=PROJECT_ROOT,

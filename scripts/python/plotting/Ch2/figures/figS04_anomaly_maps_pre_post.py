@@ -54,26 +54,26 @@ ANOM_DIR = PROJECT_ROOT / "data" / "anomalies" / "SMMR"
 SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
 REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
-SUBFOLDER   = "anomalies"
+SUBFOLDER   = ""
 
 # ---------------------------------------------------------------------
 # Period configs (same as before)
 # ---------------------------------------------------------------------
 PERIOD_CONFIGS = {
     "A_pre1980-2016_post2017-2023": {
-        "pre_start": 1980,
+        "pre_start": 1979,
         "pre_end":   2016,
         "post_start": 2017,
         "post_end":   2024,
     },
     "B_pre1980-2015_post2016-2023": {
-        "pre_start": 1980,
+        "pre_start": 1979,
         "pre_end":   2015,
         "post_start": 2016,
         "post_end":   2024,
     },
     "D_pre1980-2017_post2018-2023": {
-        "pre_start": 1980,
+        "pre_start": 1979,
         "pre_end":   2017,
         "post_start": 2018,
         "post_end":   2024,
@@ -260,7 +260,7 @@ def make_anomaly_map_for_period(period_key, cfg, fields):
 
     fig.tight_layout(rect=[0.02, 0.14, 0.98, 0.95])
 
-    fig_name = f"FigS04_FS_MS_anomaly_maps_static_vs_dynamic_{period_key}.png"
+    fig_name = f"FigS03_FS_MS_anomaly_maps_static_vs_dynamic_{period_key}.png"
     out_path = get_fig_path(
         project_root=PROJECT_ROOT,
         subfolder=SUBFOLDER,

@@ -213,7 +213,7 @@ def plot_threshold_maps():
             vmax=VMAX,
             shading="auto",
         )
-        ax.set_title(title, fontsize=9)
+        ax.set_title(title, fontsize=9, fontweight="bold")
 
     # Shared colourbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
