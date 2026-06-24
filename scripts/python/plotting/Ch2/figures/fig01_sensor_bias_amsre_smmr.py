@@ -41,6 +41,7 @@ from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
     format_fig_name,
     get_fig_path,
     save_and_upload,
+    get_sentinel_mask,
 )
 
 # ---------------------------------------------------------------------
@@ -64,6 +65,11 @@ def wrapped_difference(a, b, period=365.0):
     return (a - b + period / 2.0) % period - period / 2.0
 
 
+def to_days_since_aug15(doy: np.ndarray) -> np.ndarray:
+    """Convert MS calendar DOY to continuous days since Aug 15 (DOY 227)."""
+    return np.where(doy < 227, doy + 365, doy) - 227
+
+
 def load_phase_year(root: Path, phase: str, year: int) -> xr.DataArray:
     path = root / phase / f"{phase}_{year}.nc"
     ds   = xr.open_dataset(path)
@@ -77,6 +83,10 @@ def compute_bias(phase: str) -> tuple[xr.DataArray, np.ndarray]:
     Compute annual and climatological wrapped bias (AMSRE − SMMR) for a phase.
     Returns (bias_clim [y,x], all_bias_flat 1D).
     """
+    # sentinel mask — pixels that never undergo a genuine transition
+    sent = get_sentinel_mask(PROJECT_ROOT, phase)
+    sent = sent.values if hasattr(sent, "values") else sent
+
     yearly = []
     flat   = []
 
@@ -98,7 +108,12 @@ def compute_bias(phase: str) -> tuple[xr.DataArray, np.ndarray]:
         amsre_coarse = amsre.coarsen(y=2, x=2, boundary="trim").mean()
         amsre_coarse = amsre_coarse.assign_coords(x=smmr.x, y=smmr.y)
 
-        bias_vals = wrapped_difference(amsre_coarse.values, smmr.values)
+        if phase == "MS":
+            # convert to days-since-Aug-15 before differencing to avoid year-boundary wrap artifacts
+            bias_vals = to_days_since_aug15(amsre_coarse.values) - to_days_since_aug15(smmr.values)
+        else:
+            bias_vals = wrapped_difference(amsre_coarse.values, smmr.values)
+        bias_vals[sent] = np.nan
         bias = xr.DataArray(
             data=bias_vals,
             coords={"y": smmr.y, "x": smmr.x},
@@ -173,7 +188,7 @@ def main():
 
     sns.histplot(
         data=df, x="bias", hue="phase", multiple="stack",
-        bins=np.arange(-40, 42, 2), stat="density", common_norm=False,
+        bins=np.arange(-40, 42, 2), stat="density", common_norm=True,
         edgecolor=".3", linewidth=0.5, ax=ax_hist,
     )
     ax_hist.set_ylim(0, 0.08)
