@@ -61,9 +61,9 @@ def smooth(arr, size):
                        np.nan)
     return out
 
-def make_polar_ax(fig, col):
+def make_polar_ax(fig, row, col, nrows=2, ncols=3):
     proj = ccrs.SouthPolarStereo()
-    ax   = fig.add_subplot(1, 2, col, projection=proj)
+    ax   = fig.add_subplot(nrows, ncols, (row-1)*ncols + col, projection=proj)
     ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
     ax.add_feature(cfeature.LAND.with_scale("110m"),
                    facecolor="0.85", edgecolor="0.6", linewidth=0.4, zorder=3)
@@ -122,25 +122,56 @@ def plot_crossing_freq_diff():
     cmap = plt.cm.RdBu_r
     norm = mcolors.Normalize(vmin=-VMAX_DIFF, vmax=VMAX_DIFF)
 
-    fig = plt.figure(figsize=(10.0, 5.5))
-    im_last = None
-    for title, data, col in [
-        ("(a) FS — post minus pre 2016", diff_fs_s, 1),
-        ("(b) MS — post minus pre 2016", diff_ms_s, 2),
-    ]:
-        ax = make_polar_ax(fig, col)
-        im_last = ax.pcolormesh(x, y, data, transform=proj,
-                                cmap=cmap, norm=norm, shading="auto", zorder=1)
-        ax.set_title(title, fontsize=10, pad=4, fontweight="bold")
+    # pre and post means (unsmoothed for absolute maps, smoothed for diff)
+    fs_pre_m  = smooth(cf_fs.sel(year=slice(YEAR_MIN, PRE_END)).mean("year", skipna=True).values, SMOOTH_SIZE)
+    fs_post_m = smooth(cf_fs.sel(year=slice(POST_START, YEAR_MAX)).mean("year", skipna=True).values, SMOOTH_SIZE)
+    ms_pre_m  = smooth(cf_ms.sel(year=slice(YEAR_MIN, PRE_END)).mean("year", skipna=True).values, SMOOTH_SIZE)
+    ms_post_m = smooth(cf_ms.sel(year=slice(POST_START, YEAR_MAX)).mean("year", skipna=True).values, SMOOTH_SIZE)
+    fs_pre_m[sent_fs]  = np.nan
+    fs_post_m[sent_fs] = np.nan
+    ms_pre_m[sent_ms]  = np.nan
+    ms_post_m[sent_ms] = np.nan
 
-    cax = fig.add_axes([0.2, 0.06, 0.6, 0.03])
-    cb  = fig.colorbar(im_last, cax=cax, orientation="horizontal", extend="both")
-    cb.set_label(
-        f"Δ mean crossings/season (post {POST_START}–{YEAR_MAX} minus {YEAR_MIN}–{PRE_END})",
-        fontsize=9)
-    cb.ax.tick_params(labelsize=8)
-    cb.outline.set_visible(False)
-    fig.tight_layout(rect=[0, 0.12, 1, 1.0])
+    cmap_abs  = plt.cm.YlOrRd
+    norm_abs  = mcolors.Normalize(vmin=0, vmax=5)
+
+    fig = plt.figure(figsize=(14.0, 9.0))
+    panels = [
+        (1, 1, "(a) FS pre-2016 (1979–2015)",   fs_pre_m,  cmap_abs, norm_abs),
+        (1, 2, "(b) FS post-2016 (2016–2024)",  fs_post_m, cmap_abs, norm_abs),
+        (1, 3, "(c) FS difference (post−pre)",   diff_fs_s, cmap,     norm),
+        (2, 1, "(d) MS pre-2016 (1979–2015)",   ms_pre_m,  cmap_abs, norm_abs),
+        (2, 2, "(e) MS post-2016 (2016–2024)",  ms_post_m, cmap_abs, norm_abs),
+        (2, 3, "(f) MS difference (post−pre)",   diff_ms_s, cmap,     norm),
+    ]
+
+    im_abs = None
+    im_diff = None
+    for row, col, title, data, cm, nm in panels:
+        ax = make_polar_ax(fig, row, col)
+        im = ax.pcolormesh(x, y, data, transform=proj,
+                           cmap=cm, norm=nm, shading="auto", zorder=1)
+        ax.set_title(title, fontsize=9, pad=4, fontweight="bold")
+        if col in (1, 2):
+            im_abs = im
+        else:
+            im_diff = im
+
+    # colorbar for absolute maps
+    cax1 = fig.add_axes([0.05, 0.04, 0.55, 0.02])
+    cb1  = fig.colorbar(im_abs, cax=cax1, orientation="horizontal")
+    cb1.set_label("Mean crossings/season", fontsize=9)
+    cb1.ax.tick_params(labelsize=8)
+    cb1.outline.set_visible(False)
+
+    # colorbar for difference maps
+    cax2 = fig.add_axes([0.65, 0.04, 0.30, 0.02])
+    cb2  = fig.colorbar(im_diff, cax=cax2, orientation="horizontal", extend="both")
+    cb2.set_label(f"Δ crossings/season", fontsize=9)
+    cb2.ax.tick_params(labelsize=8)
+    cb2.outline.set_visible(False)
+
+    fig.tight_layout(rect=[0, 0.08, 1, 1.0])
 
     fig_name = format_fig_name(
         num=7,
