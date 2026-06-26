@@ -372,6 +372,8 @@ def main():
     ms_class = make_sign_class_map(ms_dyn_diff, ms_sta_diff, valid_ocean, thresh=7.0)
 
     # Col 2: sector mean bars (ACTIVE-only)
+    # TODO: ~30% of pixels have static MS < DSA20 (spurious outer ice edge detections)
+    # Discuss with advisor whether to add minimum DSA threshold or flag as caveat in text
     df_sector = sector_mean_deltas(
         fs_dyn_diff, fs_sta_diff,
         ms_dyn_diff, ms_sta_diff,
