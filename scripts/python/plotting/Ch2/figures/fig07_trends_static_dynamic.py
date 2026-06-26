@@ -369,7 +369,7 @@ def main():
 
     # Col 1: sign agreement classes (NaN outside ocean)
     fs_class = make_sign_class_map(fs_dyn_diff.where(fs_active), fs_sta_diff.where(fs_active), valid_ocean, thresh=7.0)
-    ms_class = make_sign_class_map(ms_dyn_diff, ms_sta_diff, valid_ocean, thresh=7.0)
+    ms_class = make_sign_class_map(ms_dyn_diff.where(ms_active), ms_sta_diff.where(ms_active), valid_ocean, thresh=7.0)
 
     # Col 2: sector mean bars (ACTIVE-only)
     # TODO: ~30% of pixels have static MS < DSA20 (spurious outer ice edge detections)
