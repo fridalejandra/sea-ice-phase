@@ -390,8 +390,8 @@ def main():
     ms_slope_dyn = compute_trend_slopes(fields["MS_dynamic_anom"])
     ms_slope_sta = compute_trend_slopes(fields["MS_static_anom"])
 
-    fs_trend_agree = make_trend_agreement_mask(fs_slope_dyn, fs_slope_sta, valid_ocean, fs_active)
-    ms_trend_agree = make_trend_agreement_mask(ms_slope_dyn, ms_slope_sta, valid_ocean, ms_active)
+    fs_trend_class = make_sign_class_map(fs_slope_dyn, fs_slope_sta, valid_ocean & fs_active, thresh=0.0)
+    ms_trend_class = make_sign_class_map(ms_slope_dyn, ms_slope_sta, valid_ocean & ms_active, thresh=0.0)
 
     # ---------------- Fractions (make denominators explicit) ----------------
     def frac_step_both_earlier_active(da_class: xr.DataArray, active_mask: xr.DataArray) -> float:
@@ -414,9 +414,9 @@ def main():
     print(f"[INFO] Step-change BOTH EARLIER fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
           frac_step_both_earlier_active(ms_class, ms_active))
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
-          frac_trend_agree_active(fs_trend_agree, fs_active))
+          frac_trend_agree_active(fs_trend_class, fs_active))
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
-          frac_trend_agree_active(ms_trend_agree, ms_active))
+          frac_trend_agree_active(ms_trend_class, ms_active))
 
     def frac_trend_both_positive_active(
         slope_dyn: xr.DataArray, slope_sta: xr.DataArray, active_mask: xr.DataArray
@@ -482,7 +482,7 @@ def main():
     ax_b.legend(frameon=True, fontsize=8)
 
     ax_c = make_polar_ax(fig, gs, 0, 2)
-    _ = plot_trend_agreement(ax_c, fs_trend_agree, t_c)
+    _ = plot_sign_class_map(ax_c, fs_trend_class, t_c)
 
     # ----- Row 2: MS -----
     ax_d = make_polar_ax(fig, gs, 1, 0)
@@ -502,7 +502,7 @@ def main():
     ax_e.set_title(t_e, fontsize=9, fontweight="bold")
 
     ax_f = make_polar_ax(fig, gs, 1, 2)
-    _ = plot_trend_agreement(ax_f, ms_trend_agree, t_f)
+    _ = plot_sign_class_map(ax_f, ms_trend_class, t_f)
 
     # ---------- Colorbar (compact; no land/mask label) ----------
     cax1 = fig.add_axes([0.075, 0.055, 0.26, 0.012])  # [left, bottom, width, height]
