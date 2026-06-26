@@ -368,8 +368,8 @@ def main():
     print(f"[INFO] Active mask @ {MIN_FRAC_ACTIVE:.2f}: FS={int(fs_active.values.sum())}, MS={int(ms_active.values.sum())}")
 
     # Col 1: sign agreement classes (NaN outside ocean)
-    fs_class = make_sign_class_map(fs_dyn_diff, fs_sta_diff, valid_ocean, thresh=0.0)
-    ms_class = make_sign_class_map(ms_dyn_diff, ms_sta_diff, valid_ocean, thresh=0.0)
+    fs_class = make_sign_class_map(fs_dyn_diff.where(fs_active), fs_sta_diff.where(fs_active), valid_ocean, thresh=7.0)
+    ms_class = make_sign_class_map(ms_dyn_diff, ms_sta_diff, valid_ocean, thresh=7.0)
 
     # Col 2: sector mean bars (ACTIVE-only)
     df_sector = sector_mean_deltas(
