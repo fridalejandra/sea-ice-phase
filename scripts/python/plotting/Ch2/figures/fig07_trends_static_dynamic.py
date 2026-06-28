@@ -453,10 +453,10 @@ def main():
     # Short panel titles (no bleeding)
     t_a = "(a) FS sign (post−pre)"
     t_b = "(b) FS sector Δ"
-    t_c = "(c) FS trend sign (1979–2024)"
+    t_c = "(c) FS trend sign (1979-2024)"
     t_d = "(d) MS sign (post−pre)"
     t_e = "(e) MS sector Δ"
-    t_f = "(f) MS trend sign (1979–2024)"
+    t_f = "(f) MS trend sign (1979-2024)"
 
     # ----- Row 1: FS -----
     ax_a = make_polar_ax(fig, gs, 0, 0)
