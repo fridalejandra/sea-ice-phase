@@ -14,8 +14,8 @@ Static files:
     /user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/MS_thr15_k5/MS_YYYY.nc
 
 Dynamic files:
-    /user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic/quantile_k5/FS/p0.7/FS_YYYY.nc
-    /user/geog/falejandraperez/sea-ice-phase/results/static_v2_slopeH/dynamic/quantile_k5/MS/p0.7/MS_YYYY.nc
+    /user/geog/falejandraperez/sea-ice-phase/data/SMMR_phase/dynamic/k5_q70/FS/FS_YYYY.nc
+    /user/geog/falejandraperez/sea-ice-phase/data/SMMR_phase/dynamic/k5_q70/MS/MS_YYYY.nc
 
 Notes on timing axes:
 - FS is shown in CALENDAR day-of-year over Feb 15 (DOY 46) to Sep 30 (DOY 273).
