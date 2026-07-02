@@ -273,7 +273,7 @@ df = pd.DataFrame.from_records(records)
 # ---------------------------------------------------------------------
 sns.set(style="whitegrid")
 
-palette = {"Static": "#8ecae6", "Dynamic": "#ffb703"}
+palette = {"Static": "#2166ac", "Dynamic": "#d97a00"}
 sector_order = sector_ids
 
 fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, dpi=300)
@@ -294,7 +294,7 @@ for ax, phase_name in zip(axes, ["FS", "MS"]):
         dodge=True,        # side-by-side
         split=False,
         inner="quartile",
-        linewidth=1,
+        linewidth=1.8,
         cut=0,
         ax=ax,
         fill=False,
