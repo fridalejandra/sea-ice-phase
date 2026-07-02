@@ -58,14 +58,14 @@ def build_duration(fs_base, ms_base):
     return xr.concat(arrays, dim="year").assign_coords(year=("year", years))
 
 # ── Load anomalies ────────────────────────────────────────────────────────────
-def load_anom(fname):
+def load_anom(fname, varname):
     ds = xr.open_dataset(ANOM_DIR/fname, decode_times=False)
-    da = ds[list(ds.data_vars)[0]].load(); ds.close()
+    da = ds[varname].load(); ds.close()
     return da
 
 print("Loading data...")
-fs_anom = load_anom("FS_dynamic_k5_q70_anomalies.nc")
-ms_anom = load_anom("MS_dynamic_k5_q70_anomalies.nc")
+fs_anom = load_anom("FS_dynamic_k5_q70_anomalies.nc", "FS_dynamic_k5_q70_anom")
+ms_anom = load_anom("MS_dynamic_k5_q70_anomalies.nc", "MS_dynamic_k5_q70_anom_dsa")
 dur_anom = build_duration(
     DATA_ROOT/"SMMR_phase/dynamic/k5_q70/FS",
     DATA_ROOT/"SMMR_phase/dynamic/k5_q70/MS"
