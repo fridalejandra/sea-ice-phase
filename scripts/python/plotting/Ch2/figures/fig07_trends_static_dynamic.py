@@ -516,7 +516,7 @@ def main():
 
     # ---------- Save / upload ----------
     fig_name = (
-        f"Fig08_FS_MS_stepchange_and_trend_static_vs_dynamic_"
+        f"Fig07_FS_MS_stepchange_and_trend_static_vs_dynamic_"
         f"pre{PRE_START}-{PRE_END}_post{POST_START}-{POST_END}_active{int(MIN_FRAC_ACTIVE*100)}.png"
     )
     out_path = get_fig_path(PROJECT_ROOT, subfolder=SUBFOLDER, fig_name=fig_name)
