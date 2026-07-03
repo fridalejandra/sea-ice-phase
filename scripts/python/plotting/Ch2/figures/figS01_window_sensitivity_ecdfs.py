@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-figS02_window_sensitivity_ecdfs.py
+figS01_window_sensitivity_ecdfs.py
 
 Circumpolar ECDFs of absolute timing differences between k=3,7 day
 persistence windows and the reference k=5 day window, for static
