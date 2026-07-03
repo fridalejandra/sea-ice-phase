@@ -13,7 +13,7 @@ from pathlib import Path
 DATA_ROOT   = Path("/user/geog/falejandraperez/sea-ice-phase/data")
 ANOM_DIR    = DATA_ROOT / "anomalies" / "SMMR"
 SECTOR_FILE = DATA_ROOT / "canonical_sectors.nc"
-OUT         = Path("/tmp/Fig09_prepost_trends.png")
+OUT = Path("/user/geog/falejandraperez/sea-ice-phase/results/Ch2_Figures/Fig08_prepost_trends.png")
 SMOOTH      = 9
 PVAL_THRESH = 0.01
 AUG15_DOY   = 227
