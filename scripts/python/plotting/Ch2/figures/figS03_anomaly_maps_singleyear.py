@@ -174,7 +174,7 @@ def make_single_year_maps(year: int, fields: dict) -> None:
 
     fig.tight_layout(rect=[0.02, 0.14, 0.98, 0.98])
 
-    fig_name = f"FigS04_FS_MS_anomaly_maps_static_vs_dynamic_{year}.png"
+    fig_name = f"FigS03_FS_MS_anomaly_maps_static_vs_dynamic_{year}.png"
     out_path = get_fig_path(
         project_root=PROJECT_ROOT,
         subfolder=SUBFOLDER,

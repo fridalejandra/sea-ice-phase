@@ -237,7 +237,7 @@ def plot_threshold_maps():
 
     fig.tight_layout(rect=[0, 0.12, 1, 1])
 
-    fig_name = f"FigS01_threshold_FS_MS_static_{SENSOR}_thr{THR_LOW}_{THR_REF}_{THR_HIGH}.png"
+    fig_name = f"FigS02_threshold_FS_MS_static_{SENSOR}_thr{THR_LOW}_{THR_REF}_{THR_HIGH}.png"
 
     out_path = get_fig_path(
         project_root=PROJECT_ROOT_CLUSTER,
