@@ -15,7 +15,7 @@ Inputs:
   data/AMSRE_phase/static/thr15_k5/MS/MS_YYYY.nc — variable: MS
 
 Output:
-  results/Ch2_Figures/Fig01_sensor_advance_retreat_bias_hist_AMSREminusSMMR_2012-2024.png
+  results/Ch2_Figures/Fig01_sensor_advance_retreat_bias_hist_AMSREminusSSMIS_2012-2024.png
 """
 
 import sys
@@ -179,7 +179,7 @@ def main():
         im_ms, ax=[ax_ms, ax_fs],
         orientation="horizontal", pad=0.08, shrink=0.9,
     )
-    cbar.set_label("Bias (AMSRE − SMMR, days)")
+    cbar.set_label("Bias (AMSRE − SSMIS, days)")
 
     # histogram
     bias_all  = np.concatenate([all_bias_fs, all_bias_ms])
@@ -193,7 +193,7 @@ def main():
     )
     ax_hist.set_ylim(0, 0.08)
     ax_hist.axvline(0, color="k", linewidth=0.8)
-    ax_hist.set_xlabel("Bias (AMSRE − SMMR, days)")
+    ax_hist.set_xlabel("Bias (AMSRE − SSMIS, days)")
     ax_hist.set_ylabel("Probability density")
     ax_hist.set_xlim(-40, 40)
     ax_hist.set_xticks([-40, -20, 0, 20, 40])
@@ -206,7 +206,7 @@ def main():
 
     fig_name = format_fig_name(
         num=1,
-        short=f"sensor_advance_retreat_bias_hist_AMSREminusSMMR_{YEARS.start}-{YEARS.stop - 1}",
+        short=f"sensor_advance_retreat_bias_hist_AMSREminusSSMIS_{YEARS.start}-{YEARS.stop - 1}",
     )
     fig_path = get_fig_path(
         project_root=PROJECT_ROOT, subfolder=SUBFOLDER, fig_name=fig_name,

@@ -65,13 +65,13 @@ def load_fs_ms_clim_anom():
     fs_dyn_anom = xr.open_dataset(ANOM_DIR / "FS_dynamic_k5_q70_anomalies.nc", decode_times=False)["FS_dynamic_k5_q70_anom"]
 
     ms_dyn_clim = xr.open_dataset(ANOM_DIR / "MS_dynamic_k5_q70_climatology.nc", decode_times=False)["MS_dynamic_k5_q70_clim"]
-    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_k5_q70_anomalies.nc", decode_times=False)["MS_dynamic_k5_q70_anom"]
+    ms_dyn_anom = xr.open_dataset(ANOM_DIR / "MS_dynamic_k5_q70_anomalies.nc", decode_times=False)["MS_dynamic_k5_q70_anom_dsa"]
 
     fs_sta_clim = xr.open_dataset(ANOM_DIR / "FS_static_thr15_k5_climatology.nc", decode_times=False)["FS_static_thr15_k5_clim"]
     fs_sta_anom = xr.open_dataset(ANOM_DIR / "FS_static_thr15_k5_anomalies.nc", decode_times=False)["FS_static_thr15_k5_anom"]
 
     ms_sta_clim = xr.open_dataset(ANOM_DIR / "MS_static_thr15_k5_climatology.nc", decode_times=False)["MS_static_thr15_k5_clim"]
-    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_thr15_k5_anomalies.nc", decode_times=False)["MS_static_thr15_k5_anom"]
+    ms_sta_anom = xr.open_dataset(ANOM_DIR / "MS_static_thr15_k5_anomalies.nc", decode_times=False)["MS_static_thr15_k5_anom_dsa"]
 
     try:
         ds_mask = xr.open_dataset(SECTOR_FILE)

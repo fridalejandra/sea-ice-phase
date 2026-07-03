@@ -14,6 +14,12 @@ Fixes from v1:
   3. Static method fully vectorized over spatial dimensions (no Python loops).
   4. Dynamic method uses precomputed clim percentiles + vectorized slope.
 
+Fixes from v2.1:
+  6. Crossing requirement: static onset now requires the opposite state to
+     occur strictly before the k-day run (genuine transition), eliminating
+     window-start DOY artifacts at pixels already in the target state that
+     evade the climatological sentinel mask via anomalous years.
+
 Fixes from v2.0:
   5. Sentinel mask: pixels that never meaningfully transition are set to NaN
      rather than being assigned the window-start DOY (46 for FS, 227 for MS).
@@ -232,6 +238,15 @@ def first_run_start_vectorized(ts: xr.DataArray,
     sustained = roll.all("window")   # (time, y, x)
 
     sustained_shifted = sustained.shift(time=-(k - 1), fill_value=False)
+
+    # v2.1 fix: require a genuine crossing — the opposite state must occur
+    # strictly BEFORE the run onset. Prevents window-start DOY assignment
+    # at pixels already in the target state when the season opens
+    # (perennial ice for FS, open ocean for MS). NaN days count as neither state.
+    opposite = (ts < threshold) if above else (ts > threshold)
+    seen_opp = opposite.cumsum("time").shift(time=1, fill_value=0) > 0
+    sustained_shifted = sustained_shifted & seen_opp
+
     any_hit   = sustained_shifted.any("time")
     onset_idx = sustained_shifted.argmax("time")
 
@@ -432,7 +447,8 @@ def compute_dynamic_year(ice365: xr.DataArray,
 
 def validate(sensor: str = "SMMR", year: int = 2000,
              thr: float = 0.15, k: int = 5,
-             ny_sub: int = 50, nx_sub: int = 50) -> None:
+             ny_sub: int = 50, nx_sub: int = 50,
+             y0: int = 100, x0: int = 100) -> None:
     """
     Run scalar (v1 logic) and vectorized (v2 logic) on a spatial subset
     for one year and compare results.
@@ -443,14 +459,19 @@ def validate(sensor: str = "SMMR", year: int = 2000,
     print(f"{'='*60}")
 
     ice365, ds = load_sic(sensor)
-    ice_sub    = ice365.isel(y=slice(100, 100+ny_sub), x=slice(100, 100+nx_sub))
+    ice_sub    = ice365.isel(y=slice(y0, y0+ny_sub), x=slice(x0, x0+nx_sub))
     landmask   = ice_sub.isnull().all("time").values
 
     def scalar_first_run(ts_1d, threshold, k, above):
-        cond = (ts_1d.values >= threshold) if above else (ts_1d.values <= threshold)
+        vals = ts_1d.values
+        cond = (vals >= threshold) if above else (vals <= threshold)
+        opp  = (vals <  threshold) if above else (vals >  threshold)
+        seen_opp = False
         for i in range(len(cond) - k + 1):
-            if all(cond[i:i+k]):
+            if seen_opp and all(cond[i:i+k]):
                 return i
+            if opp[i]:
+                seen_opp = True
         return None
 
     ts_FS      = slice_season(ice_sub, f"{year}{FS_START_MMDD}", f"{year}{FS_END_MMDD}")
