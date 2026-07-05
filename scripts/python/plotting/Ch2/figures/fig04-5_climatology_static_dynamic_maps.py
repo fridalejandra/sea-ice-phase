@@ -138,8 +138,8 @@ def load_phase_climatology(
 
     da = ds[phase]
     clim = da.mean("year", skipna=True)
-
-    return clim
+    nvalid = np.isfinite(da).sum("year").compute()
+    return clim, nvalid
 
 
 def freeze_label(phase: str) -> str:
@@ -193,12 +193,13 @@ def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.D
 
 def main():
     set_mpl_defaults()
+    MIN_YEARS = 10  # display floor: show climatology only where >= this many valid years
 
     for phase in PHASES:
         print(f"Processing climatology for {phase}")
 
-        clim_static = load_phase_climatology(phase, "static", YEAR_START, YEAR_END)
-        clim_dynamic = load_phase_climatology(phase, "dynamic", YEAR_START, YEAR_END)
+        clim_static, nvalid_static = load_phase_climatology(phase, "static", YEAR_START, YEAR_END)
+        clim_dynamic, nvalid_dynamic = load_phase_climatology(phase, "dynamic", YEAR_START, YEAR_END)
 
         # --- phase-specific plotting coordinates ---
         if phase == "FS":
@@ -213,6 +214,17 @@ def main():
 
             clim_static = load_ms_climatology_dsa(method="static", year_start=YEAR_START, year_end=YEAR_END)
             clim_dynamic = load_ms_climatology_dsa(method="dynamic", year_start=YEAR_START, year_end=YEAR_END)
+
+            # Min-N display floor: suppress pixels with too few valid years
+            nv_s = np.asarray(nvalid_static)
+            nv_d = np.asarray(nvalid_dynamic)
+            clim_static = clim_static.where(
+                xr.DataArray(nv_s, dims=clim_static.dims) >= MIN_YEARS)
+            clim_dynamic = clim_dynamic.where(
+                xr.DataArray(nv_d, dims=clim_dynamic.dims) >= MIN_YEARS)
+            print(f"  [min-N] {phase}: suppressed static="
+                  f"{int(((nv_s > 0) & (nv_s < MIN_YEARS)).sum())}, "
+                  f"dynamic={int(((nv_d > 0) & (nv_d < MIN_YEARS)).sum())}")
 
             label = f"{freeze_label(phase)} (days since Aug 15)"
             field_vmin, field_vmax = 0, 210
