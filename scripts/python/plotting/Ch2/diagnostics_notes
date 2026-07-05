@@ -6,3 +6,8 @@ Bootstrap SIC:
 - Grid: NSIDC polar stereographic, 25 km (y=332, x=316)
 - Time: 1978-11-01 to 2024-12-31 (datetime64)
 - Leap days present (Feb 29 removed for diagnostics)
+
+
+(1) bad years + exact gap dates from ncview (1987: Aug 1–Dec 3; 1991: Dec 17–31; 1995: May 10–Dec 31),
+(2) perennial-zone MS detections are sparse real events, not artifacts,
+(3) FS_2024 empty-file incident and fix date.
