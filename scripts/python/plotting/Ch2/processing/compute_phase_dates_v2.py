@@ -61,6 +61,7 @@ SENSOR_CONFIGS = {
         "units":       "fraction",
         "mask_above":  1.1,
         "years":       range(1979, 2026),
+        "bad_years":   [1987, 1991, 1995],  # verified gaps in merged record (ncview, Jul 2026)
         "output_root": "/user/geog/falejandraperez/sea-ice-phase/data/SMMR_phase",
     },
     "AMSRE": {
@@ -130,6 +131,11 @@ def load_sic(sensor: str) -> tuple[xr.DataArray, xr.Dataset]:
         ice = ice / 100.0
     ice365 = standardize_calendar(ice, mode=FEB29_MODE)
     ice365 = ice365.sortby("time")
+    bad = cfg.get("bad_years", [])
+    if bad:
+        n0 = ice365.time.size
+        ice365 = ice365.sel(time=~ice365.time.dt.year.isin(bad))
+        print(f"  excluded bad years {bad}: {n0 - ice365.time.size} timesteps dropped")
     return ice365, ds
 
 
@@ -528,7 +534,7 @@ def run_static(sensor: str,
     ice365, ds = load_sic(sensor)
     landmask   = ice365.isnull().all("time").values
     all_years  = np.unique(ice365.time.dt.year.values)
-    years_run  = [y for y in cfg["years"]
+    years_run  = [y for y in cfg["years"] if y not in cfg.get("bad_years", [])
                   if (y in all_years) and ((y + 1) in all_years)]
 
     for thr in thresholds:
@@ -562,7 +568,7 @@ def run_dynamic(sensor: str,
     ice365, ds = load_sic(sensor)
     landmask   = ice365.isnull().all("time").values
     all_years  = np.unique(ice365.time.dt.year.values)
-    years_run  = [y for y in cfg["years"]
+    years_run  = [y for y in cfg["years"] if y not in cfg.get("bad_years", [])
                   if (y in all_years) and ((y + 1) in all_years)]
 
     # for dynamic, use BASELINE_THR for the sentinel check since the
