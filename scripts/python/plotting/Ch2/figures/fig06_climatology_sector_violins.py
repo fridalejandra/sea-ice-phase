@@ -364,6 +364,31 @@ def build_and_plot_violins(variant: str) -> None:
         remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
         remote_subdir="",
     )
+def print_sector_offset_stats(phase_name, stat_clim, dyn_clim, active_mask, sector_mask, ocean_mask):
+    """Median static-vs-dynamic offset per sector, active80 pixels only,
+    plus a static-only-valid / dynamic-invalid pixel count per sector
+    (the 'X multi-year ice pixels' claim in the Fig 6 paragraph)."""
+    print(f"\n  --- {phase_name} sector median offsets (dynamic - static), active80 ---")
+    for sec in sector_ids:
+        m = (sector_mask == sec) & ocean_mask & active_mask
+        s_vals = stat_clim.where(m).values.ravel()
+        d_vals = dyn_clim.where(m).values.ravel()
+        pair_mask = np.isfinite(s_vals) & np.isfinite(d_vals)
+        offset = np.nanmedian(d_vals[pair_mask] - s_vals[pair_mask])
+        print(f"    {sector_labels[sec].replace(chr(10),' ')}: median offset = {offset:+.1f} days, n={pair_mask.sum()}")
+
+    # static-valid-but-dynamic-invalid count (spurious static detections), whole domain
+    static_valid = np.isfinite(stat_clim.values) & ocean_mask.values
+    dynamic_valid = np.isfinite(dyn_clim.values) & ocean_mask.values
+    static_only = static_valid & ~dynamic_valid
+    print(f"  static-valid/dynamic-invalid pixels (whole domain): {int(static_only.sum())}")
+    for sec in sector_ids:
+        m = (sector_mask.values == sec) & static_only
+        print(f"    {sector_labels[sec].replace(chr(10),' ')}: {int(m.sum())}")
+
+
+print_sector_offset_stats("FS", fs_stat_clim, fs_dyn_clim, fs_active.values, sector_mask, ocean_mask)
+print_sector_offset_stats("MS", ms_stat_clim, ms_dyn_clim, ms_active.values, sector_mask, ocean_mask)
 
 # ---------------------------------------------------------------------
 # Run both variants

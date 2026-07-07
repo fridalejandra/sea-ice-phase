@@ -1,5 +1,5 @@
 # ============================================================
-# fig04-5_climatology_static_dynamic_maps.py  (UPDATED — per-method masking fix)
+# fig04-5_climatology_static_dynamic_maps.py  (UPDATED — min-N=10 display floor restored)
 # ============================================================
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -25,18 +25,28 @@ Notes on timing axes:
 - MS crosses the calendar year boundary, so it is remapped to a continuous axis:
     "days since Aug 15" (Aug 15 = 0; Feb 28 ~ 197).
 
-Masking (2024 revision, corrected):
-- The old per-method "min-N >= 10 years" display floor has been removed.
-- Panels (a) static and (b) dynamic are each masked by THEIR OWN 80%-of-years
-  reliability only (per-method mask) — a pixel where static is reliable but
-  dynamic isn't should still show up on the static panel, and vice versa.
-  Applying the JOINT (both-methods) criterion to single-method panels was a
-  bug in the first pass of this revision: it suppressed real, reliable
-  single-method data for no reason relevant to that panel.
-- Panel (c), the difference, is NOT separately masked. It doesn't need to be:
-  dynamic − static is NaN wherever either input is NaN, so it automatically
-  reduces to the joint (both-methods-reliable) criterion used everywhere in
-  Figs. 6-8 — without needing to compute or apply that joint mask twice.
+Masking (2024 revision, final):
+- Panels (a) static and (b) dynamic are each masked by a simple per-method
+  DISPLAY MINIMUM: at least DISPLAY_MIN_YEARS (10) real valid years out of
+  43, plus valid_ocean. This is a sample-size floor, not a comparison bar —
+  its only job is to keep a climatological mean from being drawn off a
+  handful of noisy years.
+- A diagnostic sweep (thresholds 0%, 30%, 50%, 65%, 80% of years) showed
+  that applying the strict 80%-of-years JOINT criterion (both methods
+  reliable) to these single-method panels was wrong: it cut real ice-edge
+  signal for a reason that has nothing to do with a single-method display
+  (e.g. FS static p95 shifted by 33 days between no floor and 80%). It also
+  showed that removing the floor entirely is worse, not better: the
+  unmasked min/max value in every field (FS/MS, static/dynamic) was backed
+  by exactly 1 of 43 years — pure single-year noise setting the color scale
+  and the outer ring of the map.
+- Panel (c), the difference, is NOT separately masked. dynamic - static is
+  NaN wherever either input is NaN, so it automatically reduces to the
+  joint (both-methods-reliable) footprint on its own.
+- The strict 80%-of-years JOINT criterion (both methods reliable) remains
+  correct and unchanged for Figs. 6-8, where an actual comparison between
+  methods is being made — this floor is scoped only to this figure's
+  single-method display panels.
 """
 
 import sys
@@ -51,7 +61,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
+from utils.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
     format_fig_name,
     get_fig_path,
@@ -92,7 +102,9 @@ PHASES = ["FS", "MS"]
 YEAR_START = 1979
 YEAR_END = 2024
 
-MIN_FRAC_ACTIVE = 0.80  # same 80% threshold used everywhere; scope differs by panel
+# Display floor for panels (a)/(b) — a sample-size minimum, NOT the
+# comparison-grade active80 criterion used in Figs. 6-8.
+DISPLAY_MIN_YEARS = 10
 
 # ---------------------------------------------------------------------
 # HELPERS
@@ -121,8 +133,9 @@ def load_phase_climatology(
     nvalid : xr.DataArray
         Per-pixel count of years with a finite (valid) detection.
     n_years : int
-        Total number of years included (denominator for the reliability
-        fraction). Bad years are already excluded upstream by
+        Total number of years included (denominator, informational only
+        now that the display floor is an absolute count rather than a
+        fraction). Bad years already excluded upstream by
         compute_phase_dates_v2.py, so this should be 43 for 1979-2024.
     """
     if mode == "static":
@@ -219,27 +232,24 @@ def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.D
     return da
 
 
-def make_per_method_mask(
+def make_display_floor_mask(
     nvalid: xr.DataArray,
-    n_years: int,
     valid_ocean: xr.DataArray,
-    frac_required: float = MIN_FRAC_ACTIVE,
+    min_years: int = DISPLAY_MIN_YEARS,
 ) -> np.ndarray:
     """
-    Reliability mask for a SINGLE method's own panel: that method must have
-    a valid detection in >= frac_required of years, within valid_ocean.
-
-    This is deliberately NOT joint with the other method — panels (a) and
-    (b) are each showing one method's own climatology, not a comparison,
-    so each should be judged on its own reliability only.
+    Per-method display floor: at least `min_years` real valid years,
+    within valid_ocean. An absolute count, not a fraction of the record —
+    this is deliberately NOT the same object as the active80 comparison
+    criterion used in Figs. 6-8.
 
     Returns a plain numpy boolean array to avoid coordinate-alignment
     issues between calendar-DOY-based nvalid arrays and the separately
     loaded DSA climatology fields used for MS display.
     """
-    frac = np.asarray(nvalid) / float(n_years)
+    nvalid_np = np.asarray(nvalid)
     ocean_np = np.asarray(valid_ocean)
-    return (frac >= frac_required) & ocean_np
+    return (nvalid_np >= min_years) & ocean_np
 
 
 # ---------------------------------------------------------------------
@@ -280,19 +290,19 @@ def main():
             label = f"{freeze_label(phase)}"
             field_vmin, field_vmax = None, None
 
-        # Per-method reliability masks — each panel judged on its OWN 80%
-        # criterion, not the joint one. The difference panel (c) needs no
-        # separate mask: dynamic - static is NaN wherever either input is
-        # NaN, so it automatically reduces to the joint criterion on its own.
-        static_reliable = make_per_method_mask(nvalid_static, n_years_static, valid_ocean)
-        dynamic_reliable = make_per_method_mask(nvalid_dynamic, n_years_dynamic, valid_ocean)
+        # Per-method display floor (min-N = 10 years) — replaces the
+        # comparison-grade active80 bar that was wrongly applied to these
+        # single-method panels. Panel (c) needs no separate mask: it
+        # reduces to the joint footprint automatically via NaN propagation.
+        static_reliable = make_display_floor_mask(nvalid_static, valid_ocean)
+        dynamic_reliable = make_display_floor_mask(nvalid_dynamic, valid_ocean)
 
         clim_static = clim_static.where(xr.DataArray(static_reliable, dims=clim_static.dims))
         clim_dynamic = clim_dynamic.where(xr.DataArray(dynamic_reliable, dims=clim_dynamic.dims))
 
         n_ocean = int(np.asarray(valid_ocean).sum())
         n_joint = int((static_reliable & dynamic_reliable).sum())
-        print(f"  [per-method @ {MIN_FRAC_ACTIVE:.2f}] {phase}: "
+        print(f"  [display floor >= {DISPLAY_MIN_YEARS} yrs] {phase}: "
               f"static={int(static_reliable.sum())} (of {n_ocean} valid-ocean), "
               f"dynamic={int(dynamic_reliable.sum())} (of {n_ocean} valid-ocean), "
               f"joint (what panel c will show)={n_joint}")
@@ -316,7 +326,7 @@ def main():
 
         fig_name = format_fig_name(
             num=fig_num,
-            short=f"climatology_{phase}_static_vs_dynamic_{YEAR_START}-{YEAR_END}_permethod80",
+            short=f"climatology_{phase}_static_vs_dynamic_{YEAR_START}-{YEAR_END}_minN{DISPLAY_MIN_YEARS}",
         )
 
         out_path = get_fig_path(

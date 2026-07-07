@@ -380,6 +380,12 @@ def main():
         sector_mask, valid_ocean,
         fs_active, ms_active
     )
+    print("\n[INFO] Sector-mean step-change deltas (post-pre, active-only):")
+    print(df_sector.sort_values(["phase", "sector_id", "method"]).to_string(index=False))
+    for phase in ["FS", "MS"]:
+        sub = df_sector[df_sector["phase"] == phase]
+        print(f"  {phase} delta range across sectors/methods: "
+              f"{sub['delta'].min():+.1f} to {sub['delta'].max():+.1f} days")
 
     # Col 3: trend agreement (ACTIVE-only)
     years = fields["FS_dynamic_anom"]["year"].values
@@ -417,6 +423,27 @@ def main():
           frac_trend_agree_active(fs_trend_class, fs_active))
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
           frac_trend_agree_active(ms_trend_class, ms_active))
+
+    # Pre/post-2016-ONLY trend sign agreement (the 75%/16% and 63%/22%
+    # style numbers in the draft text -- NOT computed anywhere else)
+    def trend_sign_fracs_for_period(anom_dyn, anom_sta, active, y0, y1, label):
+        dyn_p = compute_trend_slopes(anom_dyn.sel(year=slice(y0, y1)))
+        sta_p = compute_trend_slopes(anom_sta.sel(year=slice(y0, y1)))
+        denom = int((valid_ocean & active).values.sum())
+        both_neg = int(((dyn_p < 0) & (sta_p < 0) & valid_ocean & active).values.sum())
+        both_pos = int(((dyn_p > 0) & (sta_p > 0) & valid_ocean & active).values.sum())
+        print(f"  {label}: both-earlier(neg)={both_neg / denom:.1%}, "
+              f"both-later(pos)={both_pos / denom:.1%}  (n={denom}, years {y0}-{y1})")
+
+    print("\n[INFO] Pre/post-2016-ONLY trend sign agreement (new — verify against draft text):")
+    trend_sign_fracs_for_period(fields["FS_dynamic_anom"], fields["FS_static_anom"], fs_active, PRE_START, PRE_END,
+                                "FS pre-2016")
+    trend_sign_fracs_for_period(fields["FS_dynamic_anom"], fields["FS_static_anom"], fs_active, POST_START, POST_END,
+                                "FS post-2016")
+    trend_sign_fracs_for_period(fields["MS_dynamic_anom"], fields["MS_static_anom"], ms_active, PRE_START, PRE_END,
+                                "MS pre-2016")
+    trend_sign_fracs_for_period(fields["MS_dynamic_anom"], fields["MS_static_anom"], ms_active, POST_START, POST_END,
+                                "MS post-2016")
 
     def frac_trend_both_positive_active(
         slope_dyn: xr.DataArray, slope_sta: xr.DataArray, active_mask: xr.DataArray

@@ -24,9 +24,8 @@ Output:
 
 import sys
 from pathlib import Path
-from glob import glob
 
-import numpy as np
+ import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -39,7 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[5]  # -> sea-ice-phase
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
+from utils.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
     format_fig_name,
     get_fig_path,

@@ -36,7 +36,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
+from utils.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
     format_fig_name,
     get_fig_path,
@@ -147,6 +147,21 @@ def plot_bias_map(ax, bias_da, vlim=20):
 # ---------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------
+def print_distribution_stats(name: str, arr: np.ndarray) -> dict:
+    """Median, IQR, histogram-mode, skewness, p90(|bias|) for a bias array."""
+    from scipy import stats as sstats
+    median = np.median(arr)
+    q25, q75 = np.percentile(arr, [25, 75])
+    skew = sstats.skew(arr)
+    lo, hi = int(np.floor(arr.min())), int(np.ceil(arr.max()))
+    bins = np.arange(lo, hi + 2) - 0.5
+    counts, edges = np.histogram(arr, bins=bins)
+    mode_bin = edges[np.argmax(counts)] + 0.5
+    p90_abs = np.percentile(np.abs(arr), 90)
+    skew_word = "right-skewed" if skew > 0.2 else ("left-skewed" if skew < -0.2 else "roughly symmetric")
+    print(f"  {name}: n={arr.size}, median={median:+.1f}, IQR=[{q25:+.1f}, {q75:+.1f}], "
+          f"mode={mode_bin:+.1f}, skew={skew:+.2f} ({skew_word}), p90(|bias|)={p90_abs:.1f}")
+    return dict(n=arr.size, median=median, q25=q25, q75=q75, mode=mode_bin, skew=skew, p90_abs=p90_abs)
 
 def main():
     set_mpl_defaults()
@@ -155,6 +170,8 @@ def main():
     bias_clim_ms, all_bias_ms = compute_bias("MS")
     print("Computing FS bias...")
     bias_clim_fs, all_bias_fs = compute_bias("FS")
+    print_distribution_stats("MS (Retreat)", all_bias_ms)
+    print_distribution_stats("FS (Advance)", all_bias_fs)
 
     fig  = plt.figure(figsize=(14, 5))
     proj = ccrs.SouthPolarStereo()
