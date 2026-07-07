@@ -1,5 +1,5 @@
 # ============================================================
-# fig04-5_climatology_static_dynamic_maps.py  (UPDATED)
+# fig04-5_climatology_static_dynamic_maps.py  (UPDATED — per-method masking fix)
 # ============================================================
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -25,13 +25,18 @@ Notes on timing axes:
 - MS crosses the calendar year boundary, so it is remapped to a continuous axis:
     "days since Aug 15" (Aug 15 = 0; Feb 28 ~ 197).
 
-Masking (2024 revision):
-- The previous per-method "min-N >= 10 years" display floor has been removed.
-- Both FS and MS climatologies are now masked with the SAME active80 criterion
-  used in Figs. 6-8: a pixel must have a valid detection in >=80% of years
-  under BOTH the static and dynamic methods, AND fall within valid_ocean
-  (data/canonical_sectors.nc). This is applied identically to FS and MS, and
-  to all three panels (static, dynamic, difference) in each figure.
+Masking (2024 revision, corrected):
+- The old per-method "min-N >= 10 years" display floor has been removed.
+- Panels (a) static and (b) dynamic are each masked by THEIR OWN 80%-of-years
+  reliability only (per-method mask) — a pixel where static is reliable but
+  dynamic isn't should still show up on the static panel, and vice versa.
+  Applying the JOINT (both-methods) criterion to single-method panels was a
+  bug in the first pass of this revision: it suppressed real, reliable
+  single-method data for no reason relevant to that panel.
+- Panel (c), the difference, is NOT separately masked. It doesn't need to be:
+  dynamic − static is NaN wherever either input is NaN, so it automatically
+  reduces to the joint (both-methods-reliable) criterion used everywhere in
+  Figs. 6-8 — without needing to compute or apply that joint mask twice.
 """
 
 import sys
@@ -87,7 +92,7 @@ PHASES = ["FS", "MS"]
 YEAR_START = 1979
 YEAR_END = 2024
 
-MIN_FRAC_ACTIVE = 0.80  # same active80 criterion as Figs. 6-8
+MIN_FRAC_ACTIVE = 0.80  # same 80% threshold used everywhere; scope differs by panel
 
 # ---------------------------------------------------------------------
 # HELPERS
@@ -116,7 +121,7 @@ def load_phase_climatology(
     nvalid : xr.DataArray
         Per-pixel count of years with a finite (valid) detection.
     n_years : int
-        Total number of years included (denominator for the active-pixel
+        Total number of years included (denominator for the reliability
         fraction). Bad years are already excluded upstream by
         compute_phase_dates_v2.py, so this should be 43 for 1979-2024.
     """
@@ -214,26 +219,27 @@ def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.D
     return da
 
 
-def make_active_mask(
-    nvalid_static: xr.DataArray,
-    n_years_static: int,
-    nvalid_dynamic: xr.DataArray,
-    n_years_dynamic: int,
+def make_per_method_mask(
+    nvalid: xr.DataArray,
+    n_years: int,
     valid_ocean: xr.DataArray,
     frac_required: float = MIN_FRAC_ACTIVE,
 ) -> np.ndarray:
     """
-    Same active80 criterion as Figs. 6-8: both methods must independently
-    have a valid detection in >= frac_required of years, within valid_ocean.
+    Reliability mask for a SINGLE method's own panel: that method must have
+    a valid detection in >= frac_required of years, within valid_ocean.
 
-    Returns a plain numpy boolean array (not an xr.DataArray) to sidestep
-    any coordinate-alignment mismatch between the calendar-DOY-based nvalid
-    arrays and the separately-loaded DSA climatology fields used for MS.
+    This is deliberately NOT joint with the other method — panels (a) and
+    (b) are each showing one method's own climatology, not a comparison,
+    so each should be judged on its own reliability only.
+
+    Returns a plain numpy boolean array to avoid coordinate-alignment
+    issues between calendar-DOY-based nvalid arrays and the separately
+    loaded DSA climatology fields used for MS display.
     """
-    frac_static = np.asarray(nvalid_static) / float(n_years_static)
-    frac_dynamic = np.asarray(nvalid_dynamic) / float(n_years_dynamic)
+    frac = np.asarray(nvalid) / float(n_years)
     ocean_np = np.asarray(valid_ocean)
-    return (frac_static >= frac_required) & (frac_dynamic >= frac_required) & ocean_np
+    return (frac >= frac_required) & ocean_np
 
 
 # ---------------------------------------------------------------------
@@ -274,17 +280,22 @@ def main():
             label = f"{freeze_label(phase)}"
             field_vmin, field_vmax = None, None
 
-        # active80 mask — identical criterion and application for FS and MS,
-        # replacing the old FS/MS-asymmetric min-N>=10 display floor.
-        active_np = make_active_mask(
-            nvalid_static, n_years_static,
-            nvalid_dynamic, n_years_dynamic,
-            valid_ocean,
-        )
-        clim_static = clim_static.where(xr.DataArray(active_np, dims=clim_static.dims))
-        clim_dynamic = clim_dynamic.where(xr.DataArray(active_np, dims=clim_dynamic.dims))
-        print(f"  [active80] {phase}: {int(active_np.sum())} active pixels "
-              f"(of {int(np.asarray(valid_ocean).sum())} valid-ocean pixels)")
+        # Per-method reliability masks — each panel judged on its OWN 80%
+        # criterion, not the joint one. The difference panel (c) needs no
+        # separate mask: dynamic - static is NaN wherever either input is
+        # NaN, so it automatically reduces to the joint criterion on its own.
+        static_reliable = make_per_method_mask(nvalid_static, n_years_static, valid_ocean)
+        dynamic_reliable = make_per_method_mask(nvalid_dynamic, n_years_dynamic, valid_ocean)
+
+        clim_static = clim_static.where(xr.DataArray(static_reliable, dims=clim_static.dims))
+        clim_dynamic = clim_dynamic.where(xr.DataArray(dynamic_reliable, dims=clim_dynamic.dims))
+
+        n_ocean = int(np.asarray(valid_ocean).sum())
+        n_joint = int((static_reliable & dynamic_reliable).sum())
+        print(f"  [per-method @ {MIN_FRAC_ACTIVE:.2f}] {phase}: "
+              f"static={int(static_reliable.sum())} (of {n_ocean} valid-ocean), "
+              f"dynamic={int(dynamic_reliable.sum())} (of {n_ocean} valid-ocean), "
+              f"joint (what panel c will show)={n_joint}")
 
         # Optional sanity printout (kept on by default — comment out if annoying)
         quick_stats(f"{phase} static", clim_static)
@@ -305,7 +316,7 @@ def main():
 
         fig_name = format_fig_name(
             num=fig_num,
-            short=f"climatology_{phase}_static_vs_dynamic_{YEAR_START}-{YEAR_END}_active80",
+            short=f"climatology_{phase}_static_vs_dynamic_{YEAR_START}-{YEAR_END}_permethod80",
         )
 
         out_path = get_fig_path(
