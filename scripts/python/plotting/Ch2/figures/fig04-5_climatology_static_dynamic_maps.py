@@ -1,379 +1,326 @@
 # ============================================================
-# fig06_climatology_sector_violins.py  (UPDATED)
+# fig04-5_climatology_static_dynamic_maps.py  (UPDATED)
 # ============================================================
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-Walsh-style violins: static vs dynamic FS/MS climatological timing by sector.
+fig4-5_FS_MS_climatology_static_vs_dynamic.py
 
-Static:
-  data/SMMR_phase/static/thr15_k5/{FS,MS}/{FS,MS}_YYYY.nc
-    - variable FS or MS (calendar DOY)
+Compare static vs dynamic FS/MS climatologies:
 
-Dynamic:
-  data/SMMR_phase/dynamic/k5_q70/{FS,MS}/{FS,MS}_YYYY.nc
-    - variable FS or MS (calendar DOY)
+  - FS: static, dynamic, dynamic − static
+  - MS: static, dynamic, dynamic − static
 
-Important:
-- FS is fine to average in calendar DOY.
-- MS crosses the year boundary (Aug–Feb), so we convert EACH YEAR to a continuous
-  axis "days since Aug 15" BEFORE computing climatologies and violins.
+Static files:
+    /user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/FS_thr15_k5/FS_YYYY.nc
+    /user/geog/falejandraperez/sea-ice-phase/results/SMMR_phase/MS_thr15_k5/MS_YYYY.nc
+
+Dynamic files:
+    /user/geog/falejandraperez/sea-ice-phase/data/SMMR_phase/dynamic/k5_q70/FS/FS_YYYY.nc
+    /user/geog/falejandraperez/sea-ice-phase/data/SMMR_phase/dynamic/k5_q70/MS/MS_YYYY.nc
+
+Notes on timing axes:
+- FS is shown in CALENDAR day-of-year over Feb 15 (DOY 46) to Sep 30 (DOY 273).
+- MS crosses the calendar year boundary, so it is remapped to a continuous axis:
+    "days since Aug 15" (Aug 15 = 0; Feb 28 ~ 197).
 
 Masking (2024 revision):
-- Only the active80 criterion is used (both methods valid in >=80% of years,
-  AND within valid_ocean). The previous "unmasked" comparison variant has
-  been dropped — the manuscript only ever reports the active80 version
-  (Fig. 6 caption / Methods 3.3), and producing both invited confusion
-  about which one is authoritative.
+- The previous per-method "min-N >= 10 years" display floor has been removed.
+- Both FS and MS climatologies are now masked with the SAME active80 criterion
+  used in Figs. 6-8: a pixel must have a valid detection in >=80% of years
+  under BOTH the static and dynamic methods, AND fall within valid_ocean
+  (data/canonical_sectors.nc). This is applied identically to FS and MS, and
+  to all three panels (static, dynamic, difference) in each figure.
 """
 
 import sys
 from pathlib import Path
+from glob import glob
 
 import numpy as np
 import xarray as xr
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-# ---------------------------------------------------------------------
-# ch2_fig_utils
-# ---------------------------------------------------------------------
-HERE = Path(__file__).resolve().parent
-PLOTTING_ROOT = HERE.parent  # .../plotting
-if str(PLOTTING_ROOT) not in sys.path:
-    sys.path.insert(0, str(PLOTTING_ROOT))
+# ensure project root on sys.path so "scripts.*" imports work
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.plot_utils import (  # noqa: E402
+from scripts.python.plotting.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
+    format_fig_name,
     get_fig_path,
     save_and_upload,
-    PROJECT_ROOT_CLUSTER,
+    plot_phase_comparison_map,
 )
 
-set_mpl_defaults()
-sns.set_style("whitegrid")
-
 # ---------------------------------------------------------------------
-# CONFIG
+# PATH CONFIG
 # ---------------------------------------------------------------------
-YEAR_MIN = 1979
-YEAR_MAX = 2024
 
-STATIC_DIR = PROJECT_ROOT_CLUSTER / "data" / "SMMR_phase" / "static"
-DYN_ROOT = (
-    PROJECT_ROOT_CLUSTER
+STATIC_ROOT = PROJECT_ROOT / "data" / "SMMR_phase" / "static"
+
+DYN_FS_DIR = (
+    PROJECT_ROOT
     / "data"
     / "SMMR_phase"
     / "dynamic"
     / "k5_q70"
+    / "FS"
 )
 
-DYN_DIR_FS = DYN_ROOT / "FS"
-DYN_DIR_MS = DYN_ROOT / "MS"
+DYN_MS_DIR = (
+    PROJECT_ROOT
+    / "data"
+    / "SMMR_phase"
+    / "dynamic"
+    / "k5_q70"
+    / "MS"
+)
 
-SECTOR_FILE = PROJECT_ROOT_CLUSTER / "data" / "canonical_sectors.nc"
+SECTOR_FILE = PROJECT_ROOT / "data" / "canonical_sectors.nc"
 
-# numeric IDs used internally; labels only used for tick text
-sector_labels = {
-    1: "Amundsen–\nBellingshausen",
-    2: "Weddell",
-    3: "King Haakon VII",
-    4: "East Antarctica",
-    5: "Ross–\nAmundsen",
-}
-sector_ids = [1, 2, 3, 4, 5]
+REMOTE_ROOT = "gdrive:sea-ice-phase/results/Ch2_Figures"
+SUBFOLDER = ""
 
-AUG15_DOY = 227  # Aug 15 (non-leap)
+PHASES = ["FS", "MS"]
+YEAR_START = 1979
+YEAR_END = 2024
 
-MIN_FRAC_ACTIVE = 0.80  # same active-pixel criterion as fig07/fig08
-
-# ---------------------------------------------------------------------
-# Sector mask
-# ---------------------------------------------------------------------
-ds_sect = xr.open_dataset(SECTOR_FILE)
-sector_mask = ds_sect["sector_id"].values
-ocean_mask = ds_sect["valid_ocean"].astype(bool).values
-ds_sect.close()
+MIN_FRAC_ACTIVE = 0.80  # same active80 criterion as Figs. 6-8
 
 # ---------------------------------------------------------------------
-# Helpers
+# HELPERS
 # ---------------------------------------------------------------------
-def ms_to_days_since_aug15(ms_da: xr.DataArray, aug15_doy: int = AUG15_DOY) -> xr.DataArray:
+
+
+def load_phase_climatology(
+    phase: str,
+    mode: str,
+    year_start: int,
+    year_end: int,
+) -> tuple[xr.DataArray, xr.DataArray, int]:
     """
-    Convert MS calendar DOY -> continuous days since Aug 15.
-    Aug 15 -> 0; Feb 28 ~ 197. NaNs preserved.
+    Load FS/MS files for given mode and return climatological mean over years.
+
+    mode:
+      - "static": results/SMMR_phase/<phase>_thr15_k5/<phase>_YYYY.nc
+      - "dynamic": points at DYN_FS_DIR / DYN_MS_DIR above
+
+    Assumes variable is named <phase> in each file.
+
+    Returns
+    -------
+    clim : xr.DataArray
+        Climatological mean over years.
+    nvalid : xr.DataArray
+        Per-pixel count of years with a finite (valid) detection.
+    n_years : int
+        Total number of years included (denominator for the active-pixel
+        fraction). Bad years are already excluded upstream by
+        compute_phase_dates_v2.py, so this should be 43 for 1979-2024.
     """
-    wrapped = xr.where(ms_da < aug15_doy, ms_da + 365, ms_da)
-    return wrapped - aug15_doy
-
-
-def _load_static_year(phase: str, year: int) -> xr.DataArray | None:
-    """
-    phase: 'FS' or 'MS'
-    static file: data/SMMR_phase/static/thr15_k5/<phase>/<phase>_YYYY.nc
-    variable: <phase> (y, x)
-    """
-    fpath = STATIC_DIR / "thr15_k5" / phase / f"{phase}_{year}.nc"
-    if not fpath.exists():
-        return None
-
-    ds = xr.open_dataset(fpath)
-
-    if phase not in ds:
-        ds.close()
-        return None
-
-    da = ds[phase].load()
-    ds.close()
-
-    if not np.any(np.isfinite(da.values)):
-        return None
-
-    return da
-
-
-def _load_dynamic_year(phase: str, year: int) -> xr.DataArray | None:
-    """
-    Dynamic FS/MS files:
-      FS: .../quantile_k5/FS/p0.7/FS_YYYY.nc
-      MS: .../quantile_k5/MS/p0.7/MS_YYYY.nc
-    """
-    if phase == "FS":
-        ddir = DYN_DIR_FS
-    elif phase == "MS":
-        ddir = DYN_DIR_MS
+    if mode == "static":
+        phase_dir = STATIC_ROOT / "thr15_k5" / phase
+    elif mode == "dynamic":
+        if phase == "FS":
+            phase_dir = DYN_FS_DIR
+        elif phase == "MS":
+            phase_dir = DYN_MS_DIR
+        else:
+            raise ValueError(f"Unknown phase for dynamic: {phase}")
     else:
-        raise ValueError("phase must be 'FS' or 'MS'")
+        raise ValueError(f"Unknown mode: {mode}")
 
-    fpath = ddir / f"{phase}_{year}.nc"
-    if not fpath.exists():
-        return None
-
-    ds = xr.open_dataset(fpath)
-    if phase not in ds:
-        ds.close()
-        raise KeyError(f"{phase} not in {fpath}; vars={list(ds.data_vars)}")
-
-    da = ds[phase].load()
-    ds.close()
-
-    if not np.any(np.isfinite(da.values)):
-        return None
-
-    return da
-
-
-def compute_climatologies_for_phase(phase: str) -> tuple[xr.DataArray, xr.DataArray, np.ndarray]:
-    """
-    Compute static and dynamic climatologies for one phase (FS or MS),
-    using ONLY years where both exist.
-
-    For MS: convert EACH YEAR to 'days since Aug 15' BEFORE averaging.
-
-    Returns:
-        static_clim, dynamic_clim  (each [y,x])
-        active_mask (numpy bool array [y,x]): active80 criterion (both
-        methods valid in >= MIN_FRAC_ACTIVE of years) AND valid_ocean —
-        identical definition to fig07/fig08.
-    """
-    static_dict = {}
-    dyn_dict = {}
-
-    for y in range(YEAR_MIN, YEAR_MAX + 1):
-        da_s = _load_static_year(phase, y)
-        da_d = _load_dynamic_year(phase, y)
-        if da_s is None or da_d is None:
-            continue
-        static_dict[y] = da_s
-        dyn_dict[y] = da_d
-
-    common_years = sorted(set(static_dict.keys()) & set(dyn_dict.keys()))
-    if not common_years:
-        raise ValueError(f"No overlapping years for phase {phase}")
-
-    stat_list = []
-    dyn_list = []
-
-    for y in common_years:
-        s = static_dict[y]
-        d = dyn_dict[y]
-
-        # Critical: MS wrap per-year (avoid calendar-year mean artifact)
-        if phase == "MS":
-            s = ms_to_days_since_aug15(s)
-            d = ms_to_days_since_aug15(d)
-
-        stat_list.append(s.expand_dims(year=[y]))
-        dyn_list.append(d.expand_dims(year=[y]))
-
-    stat_all = xr.concat(stat_list, dim="year")
-    dyn_all = xr.concat(dyn_list, dim="year")
-
-    stat_clim = stat_all.mean("year", skipna=True)
-    dyn_clim = dyn_all.mean("year", skipna=True)
-
-    # active80: valid timing in >= MIN_FRAC_ACTIVE of years for BOTH methods,
-    # AND within valid_ocean (identical criterion to fig07/fig08).
-    n_years = len(common_years)
-    frac_stat = (np.isfinite(stat_all).sum("year") / n_years).values
-    frac_dyn = (np.isfinite(dyn_all).sum("year") / n_years).values
-    active_mask = (frac_stat >= MIN_FRAC_ACTIVE) & (frac_dyn >= MIN_FRAC_ACTIVE) & ocean_mask
-
-    return stat_clim, dyn_clim, active_mask
-
-
-# ---------------------------------------------------------------------
-# Compute climatologies
-# ---------------------------------------------------------------------
-print("Computing FS static/dynamic climatologies...")
-fs_stat_clim, fs_dyn_clim, fs_active = compute_climatologies_for_phase("FS")
-
-print("Computing MS static/dynamic climatologies (days since Aug 15)...")
-ms_stat_clim, ms_dyn_clim, ms_active = compute_climatologies_for_phase("MS")
-
-print(f"[INFO] Active mask @ {MIN_FRAC_ACTIVE:.2f}: "
-      f"FS={int(fs_active.sum())}, MS={int(ms_active.sum())}")
-
-# Check grid matches sector mask
-if fs_stat_clim.shape != sector_mask.shape:
-    raise ValueError(
-        f"FS climatology shape {fs_stat_clim.shape} "
-        f"does not match sector mask {sector_mask.shape}"
-    )
-
-# ---------------------------------------------------------------------
-# Build + plot violins (active80 only)
-# ---------------------------------------------------------------------
-def build_and_plot_violins() -> None:
-    fs_stat_clim_v = fs_stat_clim.where(xr.DataArray(fs_active, dims=fs_stat_clim.dims))
-    fs_dyn_clim_v = fs_dyn_clim.where(xr.DataArray(fs_active, dims=fs_dyn_clim.dims))
-    ms_stat_clim_v = ms_stat_clim.where(xr.DataArray(ms_active, dims=ms_stat_clim.dims))
-    ms_dyn_clim_v = ms_dyn_clim.where(xr.DataArray(ms_active, dims=ms_dyn_clim.dims))
-
-    records: list[dict] = []
-
-    def add_phase_records(
-        phase_name: str,
-        da_static: xr.DataArray,
-        da_dynamic: xr.DataArray,
-        ylim_min: float,
-        ylim_max: float,
-        value_label: str,
-    ) -> None:
-        """
-        Extract static/dynamic climatology values by sector into records.
-        value_label: name of the y variable ('doy' for FS, 'dsa' for MS).
-        """
-        for sec in sector_ids:
-            mask = (sector_mask == sec) & ocean_mask
-
-            stat_vals = da_static.where(mask).values.ravel()
-            dyn_vals = da_dynamic.where(mask).values.ravel()
-
-            stat_vals = stat_vals[np.isfinite(stat_vals)]
-            dyn_vals = dyn_vals[np.isfinite(dyn_vals)]
-
-            # Clip to tidy plotting range
-            stat_vals = stat_vals[(stat_vals >= ylim_min) & (stat_vals <= ylim_max)]
-            dyn_vals = dyn_vals[(dyn_vals >= ylim_min) & (dyn_vals <= ylim_max)]
-
-            for v in stat_vals:
-                records.append(
-                    {"phase": phase_name, "sector": sec, "method": "Static", value_label: float(v)}
-                )
-            for v in dyn_vals:
-                records.append(
-                    {"phase": phase_name, "sector": sec, "method": "Dynamic", value_label: float(v)}
-                )
-
-    # FS: calendar DOY (choose a sane plotting window)
-    add_phase_records("FS", fs_stat_clim_v, fs_dyn_clim_v, 46, 273, value_label="value")
-
-    # MS: days since Aug 15 (0..~197) — give headroom
-    add_phase_records("MS", ms_stat_clim_v, ms_dyn_clim_v, 0, 210, value_label="value")
-
-    df = pd.DataFrame.from_records(records)
-
-    # ---------------------------------------------------------------------
-    # Plot violins
-    # ---------------------------------------------------------------------
-    sns.set(style="whitegrid")
-
-    palette = {"Static": "#2166ac", "Dynamic": "#d97a00"}
-    sector_order = sector_ids
-
-    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, dpi=300)
-
-    titles = {"FS": "(a) FS", "MS": "(b) MS"}
-
-    for ax, phase_name in zip(axes, ["FS", "MS"]):
-        sub = df[df["phase"] == phase_name]
-
-        # Robust outline violins: side-by-side (avoids split+fill=False issues)
-        sns.violinplot(
-            data=sub,
-            x="sector",
-            y="value",
-            hue="method",
-            order=sector_order,
-            palette=palette,
-            dodge=True,        # side-by-side
-            split=False,
-            inner="quartile",
-            linewidth=1.8,
-            cut=0,
-            ax=ax,
-            fill=False,
+    pattern = str(phase_dir / f"{phase}_*.nc")
+    files = sorted(glob(pattern))
+    if not files:
+        raise FileNotFoundError(
+            f"No files found for phase={phase}, mode={mode}, pattern={pattern}"
         )
 
-        ax.set_xticklabels([sector_labels[i] for i in sector_order])
-        ax.set_title(titles[phase_name], fontweight="bold", pad=8)
+    # infer years from filenames like "FS_1979.nc"
+    years = []
+    for f in files:
+        base = Path(f).name
+        try:
+            y = int(base.split("_")[1].split(".")[0])
+            years.append(y)
+        except Exception:
+            continue
 
-        if phase_name == "FS":
-            ax.set_ylabel("Freeze start (day of year)")
-            ax.set_ylim(46, 273)
+    years = np.array(years)
+    mask = (years >= year_start) & (years <= year_end)
+    if not mask.any():
+        raise ValueError(
+            f"No years in [{year_start}, {year_end}] for phase={phase}, mode={mode}"
+        )
+
+    files_sel = [f for f, m in zip(files, mask) if m]
+    years_sel = years[mask]
+
+    ds = xr.open_mfdataset(files_sel, combine="nested", concat_dim="year")
+    ds = ds.assign_coords(year=("year", years_sel))
+
+    da = ds[phase]
+    clim = da.mean("year", skipna=True)
+    nvalid = np.isfinite(da).sum("year").compute()
+    return clim, nvalid, len(years_sel)
+
+
+def freeze_label(phase: str) -> str:
+    if phase == "FS":
+        return "Freeze start"
+    elif phase == "MS":
+        return "Melt start"
+    return phase
+
+
+def quick_stats(name: str, da: xr.DataArray) -> None:
+    v = da.values
+    v = v[np.isfinite(v)]
+    if v.size == 0:
+        print(f"{name}: all-NaN")
+        return
+    print(
+        f"{name}: min={np.nanmin(v):.1f}, max={np.nanmax(v):.1f}, "
+        f"p5={np.nanpercentile(v, 5):.1f}, p95={np.nanpercentile(v, 95):.1f}"
+    )
+
+
+def load_ms_climatology_dsa(method: str, year_start: int, year_end: int) -> xr.DataArray:
+    """
+    Load MS climatology in "days since Aug 15" coordinate from results/anomalies.
+
+    Expects variables written by the updated climatology/anomaly script:
+      - MS_static_clim_dsa in results/anomalies/MS_static_climatology.nc
+      - MS_dynamic_clim_dsa in results/anomalies/MS_dynamic_climatology.nc
+    """
+    suffix = "thr15_k5" if method == "static" else "k5_q70"
+    clim_path = PROJECT_ROOT / "data" / "anomalies" / "SMMR" / f"MS_{method}_{suffix}_climatology.nc"
+    if not clim_path.exists():
+        raise FileNotFoundError(f"Missing MS climatology file: {clim_path}")
+
+    ds = xr.open_dataset(clim_path, decode_times=False)
+    var = f"MS_{method}_{suffix}_clim_dsa"
+    if var not in ds:
+        raise KeyError(
+            f"{var} not found in {clim_path}. "
+            "Did you rerun compute_FS_MS_anomalies_static_dynamic.py after adding the _dsa outputs?"
+        )
+
+    da = ds[var].load()
+    ds.close()
+    return da
+
+
+def make_active_mask(
+    nvalid_static: xr.DataArray,
+    n_years_static: int,
+    nvalid_dynamic: xr.DataArray,
+    n_years_dynamic: int,
+    valid_ocean: xr.DataArray,
+    frac_required: float = MIN_FRAC_ACTIVE,
+) -> np.ndarray:
+    """
+    Same active80 criterion as Figs. 6-8: both methods must independently
+    have a valid detection in >= frac_required of years, within valid_ocean.
+
+    Returns a plain numpy boolean array (not an xr.DataArray) to sidestep
+    any coordinate-alignment mismatch between the calendar-DOY-based nvalid
+    arrays and the separately-loaded DSA climatology fields used for MS.
+    """
+    frac_static = np.asarray(nvalid_static) / float(n_years_static)
+    frac_dynamic = np.asarray(nvalid_dynamic) / float(n_years_dynamic)
+    ocean_np = np.asarray(valid_ocean)
+    return (frac_static >= frac_required) & (frac_dynamic >= frac_required) & ocean_np
+
+
+# ---------------------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------------------
+
+
+def main():
+    set_mpl_defaults()
+
+    ds_mask = xr.open_dataset(SECTOR_FILE)
+    valid_ocean = ds_mask["valid_ocean"].astype(bool)
+    ds_mask.close()
+
+    for phase in PHASES:
+        print(f"Processing climatology for {phase}")
+
+        clim_static, nvalid_static, n_years_static = load_phase_climatology(phase, "static", YEAR_START, YEAR_END)
+        clim_dynamic, nvalid_dynamic, n_years_dynamic = load_phase_climatology(phase, "dynamic", YEAR_START, YEAR_END)
+
+        # --- phase-specific plotting coordinates ---
+        if phase == "FS":
+            # Feb 15–Sep 30 (calendar DOY)
+            label = f"{freeze_label(phase)} (day of year)"
+            field_vmin, field_vmax = 46, 273
+
+        elif phase == "MS":
+            # MS climatology should NOT be computed by averaging calendar DOY and then wrapping.
+            # Instead, load the pre-wrapped climatology (days since Aug 15) produced by
+            # compute_FS_MS_anomalies_static_dynamic.py: MS_*_clim_dsa
+            clim_static = load_ms_climatology_dsa(method="static", year_start=YEAR_START, year_end=YEAR_END)
+            clim_dynamic = load_ms_climatology_dsa(method="dynamic", year_start=YEAR_START, year_end=YEAR_END)
+
+            label = f"{freeze_label(phase)} (days since Aug 15)"
+            field_vmin, field_vmax = 0, 210
+
         else:
-            ax.set_ylabel("Melt start (days since Aug 15)")
-            ax.set_ylim(0, 210)
+            label = f"{freeze_label(phase)}"
+            field_vmin, field_vmax = None, None
 
-        ax.tick_params(axis="x", rotation=0)
+        # active80 mask — identical criterion and application for FS and MS,
+        # replacing the old FS/MS-asymmetric min-N>=10 display floor.
+        active_np = make_active_mask(
+            nvalid_static, n_years_static,
+            nvalid_dynamic, n_years_dynamic,
+            valid_ocean,
+        )
+        clim_static = clim_static.where(xr.DataArray(active_np, dims=clim_static.dims))
+        clim_dynamic = clim_dynamic.where(xr.DataArray(active_np, dims=clim_dynamic.dims))
+        print(f"  [active80] {phase}: {int(active_np.sum())} active pixels "
+              f"(of {int(np.asarray(valid_ocean).sum())} valid-ocean pixels)")
 
-    # Legend once, outside
-    handles, labels = axes[0].get_legend_handles_labels()
-    axes[0].legend(
-        handles,
-        labels,
-        title="",
-        loc="center left",
-        bbox_to_anchor=(1.02, 0.5),
-        frameon=True,
-    )
-    axes[1].get_legend().remove()
-    axes[1].set_xlabel("Sector")
+        # Optional sanity printout (kept on by default — comment out if annoying)
+        quick_stats(f"{phase} static", clim_static)
+        quick_stats(f"{phase} dynamic", clim_dynamic)
 
-    fig.subplots_adjust(right=0.82)
+        fig, axes = plot_phase_comparison_map(
+            static_field=clim_static,
+            dynamic_field=clim_dynamic,
+            label=label,
+            title_prefix=f"{phase} ",
+            diff_vlim=20,
+            field_vmin=field_vmin,
+            field_vmax=field_vmax,
+        )
 
-    # ---------------------------------------------------------------------
-    # Save / upload
-    # ---------------------------------------------------------------------
-    out_path = get_fig_path(
-        PROJECT_ROOT_CLUSTER,
-        subfolder="",
-        fig_name="Fig06_FS_MS_climatology_static_vs_dynamic_violins_active80.png",
-    )
+        # You’ll title/caption in the paper; this is just the filename index.
+        fig_num = 4 if phase == "FS" else 5  # adjust if you change ordering
 
-    save_and_upload(
-        fig,
-        out_path,
-        remote_root="gdrive:sea-ice-phase/results/Ch2_Figures",
-        remote_subdir="",
-    )
+        fig_name = format_fig_name(
+            num=fig_num,
+            short=f"climatology_{phase}_static_vs_dynamic_{YEAR_START}-{YEAR_END}_active80",
+        )
+
+        out_path = get_fig_path(
+            project_root=PROJECT_ROOT,
+            subfolder=SUBFOLDER,
+            fig_name=fig_name,
+        )
+
+        save_and_upload(
+            fig,
+            out_path,
+            remote_root=REMOTE_ROOT,
+            remote_subdir="",
+        )
 
 
-# ---------------------------------------------------------------------
-# Run (active80 only — the "unmasked" variant has been removed)
-# ---------------------------------------------------------------------
-print("Building violins: active80")
-build_and_plot_violins()
+if __name__ == "__main__":
+    main()
