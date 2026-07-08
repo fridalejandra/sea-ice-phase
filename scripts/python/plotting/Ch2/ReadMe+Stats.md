@@ -1,7 +1,5 @@
 # Ch2 Figure Stats Verification Log
 
-One section per figure/script. Paste raw stdout under each as you run it.
-Goal: every number in the manuscript text traces to a pasted printout here.
 
 ---
 
@@ -20,8 +18,6 @@ Text claims this affects: p.17 caption ("modes near zero"), p.18-19
 ---
 
 ## Fig 4/5 — fig04-5_climatology_static_dynamic_maps.py
-Patch: none needed, quick_stats() already prints what's used.
-Status: [ ] not run  [ ] run, pasted below  [ ] text updated to match
 
 ```
  [display floor >= 10 yrs] FS: static=34829 (of 104912 valid-ocean), dynamic=33592 (of 104912 valid-ocean), joint (what panel c will show)=33147
@@ -40,27 +36,85 @@ min-N=10 pixel counts, FS/MS static/dynamic min/max/p5/p95.
 ## Fig 6 — fig06_climatology_sector_violins.py
 
 ```
-<paste stdout here>
-```
+Active mask @ 0.80: FS=24186, MS=23100
 
-Text claims this affects: sector median offsets (Weddell +16d, Ross +14d,
-A-B +9d, KHV +4d for FS; Weddell +16d, A-B +7d, EA +7d, KHV -1d, Ross -4d
-for MS), and the "over 1,300 multi-year ice pixels" claim.
+  --- FS sector median offsets (dynamic - static), active80 ---
+    Amundsen– Bellingshausen: median offset = +10.5 days, n=1543
+    Weddell: median offset = +6.8 days, n=4316
+    King Haakon VII: median offset = +4.8 days, n=8447
+    East Antarctica: median offset = +11.5 days, n=4130
+    Ross– Amundsen: median offset = +10.1 days, n=5750
+  static-valid/dynamic-invalid pixels (whole domain): 1473
+    Amundsen– Bellingshausen: 41
+    Weddell: 1274
+    King Haakon VII: 9
+    East Antarctica: 119
+    Ross– Amundsen: 30
+
+  --- MS sector median offsets (dynamic - static), active80 ---
+    Amundsen– Bellingshausen: median offset = -4.5 days, n=1218
+    Weddell: median offset = -10.5 days, n=3885
+    King Haakon VII: median offset = -7.2 days, n=8461
+    East Antarctica: median offset = -7.6 days, n=3791
+    Ross– Amundsen: median offset = -12.4 days, n=5745
+  static-valid/dynamic-invalid pixels (whole domain): 1682
+    Amundsen– Bellingshausen: 106
+    Weddell: 434
+    King Haakon VII: 302
+    East Antarctica: 499
+    Ross– Amundsen: 341
+```
 
 ---
 
 ## Fig 7 — fig07_trends_static_dynamic.py
-Status: SCRIPT NOT YET PROVIDED -- highest priority, verifies the most
-currently-unverified numbers in the draft.
+
 
 ```
-<paste stdout here once script is provided and run>
+MS_dynamic_clim min/max: 4.0/192.0
+MS_static_clim  min/max: 1.0/193.0
+Active mask @ 0.80: FS=24186, MS=23100
+
+Sector-mean step-change deltas (post-pre, active-only):
+phase  sector_id sector_label  method      delta
+   FS          1          A–B Dynamic   3.834116
+   FS          1          A–B  Static   4.922143
+   FS          2          WED Dynamic   8.539152
+   FS          2          WED  Static   8.832134
+   FS          3          KHV Dynamic   9.159275
+   FS          3          KHV  Static   8.810742
+   FS          4           EA Dynamic   5.614586
+   FS          4           EA  Static   4.871596
+   FS          5           RA Dynamic   7.216149
+   FS          5           RA  Static   7.234293
+   MS          1          A–B Dynamic  -0.518216
+   MS          1          A–B  Static  -0.634838
+   MS          2          WED Dynamic -14.017342
+   MS          2          WED  Static -12.071669
+   MS          3          KHV Dynamic  -8.124432
+   MS          3          KHV  Static  -7.870877
+   MS          4           EA Dynamic  -6.650866
+   MS          4           EA  Static  -7.389708
+   MS          5           RA Dynamic  -5.142918
+   MS          5           RA  Static  -4.784264
+  FS delta range across sectors/methods: +3.8 to +9.2 days
+  MS delta range across sectors/methods: -14.0 to -0.5 days
+Trend years span: 1979–2024
+Step-change BOTH EARLIER fraction (FS) [denom=ACTIVE @ 0.80]: 0.01310675597453072
+Step-change BOTH EARLIER fraction (MS) [denom=ACTIVE @ 0.80]: 0.4325108225108225
+Trend BOTH NEG SLOPE fraction (FS) [denom=ACTIVE @ 0.80]: 0.45083932853717024
+Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ 0.80]: 0.626969696969697
+
+Pre/post-2016-ONLY trend sign agreement (new — verify against draft text):
+  FS pre-2016: both-earlier(neg)=76.5%, both-later(pos)=14.9%  (n=24186, years 1979-2015)
+  FS post-2016: both-earlier(neg)=21.7%, both-later(pos)=64.1%  (n=24186, years 2016-2024)
+  MS pre-2016: both-earlier(neg)=29.1%, both-later(pos)=55.3%  (n=23100, years 1979-2015)
+  MS post-2016: both-earlier(neg)=42.1%, both-later(pos)=41.7%  (n=23100, years 2016-2024)
+Trend BOTH POS SLOPE fraction (FS) [denom=ACTIVE @ 0.80]: 0.4059786653435872
+Trend BOTH POS SLOPE fraction (MS) [denom=ACTIVE @ 0.80]: 0.20432900432900433
+Step-change BOTH LATER fraction (FS) [denom=ACTIVE @ 0.80]: 0.46572397254610104
+Step-change BOTH LATER fraction (MS) [denom=ACTIVE @ 0.80]: 0.03666666666666667
 ```
-
-Text claims this affects: step-change sign agreement (FS 47%/1%,
-MS 23%/5%), sector-mean step changes (5-11 days FS), full-record trend
-sign split (FS 46%/41%), pre-2016 (75%/16%), post-2016 (63%/22%).
-
 ---
 
 ## Fig 8 — fig08_prepost_trends.py
@@ -68,8 +122,14 @@ Patch: none needed, already prints median slope per phase/period.
 Status: [ ] not run  [ ] run, pasted below  [ ] text updated to match
 
 ```
-<paste stdout here>
-```
+Computing slopes...
+  FS pre: median=-0.373
+  FS post: median=1.600
+  MS pre: median=0.091
+  MS post: median=0.067
+  DUR pre: median=0.454
+  DUR post: median=-1.600
+  ```
 
 Text claims this affects: circumpolar-median FS trend reversal
 (-0.37 to +1.60 days/yr), duration mirror (+0.45 to -1.60 days/yr).
@@ -117,7 +177,6 @@ method disagreement (flat-to-down), crossing frequency deltas
 ---
 
 ## Open questions carried over from this session
-- [ ] Fig 7 script still needed
 - [ ] 46-year vs 43-year record language -- decide convention, apply
       consistently (Fig 4/5/8 paragraphs all currently mix these)
 - [ ] C15/"volatility" wording + whether a crossing-frequency figure gets

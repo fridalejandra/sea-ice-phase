@@ -109,6 +109,19 @@ def compute_ecdf_vals(metric: str, k_test: int, sentinel: np.ndarray) -> np.ndar
     return vals
 
 
+def print_ecdf_stats(name: str, vals: np.ndarray) -> dict:
+    """Median/p90/p95 of |delta date| for one window comparison -- gives
+    exact numbers for the Window section's '±2-3 days ... up to ~8-10 days'
+    claims instead of eyeballing the ECDF plot."""
+    median = float(np.median(vals))
+    p90 = float(np.percentile(vals, 90))
+    p95 = float(np.percentile(vals, 95))
+    p99 = float(np.percentile(vals, 99))
+    print(f"  {name}: n={vals.size}, median={median:.1f}, p90={p90:.1f}, "
+          f"p95={p95:.1f}, p99={p99:.1f}")
+    return dict(n=vals.size, median=median, p90=p90, p95=p95, p99=p99)
+
+
 # ---------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------
@@ -126,6 +139,12 @@ def main():
     ms_3v5 = compute_ecdf_vals("MS", 3, sent_ms)
     print("Computing MS 7v5...")
     ms_7v5 = compute_ecdf_vals("MS", 7, sent_ms)
+
+    print("\n=== Window sensitivity distribution stats (|delta date|, days) ===")
+    print_ecdf_stats("FS 3 vs 5 days", fs_3v5)
+    print_ecdf_stats("FS 7 vs 5 days", fs_7v5)
+    print_ecdf_stats("MS 3 vs 5 days", ms_3v5)
+    print_ecdf_stats("MS 7 vs 5 days", ms_7v5)
 
     fig, ax = plt.subplots(figsize=(4.2, 3.2), dpi=300)
 
