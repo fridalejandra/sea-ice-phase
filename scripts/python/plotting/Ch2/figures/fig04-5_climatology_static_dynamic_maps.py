@@ -51,16 +51,23 @@ Masking (2024 revision, final):
 
 import sys
 from pathlib import Path
-from glob import glob
-
-import numpy as np
-import xarray as xr
-
-# ensure project root on sys.path so "scripts.*" imports work
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+import sys
+from pathlib import Path
+from glob import glob
+import numpy as np
+import xarray as xr
 
+# ensure Ch2/ is on sys.path so "utils.*" imports work
+HERE = Path(__file__).resolve().parent   # .../Ch2/figures
+CH2_ROOT = HERE.parent                    # .../Ch2
+if str(CH2_ROOT) not in sys.path:
+    sys.path.insert(0, str(CH2_ROOT))
+
+
+PROJECT_ROOT = Path("/user/geog/falejandraperez/sea-ice-phase")
 from utils.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
     format_fig_name,

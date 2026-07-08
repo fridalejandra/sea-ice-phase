@@ -18,8 +18,7 @@ Output:
   results/Ch2_Figures/Fig01_sensor_advance_retreat_bias_hist_AMSREminusSSMIS_2012-2024.png
 """
 
-import sys
-from pathlib import Path
+
 
 import numpy as np
 import xarray as xr
@@ -28,13 +27,14 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import pandas as pd
 import seaborn as sns
+import sys
+from pathlib import Path
 
-# ---------------------------------------------------------------------
-# project root
-# ---------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parents[5]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# was: PROJECT_ROOT = Path(__file__).resolve().parents[5]  -- wrong level for utils/
+HERE = Path(__file__).resolve().parent   # .../Ch2/figures
+CH2_ROOT = HERE.parent                    # .../Ch2
+if str(CH2_ROOT) not in sys.path:
+    sys.path.insert(0, str(CH2_ROOT))
 
 from utils.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
@@ -44,6 +44,11 @@ from utils.ch2_fig_utils import (  # noqa: E402
     get_sentinel_mask,
 )
 
+# PROJECT_ROOT is used later for actual data paths (SMMR_ROOT, AMSRE_ROOT, etc.)
+# — keep it, just stop deriving it from parents[N], which is exactly the kind
+# of fragile assumption that just broke. Hardcode it like every other Ch2
+# script already does (fig07, fig08, compute_sector_mean_trends07, etc.):
+PROJECT_ROOT = Path("/user/geog/falejandraperez/sea-ice-phase")
 # ---------------------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------------------
