@@ -10,7 +10,8 @@ Patch: print_distribution_stats() for FS/MS bias (added [DATE])
 Status: [ ] not run  [ ] run, pasted below  [ ] text updated to match
 
 ```
-<paste stdout here>
+  MS (Retreat): n=302638, median=+2.8, IQR=[-25.2, +29.2], mode=+6.0, skew=+0.70 (right-skewed), p90(|bias|)=88.5
+  FS (Advance): n=268794, median=+8.0, IQR=[-26.2, +42.0], mode=+8.0, skew=-0.06 (roughly symmetric), p90(|bias|)=85.5
 ```
 
 Text claims this affects: p.17 caption ("modes near zero"), p.18-19
@@ -23,7 +24,12 @@ Patch: none needed, quick_stats() already prints what's used.
 Status: [ ] not run  [ ] run, pasted below  [ ] text updated to match
 
 ```
-<paste stdout here>
+ [display floor >= 10 yrs] FS: static=34829 (of 104912 valid-ocean), dynamic=33592 (of 104912 valid-ocean), joint (what panel c will show)=33147
+FS static: min=52.7, max=258.4, p5=69.3, p95=237.9
+FS dynamic: min=70.3, max=258.0, p5=100.9, p95=238.2
+ [display floor >= 10 yrs] MS: static=36064 (of 104912 valid-ocean), dynamic=35273 (of 104912 valid-ocean), joint (what panel c will show)=33525
+MS static: min=12.8, max=186.5, p5=35.7, p95=161.6
+MS dynamic: min=16.4, max=177.9, p5=48.1, p95=146.3
 ```
 
 Text claims this affects: active80 pixel counts (24,186 FS / 23,100 MS),
@@ -32,8 +38,6 @@ min-N=10 pixel counts, FS/MS static/dynamic min/max/p5/p95.
 ---
 
 ## Fig 6 — fig06_climatology_sector_violins.py
-Patch: print_sector_offset_stats() (added [DATE])
-Status: [ ] not run  [ ] run, pasted below  [ ] text updated to match
 
 ```
 <paste stdout here>

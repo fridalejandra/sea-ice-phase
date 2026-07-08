@@ -378,17 +378,14 @@ def print_sector_offset_stats(phase_name, stat_clim, dyn_clim, active_mask, sect
         print(f"    {sector_labels[sec].replace(chr(10),' ')}: median offset = {offset:+.1f} days, n={pair_mask.sum()}")
 
     # static-valid-but-dynamic-invalid count (spurious static detections), whole domain
-    static_valid = np.isfinite(stat_clim.values) & ocean_mask.values
-    dynamic_valid = np.isfinite(dyn_clim.values) & ocean_mask.values
+    # fixed: ocean_mask/sector_mask are already plain numpy arrays here, not xr.DataArray
+    static_valid = np.isfinite(stat_clim.values) & ocean_mask
+    dynamic_valid = np.isfinite(dyn_clim.values) & ocean_mask
     static_only = static_valid & ~dynamic_valid
     print(f"  static-valid/dynamic-invalid pixels (whole domain): {int(static_only.sum())}")
     for sec in sector_ids:
-        m = (sector_mask.values == sec) & static_only
+        m = (sector_mask == sec) & static_only
         print(f"    {sector_labels[sec].replace(chr(10),' ')}: {int(m.sum())}")
-
-
-print_sector_offset_stats("FS", fs_stat_clim, fs_dyn_clim, fs_active.values, sector_mask, ocean_mask)
-print_sector_offset_stats("MS", ms_stat_clim, ms_dyn_clim, ms_active.values, sector_mask, ocean_mask)
 
 # ---------------------------------------------------------------------
 # Run both variants
