@@ -18,7 +18,8 @@ Output:
   results/Ch2_Figures/Fig01_sensor_advance_retreat_bias_hist_AMSREminusSSMIS_2012-2024.png
 """
 
-
+import sys
+from pathlib import Path
 
 import numpy as np
 import xarray as xr
@@ -27,16 +28,17 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import pandas as pd
 import seaborn as sns
-import sys
-from pathlib import Path
 
-# was: PROJECT_ROOT = Path(__file__).resolve().parents[5]  -- wrong level for utils/
-HERE = Path(__file__).resolve().parent   # .../Ch2/figures
-CH2_ROOT = HERE.parent                    # .../Ch2
-if str(CH2_ROOT) not in sys.path:
-    sys.path.insert(0, str(CH2_ROOT))
+# ---------------------------------------------------------------------
+# project root
+# ---------------------------------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.ch2_fig_utils import (  # noqa: E402
+# fixed: was "scripts.python.plotting.ch2_fig_utils" -- module actually
+# lives at scripts/python/plotting/Ch2/utils/ch2_fig_utils.py
+from scripts.python.plotting.Ch2.utils.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
     format_fig_name,
     get_fig_path,
@@ -44,11 +46,6 @@ from utils.ch2_fig_utils import (  # noqa: E402
     get_sentinel_mask,
 )
 
-# PROJECT_ROOT is used later for actual data paths (SMMR_ROOT, AMSRE_ROOT, etc.)
-# — keep it, just stop deriving it from parents[N], which is exactly the kind
-# of fragile assumption that just broke. Hardcode it like every other Ch2
-# script already does (fig07, fig08, compute_sector_mean_trends07, etc.):
-PROJECT_ROOT = Path("/user/geog/falejandraperez/sea-ice-phase")
 # ---------------------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------------------
@@ -149,9 +146,6 @@ def plot_bias_map(ax, bias_da, vlim=20):
     return im
 
 
-# ---------------------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------------------
 def print_distribution_stats(name: str, arr: np.ndarray) -> dict:
     """Median, IQR, histogram-mode, skewness, p90(|bias|) for a bias array."""
     from scipy import stats as sstats
@@ -168,6 +162,11 @@ def print_distribution_stats(name: str, arr: np.ndarray) -> dict:
           f"mode={mode_bin:+.1f}, skew={skew:+.2f} ({skew_word}), p90(|bias|)={p90_abs:.1f}")
     return dict(n=arr.size, median=median, q25=q25, q75=q75, mode=mode_bin, skew=skew, p90_abs=p90_abs)
 
+
+# ---------------------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------------------
+
 def main():
     set_mpl_defaults()
 
@@ -175,6 +174,7 @@ def main():
     bias_clim_ms, all_bias_ms = compute_bias("MS")
     print("Computing FS bias...")
     bias_clim_fs, all_bias_fs = compute_bias("FS")
+
     print_distribution_stats("MS (Retreat)", all_bias_ms)
     print_distribution_stats("FS (Advance)", all_bias_fs)
 
