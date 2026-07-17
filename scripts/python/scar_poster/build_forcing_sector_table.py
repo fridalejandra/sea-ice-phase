@@ -92,7 +92,7 @@ for sid, name in SECTOR_NAMES.items():
     tau_sector = sector_daily_mean(tau_ps, mask)
 
     df = pd.DataFrame({
-        "date": pd.to_datetime(tau_sector.time.values),
+        "date": pd.to_datetime(tau_sector.time.values).normalize(),
         "sector": name,
         "wind_stress": tau_sector.values,
     })
@@ -103,9 +103,11 @@ forcing_df = pd.concat(records, ignore_index=True)
 # ---------------- Merge with SIA ----------------
 print("\nMerging with SIA record...")
 sia_df = pd.read_csv(SIA_CSV, index_col="date", parse_dates=True)
+sia_df.index = sia_df.index.normalize()
 sia_long = sia_df[list(SECTOR_NAMES.values())].reset_index().melt(
     id_vars="date", var_name="sector", value_name="SIA"
 )
+sia_long["date"] = pd.to_datetime(sia_long["date"]).dt.normalize()
 
 merged = forcing_df.merge(sia_long, on=["date", "sector"], how="inner")
 merged = merged.sort_values(["sector", "date"])
