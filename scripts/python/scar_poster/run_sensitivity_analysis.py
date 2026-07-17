@@ -1,21 +1,29 @@
 """
-run_sensitivity_analysis.py  (WIND STRESS ONLY - DLWR removed)
+run_sensitivity_analysis.py  (ANOMALY VERSION)
 
-Core analysis for the poster:
-  1. Regression: delta_SIA ~ wind_stress, split by sector, season, and
-     pre/post-2016 period. beta = sensitivity, residual variance = the
-     "buffering" diagnostic.
-  2. AR(1) persistence model: X_t+1 = rho * X_t + noise, on raw SIA,
-     same splits - the "statistical model" from your notebook.
+Uses SIA_anomaly / delta_SIA_anomaly (deseasonalized) instead of raw SIA,
+per the Ch4 framework where X_t is defined as a deviation from the seasonal
+cycle, not the raw state.
+
+  1. Regression: delta_SIA_anomaly ~ wind_stress, split by sector, season,
+     pre/post-2016 period.
+  2. AR(1) persistence model on SIA_anomaly, same splits, now with:
+       - an ACF check (lag-1 through lag-10) to see whether a single-lag
+         AR(1) is even a reasonable representation of the memory structure
+       - block-bootstrap confidence intervals on rho (3-year-equivalent
+         blocks, consistent with the block bootstrap already used in Ch3)
 """
 
 import os
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from statsmodels.tsa.stattools import acf
 
-IN_CSV = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_table_daily.csv"
+IN_CSV = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_table_daily_anomaly.csv"
 OUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_results"
+N_BOOTSTRAP = 500
+BLOCK_LEN_DAYS = 365 * 3  # ~3-year blocks, matching Ch3's block bootstrap
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -34,26 +42,24 @@ sectors = df["sector"].unique()
 
 
 def run_regression(sub, y_col, x_col):
-    """OLS regression of y_col on x_col. Returns dict of key stats + residuals."""
     sub = sub.dropna(subset=[y_col, x_col])
     if len(sub) < 30:
-        return None, None
+        return None
     X = sm.add_constant(sub[x_col])
     y = sub[y_col]
     model = sm.OLS(y, X).fit()
-    result = {
+    return {
         "n_obs": len(sub),
         "beta": model.params[x_col],
         "pvalue": model.pvalues[x_col],
         "r_squared": model.rsquared,
         "residual_variance": model.resid.var(),
     }
-    return result, model.resid
 
 
-# ---------------- 1. Univariate regression: delta_SIA ~ wind_stress ----------------
+# ---------------- 1. Regression on ANOMALY delta ----------------
 print("=" * 60)
-print("REGRESSION: delta_SIA ~ wind_stress")
+print("REGRESSION: delta_SIA_anomaly ~ wind_stress")
 print("=" * 60)
 
 regression_results = []
@@ -61,73 +67,124 @@ for sector in sectors:
     for period in ["pre_2016", "post_2016"]:
         for season in ["DJF", "MAM", "JJA", "SON"]:
             sub = df[(df["sector"] == sector) & (df["period"] == period) & (df["season"] == season)]
-            res, _ = run_regression(sub, "delta_SIA", "wind_stress")
+            res = run_regression(sub, "delta_SIA_anomaly", "wind_stress")
             if res:
                 row = {"sector": sector, "period": period, "season": season}
                 row.update(res)
                 regression_results.append(row)
 
 regression_df = pd.DataFrame(regression_results)
-regression_df.to_csv(f"{OUT_DIR}/wind_stress_regressions.csv", index=False)
+regression_df.to_csv(f"{OUT_DIR}/wind_stress_regressions_anomaly.csv", index=False)
 print(f"Saved {len(regression_df)} regression results")
 print(regression_df.head(10))
 
-# ---------------- Check: has beta (sensitivity) changed pre vs post 2016? ----------------
-print("\n" + "=" * 60)
-print("CHECK: beta (sensitivity) and residual variance, pre vs post 2016")
-print("=" * 60)
-pivot_beta = regression_df.pivot_table(
-    index=["sector", "season"], columns="period", values="beta"
-)
-pivot_beta["beta_change_pct"] = 100 * (pivot_beta["post_2016"] - pivot_beta["pre_2016"]) / pivot_beta["pre_2016"].abs()
+pivot_beta = regression_df.pivot_table(index=["sector", "season"], columns="period", values="beta")
+pivot_resvar = regression_df.pivot_table(index=["sector", "season"], columns="period", values="residual_variance")
+pivot_r2 = regression_df.pivot_table(index=["sector", "season"], columns="period", values="r_squared")
 
-pivot_resvar = regression_df.pivot_table(
-    index=["sector", "season"], columns="period", values="residual_variance"
-)
-pivot_resvar["resvar_change_pct"] = 100 * (pivot_resvar["post_2016"] - pivot_resvar["pre_2016"]) / pivot_resvar["pre_2016"]
-
-print("\nSensitivity (beta) change:")
+print("\nBeta (sensitivity), pre vs post 2016:")
 print(pivot_beta)
-print("\nResidual variance change (buffering diagnostic):")
+print("\nR-squared, pre vs post 2016:")
+print(pivot_r2)
+print("\nResidual variance, pre vs post 2016:")
 print(pivot_resvar)
 
-pivot_beta.to_csv(f"{OUT_DIR}/beta_pre_post_comparison.csv")
-pivot_resvar.to_csv(f"{OUT_DIR}/residual_variance_pre_post_comparison.csv")
+pivot_beta.to_csv(f"{OUT_DIR}/beta_pre_post_anomaly.csv")
+pivot_resvar.to_csv(f"{OUT_DIR}/residual_variance_pre_post_anomaly.csv")
+pivot_r2.to_csv(f"{OUT_DIR}/r2_pre_post_anomaly.csv")
 
-# ---------------- 2. AR(1) persistence model ----------------
+# ---------------- 2a. ACF check - is AR(1) even reasonable? ----------------
 print("\n" + "=" * 60)
-print("AR(1) PERSISTENCE MODEL: X_t+1 = rho * X_t + noise")
+print("ACF CHECK: autocorrelation of SIA_anomaly at lags 1-10 (days)")
 print("=" * 60)
+print("(If autocorrelation decays much slower than lag-1 alone captures,")
+print(" a single-lag AR(1) is understating the memory structure.)\n")
+
+acf_results = []
+for sector in sectors:
+    sub = df[df["sector"] == sector].sort_values("date")
+    series = sub["SIA_anomaly"].dropna().values
+    if len(series) < 50:
+        continue
+    acf_vals = acf(series, nlags=10, fft=True)
+    print(f"{sector}: lags 1-10 = {np.round(acf_vals[1:], 3)}")
+    acf_results.append({"sector": sector, **{f"lag_{i}": acf_vals[i] for i in range(1, 11)}})
+
+pd.DataFrame(acf_results).to_csv(f"{OUT_DIR}/acf_check.csv", index=False)
+
+# ---------------- 2b. AR(1) with block bootstrap CIs ----------------
+print("\n" + "=" * 60)
+print("AR(1) ON ANOMALY, WITH BLOCK-BOOTSTRAP CONFIDENCE INTERVALS")
+print("=" * 60)
+
+
+def fit_ar1(x_t, x_t1):
+    X = sm.add_constant(x_t)
+    model = sm.OLS(x_t1, X).fit()
+    return model.params[1]
+
+
+def block_bootstrap_rho(series, block_len, n_boot):
+    """Resample contiguous blocks (with replacement) to preserve temporal
+    dependence, refit AR(1) each time, return array of bootstrap rho estimates."""
+    n = len(series)
+    if n < block_len * 2:
+        block_len = max(30, n // 4)  # shrink block length for short post-2016 series
+    n_blocks_needed = int(np.ceil(n / block_len))
+    rhos = []
+    rng = np.random.default_rng(42)
+    for _ in range(n_boot):
+        starts = rng.integers(0, n - block_len, size=n_blocks_needed)
+        resampled = np.concatenate([series[s:s + block_len] for s in starts])[:n]
+        x_t = resampled[:-1]
+        x_t1 = resampled[1:]
+        if len(x_t) < 30:
+            continue
+        try:
+            rhos.append(fit_ar1(x_t, x_t1))
+        except Exception:
+            continue
+    return np.array(rhos)
+
 
 ar1_results = []
 for sector in sectors:
     for period in ["pre_2016", "post_2016"]:
         sub = df[(df["sector"] == sector) & (df["period"] == period)].sort_values("date")
-        sub = sub.dropna(subset=["SIA"])
-        if len(sub) < 30:
+        series = sub["SIA_anomaly"].dropna().values
+        if len(series) < 30:
             continue
-        x_t = sub["SIA"].values[:-1]
-        x_t1 = sub["SIA"].values[1:]
-        X = sm.add_constant(x_t)
-        model = sm.OLS(x_t1, X).fit()
-        rho = model.params[1]
+
+        x_t = series[:-1]
+        x_t1 = series[1:]
+        rho_point = fit_ar1(x_t, x_t1)
+
+        boot_rhos = block_bootstrap_rho(series, BLOCK_LEN_DAYS, N_BOOTSTRAP)
+        ci_low, ci_high = np.percentile(boot_rhos, [2.5, 97.5]) if len(boot_rhos) > 0 else (np.nan, np.nan)
+
         ar1_results.append({
             "sector": sector, "period": period,
-            "rho": rho, "one_minus_rho": 1 - rho,
-            "r_squared": model.rsquared, "n_obs": len(sub),
+            "rho": rho_point, "rho_ci_low": ci_low, "rho_ci_high": ci_high,
+            "n_obs": len(series), "n_bootstrap_valid": len(boot_rhos),
         })
-        print(f"  {sector} ({period}): rho = {rho:.4f}, R^2 = {model.rsquared:.4f}")
+        print(f"  {sector} ({period}): rho = {rho_point:.4f} "
+              f"[95% CI: {ci_low:.4f}, {ci_high:.4f}], n={len(series)}")
 
 ar1_df = pd.DataFrame(ar1_results)
-ar1_df.to_csv(f"{OUT_DIR}/ar1_persistence.csv", index=False)
+ar1_df.to_csv(f"{OUT_DIR}/ar1_persistence_anomaly.csv", index=False)
 
-pivot_rho = ar1_df.pivot_table(index="sector", columns="period", values="rho")
-pivot_rho["rho_change"] = pivot_rho["post_2016"] - pivot_rho["pre_2016"]
-print("\nPersistence (rho) change, pre vs post 2016:")
-print(pivot_rho)
-pivot_rho.to_csv(f"{OUT_DIR}/rho_pre_post_comparison.csv")
+print("\n" + "=" * 60)
+print("CHECK: do pre/post-2016 confidence intervals overlap?")
+print("=" * 60)
+for sector in sectors:
+    rows = ar1_df[ar1_df["sector"] == sector]
+    if len(rows) < 2:
+        continue
+    pre = rows[rows["period"] == "pre_2016"].iloc[0]
+    post = rows[rows["period"] == "post_2016"].iloc[0]
+    overlap = not (post["rho_ci_low"] > pre["rho_ci_high"] or post["rho_ci_high"] < pre["rho_ci_low"])
+    print(f"  {sector}: pre=[{pre['rho_ci_low']:.4f},{pre['rho_ci_high']:.4f}] "
+          f"post=[{post['rho_ci_low']:.4f},{post['rho_ci_high']:.4f}] "
+          f"-> {'OVERLAP (not distinguishable)' if overlap else 'NO OVERLAP (likely real difference)'}")
 
 print(f"\n\nAll results saved to: {OUT_DIR}/")
-print("Files: wind_stress_regressions.csv, beta_pre_post_comparison.csv,")
-print("       residual_variance_pre_post_comparison.csv, ar1_persistence.csv,")
-print("       rho_pre_post_comparison.csv")
