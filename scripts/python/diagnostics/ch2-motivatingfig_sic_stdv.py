@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# ============================================================
+# ==========================================================
 # Motivating Figure: Threshold Ambiguity in Fixed-15%-SIC
 # Transition Detection
 #
