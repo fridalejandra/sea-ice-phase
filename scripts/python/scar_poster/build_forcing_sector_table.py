@@ -82,6 +82,14 @@ tau_y_all = xr.concat(tau_y_years, dim="valid_time").rename({"valid_time": "time
 tau_magnitude = np.sqrt(tau_x_all**2 + tau_y_all**2)
 
 print("Regridding wind stress onto sector grid...")
+# ERA5 longitude is in -180/179 convention; sector grid uses lonE (0-360).
+# Convert ERA5's longitude to 0-360 and sort, so both sides match before
+# interpolating - otherwise any sector spanning >179 degE (e.g. AB, Weddell)
+# falls entirely outside ERA5's coordinate range and returns all-NaN.
+tau_magnitude = tau_magnitude.assign_coords(
+    longitude=(tau_magnitude.longitude % 360)
+).sortby("longitude")
+
 tau_ps = regrid_to_sector_grid(tau_magnitude, lat_ps, lon_ps)
 
 # ---------------- Compute sector daily means ----------------
