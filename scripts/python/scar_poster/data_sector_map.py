@@ -162,7 +162,7 @@ ax.set_boundary(circle, transform=ax.transAxes)
 # neutral near-white ocean instead of warm beige - beige was pulling
 # every semi-transparent sector color toward a muddy olive tone
 ax.add_feature(cfeature.OCEAN, color="#FAFAF7", zorder=0)
-ax.add_feature(cfeature.LAND, color="#D3D1C7", zorder=2)
+#ax.add_feature(cfeature.LAND, color="#D3D1C7", zorder=2)
 ax.add_feature(cfeature.COASTLINE, linewidth=0.4, color="#888780", zorder=3)
 
 for name, props in SECTORS.items():
