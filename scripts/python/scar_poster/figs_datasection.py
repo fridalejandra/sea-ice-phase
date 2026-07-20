@@ -23,6 +23,7 @@ actual analysis_table_daily_anomaly.csv.
 """
 
 import os
+import subprocess
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -48,6 +49,7 @@ REGIME_SHIFT_YEAR = 2016
 
 OUTPUT_DIR = '/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/poster/figures/'
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+GDRIVE = 'gdrive:My Drive/scar_poster/'
 
 # Sector display order + colors (Cove categorical palette, matches
 # earlier mockup so the poster stays visually consistent). Names match
@@ -171,3 +173,12 @@ def make_stacked_panels(outpath=OUTPUT_DIR + 'sia_wind_stacked_panels.png'):
 if __name__ == '__main__':
     make_sector_map()
     make_stacked_panels()
+
+    result = subprocess.run(
+        ["rclone", "copy", OUTPUT_DIR, GDRIVE],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print(f"Synced -> {GDRIVE}")
+    else:
+        print(f"rclone failed: {result.stderr.strip()}")
