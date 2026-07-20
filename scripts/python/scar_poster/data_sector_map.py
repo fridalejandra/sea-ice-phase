@@ -20,14 +20,15 @@ OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/p
 GDRIVE     = "gdrive:My Drive/scar_poster/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Same real boundaries as fig_sector_map.py - swap colors here if you want
-# to match a different palette (e.g. to match the SIA/wind timeseries panel)
+# Canonical Raphael & Hobbs (2014) sector boundaries - matches the
+# convention cited throughout the poster text. (Previous version used
+# the Ch3 script's boundaries, which are shifted ~5-10 deg from this.)
 SECTORS = {
-    "Weddell":         {"lon_min": -65.0, "lon_max": -25.0, "color": "#2196F3"},
-    "King Haakon":     {"lon_min": -25.0, "lon_max":  70.0, "color": "#9C27B0"},
-    "East Antarctica": {"lon_min":  70.0, "lon_max": 165.0, "color": "#FF9800"},
-    "Ross":            {"lon_min": 165.0, "lon_max": 250.0, "color": "#4CAF50"},
-    "ABS":             {"lon_min": 250.0, "lon_max": 295.0, "color": "#F44336"},
+    "Weddell":         {"lon_min": -60.0, "lon_max":  20.0, "color": "#2196F3"},
+    "King Haakon":     {"lon_min":  20.0, "lon_max":  90.0, "color": "#9C27B0"},
+    "East Antarctica": {"lon_min":  90.0, "lon_max": 160.0, "color": "#FF9800"},
+    "Ross":            {"lon_min": 160.0, "lon_max": 230.0, "color": "#4CAF50"},
+    "ABS":             {"lon_min": 230.0, "lon_max": 300.0, "color": "#F44336"},
 }
 
 ALPHA = 0.55
@@ -50,7 +51,7 @@ def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-50, n=100):
 
 fig = plt.figure(figsize=(3.2, 3.2))
 ax = fig.add_axes([0.02, 0.02, 0.96, 0.96], projection=ccrs.SouthPolarStereo())
-ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
+ax.set_extent([-180, 180, -90, -46], crs=ccrs.PlateCarree())
 
 theta = np.linspace(0, 2 * np.pi, 100)
 verts = np.vstack([np.sin(theta), np.cos(theta)]).T
@@ -70,8 +71,27 @@ for name, props in SECTORS.items():
             transform=ccrs.PlateCarree(),
             color=props["color"], linewidth=1.0, alpha=0.9, zorder=3)
 
-# no on-map labels, no gridlines, no title - this is a thumbnail meant to
-# be paired with a legend + the SIA/wind timeseries panel, not read alone
+# longitude gridlines + labels every 30 deg, matching the reference style
+ax.gridlines(draw_labels=False, linewidth=0.4, linestyle="--",
+             color="#888780", alpha=0.7, zorder=4,
+             xlocs=range(-180, 181, 30), ylocs=range(-80, -49, 10))
+
+LON_LABEL_RADIUS_LAT = -48  # just outside the sector fill, inside the frame edge
+for lon_deg in range(-180, 181, 30):
+    if lon_deg == 180 or lon_deg == -180:
+        label = "180"
+    elif lon_deg == 0:
+        label = "0"
+    elif lon_deg > 0:
+        label = f"{lon_deg}E"
+    else:
+        label = f"{abs(lon_deg)}W"
+    ax.text(lon_deg, LON_LABEL_RADIUS_LAT, label,
+            transform=ccrs.PlateCarree(),
+            ha="center", va="center", fontsize=7, color="#52514e", zorder=5)
+
+# no on-map sector-name labels - this is a thumbnail meant to be paired
+# with a legend + the SIA/wind timeseries panel, not read alone
 
 fpath = os.path.join(OUTPUT_DIR, "sector_map_poster.png")
 fig.savefig(fpath, dpi=300, bbox_inches="tight", transparent=True)
@@ -86,4 +106,3 @@ if result.returncode == 0:
     print(f"Synced -> {GDRIVE}")
 else:
     print(f"rclone failed: {result.stderr.strip()}")
-    print(f"Saved -> {fpath}")
