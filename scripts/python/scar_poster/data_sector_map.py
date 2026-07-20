@@ -14,8 +14,10 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import warnings
 warnings.filterwarnings("ignore")
+import subprocess
 
 OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/poster/figures"
+GDRIVE     = "gdrive:My Drive/scar_poster/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Same real boundaries as fig_sector_map.py - swap colors here if you want
@@ -75,3 +77,12 @@ fpath = os.path.join(OUTPUT_DIR, "sector_map_poster.png")
 fig.savefig(fpath, dpi=300, bbox_inches="tight", transparent=True)
 plt.close()
 print(f"Saved -> {fpath}")
+
+result = subprocess.run(
+    ["rclone", "copy", fpath, GDRIVE],
+    capture_output=True, text=True
+)
+if result.returncode == 0:
+    print(f"Synced -> {GDRIVE}")
+else:
+    print(f"rclone failed: {result.stderr.strip()}")print(f"Saved -> {fpath}")
