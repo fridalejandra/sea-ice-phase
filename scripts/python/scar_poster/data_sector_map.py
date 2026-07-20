@@ -73,11 +73,23 @@ MEAN_SIC_PATH = (
     "/user/geog/falejandraperez/sea-ice-phase/data/merged/"
     "merged_bootstrap_SH_latest.nc"
 )
-SIC_LEVEL = 15  # standard 15% SIC ice-edge threshold, matches Ch2 convention
+SIC_LEVEL = 0.15  # standard 15% SIC ice-edge threshold, matches Ch2 convention.
+                   # Fractional (0-1) scale, matching the "land=1.2" flag
+                   # convention from your compute_sia.py masking - NOT 15.
 MAX_EXTENT_MONTH = 9  # September = canonical Antarctic SIE annual maximum
                        # (Parkinson & Cavalieri, Parkinson 2019). Check
                        # against your own record if you want the exact
                        # month of max extent rather than the canonical one.
+
+# NSIDC Southern Hemisphere polar stereographic grid definition (Hughes
+# 1980 ellipsoid), matching the projection your merged_bootstrap file's
+# x/y coordinates are actually defined on. This lets us plot directly in
+# native x/y (meters) instead of needing lon/lat, which your file doesn't
+# have as separate variables.
+NSIDC_SH_CRS = ccrs.Stereographic(
+    central_latitude=-90, central_longitude=0, true_scale_latitude=-70,
+    globe=ccrs.Globe(semimajor_axis=6378273, semiminor_axis=6356889.449),
+)
 
 
 def add_mean_sia_outline(ax, nc_path=MEAN_SIC_PATH, level=SIC_LEVEL,
@@ -86,14 +98,16 @@ def add_mean_sia_outline(ax, nc_path=MEAN_SIC_PATH, level=SIC_LEVEL,
     Overlays the climatological winter-maximum sea ice edge as a black
     contour line only (no fill), at the standard 15% SIC threshold.
     "Winter max" = climatological mean SIC for `month` across all years
-    (default September, the canonical Antarctic SIE annual maximum),
-    not an all-months/all-time average.
+    (default September), not an all-months/all-time average.
 
-    Expects an xarray-readable file with a SIC variable and 2D (or 1D,
-    auto-broadcast) longitude/latitude coordinates. Adjust VAR_NAME,
-    LON_NAME, LAT_NAME below to match your actual merged file's variable
-    names - these are guesses based on typical NSIDC Bootstrap conventions
-    and may need correcting against your real file.
+    Your merged file stores SIC under per-sensor-era variable names
+    (N07_ICECON, F08_ICECON, F11_ICECON, F13_ICECON, F17_ICECON - one
+    active per satellite era), not a single unified "SIC" variable, and
+    provides x/y polar-stereographic coordinates rather than lon/lat.
+    This function dynamically finds whichever *_ICECON variable(s) are
+    present, combines them into one field per timestep, masks land/
+    invalid flags (values > 1.0, e.g. the 1.2 land flag), and plots
+    directly in the native NSIDC stereographic projection.
     """
     try:
         import xarray as xr
@@ -102,28 +116,35 @@ def add_mean_sia_outline(ax, nc_path=MEAN_SIC_PATH, level=SIC_LEVEL,
               "(pip install xarray --break-system-packages)")
         return
 
-    VAR_NAME = "SIC"        # <- confirm against your actual merged file
-    LON_NAME = "longitude"  # <- confirm against your actual merged file
-    LAT_NAME = "latitude"   # <- confirm against your actual merged file
-    TIME_NAME = "time"      # <- confirm against your actual merged file
-
     try:
         ds = xr.open_dataset(nc_path)
-        winter_only = ds[VAR_NAME].sel(
-            {TIME_NAME: ds[TIME_NAME].dt.month == month}
-        )
-        mean_sic = winter_only.mean(dim=TIME_NAME, skipna=True)
-        lon2d = ds[LON_NAME].values
-        lat2d = ds[LAT_NAME].values
-        if lon2d.ndim == 1:
-            lon2d, lat2d = np.meshgrid(lon2d, lat2d)
 
-        ax.contour(lon2d, lat2d, mean_sic.values, levels=[level],
-                   colors="black", linewidths=1.1,
-                   transform=ccrs.PlateCarree(), zorder=6)
+        icecon_vars = [v for v in ds.data_vars if v.endswith("_ICECON")]
+        if not icecon_vars:
+            raise ValueError(
+                f"No *_ICECON variable found. Available: {list(ds.data_vars)}"
+            )
+
+        # Combine all sensor-era variables into one field: at each
+        # timestep only one sensor is typically active/non-null, so
+        # combine_first stacks them into a single coherent SIC array.
+        sic = ds[icecon_vars[0]]
+        for v in icecon_vars[1:]:
+            sic = sic.combine_first(ds[v])
+
+        # mask land (1.2 flag) and any other >1.0 invalid/missing flags -
+        # same convention as your compute_sia.py: sic.where(sic <= 1.0)
+        sic = sic.where(sic <= 1.0)
+
+        winter_only = sic.sel(time=ds["time"].dt.month == month)
+        mean_sic = winter_only.mean(dim="time", skipna=True)
+
+        ax.contour(ds["x"].values, ds["y"].values, mean_sic.values,
+                   levels=[level], colors="black", linewidths=1.1,
+                   transform=NSIDC_SH_CRS, zorder=6)
     except Exception as e:
         print(f"Could not add mean SIA outline: {e}")
-        print("Check VAR_NAME / LON_NAME / LAT_NAME / TIME_NAME against your actual file.")
+        print("Check the *_ICECON variable name(s) and x/y coordinates against your actual file.")
 
 
 fig = plt.figure(figsize=(3.6, 3.6))
