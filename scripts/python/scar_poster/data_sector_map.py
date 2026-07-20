@@ -24,11 +24,11 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Canonical Raphael & Hobbs (2014) sector boundaries - matches the
 # convention cited throughout the poster text.
 SECTORS = {
-    "Weddell":         {"lon_min": -60.0, "lon_max":  20.0, "color": "#F44336", "abbrev": "WS"},
-    "King Haakon":     {"lon_min":  20.0, "lon_max":  90.0, "color": "#FFC107", "abbrev": "KH"},
-    "East Antarctica": {"lon_min":  90.0, "lon_max": 160.0, "color": "#FF9800", "abbrev": "EA"},
-    "Ross":            {"lon_min": 160.0, "lon_max": 230.0, "color": "#4CAF50", "abbrev": "RS"},
-    "ABS":             {"lon_min": 230.0, "lon_max": 300.0, "color": "#2196F3", "abbrev": "ABS"},
+    "Weddell":         {"lon_min": -65.0, "lon_max":  -25.0, "color": "#F44336", "abbrev": "WS"},
+    "King Haakon":     {"lon_min":  -25.0, "lon_max":  70.0, "color": "#FFC107", "abbrev": "KH"},
+    "East Antarctica": {"lon_min":  70.0, "lon_max": 165.0, "color": "#FF9800", "abbrev": "EA"},
+    "Ross":            {"lon_min": 165.0, "lon_max": 250.0, "color": "#4CAF50", "abbrev": "RS"},
+    "ABS":             {"lon_min": 250.0, "lon_max": 295.0, "color": "#2196F3", "abbrev": "ABS"},
 }
 
 ALPHA = 0.8  # raised from 0.55 - at low alpha, all fills blended toward
