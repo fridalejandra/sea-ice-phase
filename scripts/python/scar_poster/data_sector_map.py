@@ -85,4 +85,5 @@ result = subprocess.run(
 if result.returncode == 0:
     print(f"Synced -> {GDRIVE}")
 else:
-    print(f"rclone failed: {result.stderr.strip()}")print(f"Saved -> {fpath}")
+    print(f"rclone failed: {result.stderr.strip()}")
+    print(f"Saved -> {fpath}")
