@@ -34,16 +34,24 @@ ALPHA = 0.55
 
 
 def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-50, n=100):
-    if lon_min < 0:
-        lon_min += 360
-    if lon_max < 0:
+    # Normalize both bounds to 0-360 first, then detect wraparound
+    # generically (lon_max <= lon_min after normalization means the
+    # sector crosses 0deg/360deg, e.g. Weddell's -60 to 20). This fixes
+    # a bug where only lon_min was checked for negativity, causing
+    # np.linspace to sweep the wrong (280deg) way around for any sector
+    # straddling the prime meridian.
+    lon_min = lon_min % 360
+    lon_max = lon_max % 360
+    if lon_max <= lon_min:
         lon_max += 360
+
     lons_top = np.linspace(lon_min, lon_max, n)
     lons_bot = np.linspace(lon_max, lon_min, n)
     lats_top = np.full(n, lat_max)
     lats_bot = np.full(n, lat_min)
     lons = np.concatenate([lons_top, lons_bot])
     lats = np.concatenate([lats_top, lats_bot])
+    lons = lons % 360
     lons = np.where(lons > 180, lons - 360, lons)
     return lons, lats
 
