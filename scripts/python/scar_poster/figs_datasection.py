@@ -1,4 +1,4 @@
-"""
+""""""
 Poster Section 2 figures - built from real data, not mockup values
 =====================================================================
 
@@ -130,20 +130,33 @@ def _polar_boundary_circle(ax):
 # Figure 2: stacked SIA anomaly + wind stress anomaly by sector
 # ---------------------------------------------------------------------
 
+ROLLING_WINDOW_DAYS = 90  # smooths day-to-day/storm-scale noise so the
+                           # underlying 2016 shift (or lack thereof, for
+                           # wind) is actually visible. This is purely for
+                           # THIS OVERVIEW FIGURE - the regression itself
+                           # still uses unsmoothed daily values.
+
+
 def make_stacked_panels(outpath=OUTPUT_DIR + 'sia_wind_stacked_panels.png'):
     df = pd.read_csv(ANALYSIS_TABLE_PATH, parse_dates=[DATE_COL])
 
     fig, axes = plt.subplots(2, 1, figsize=(9, 6), sharex=True)
 
     for sector in SECTORS:
-        sub = df[df[SECTOR_COL] == sector].sort_values(DATE_COL)
+        sub = df[df[SECTOR_COL] == sector].sort_values(DATE_COL).set_index(DATE_COL)
         color = SECTOR_COLORS[sector]
-        # SIA_anomaly is in raw km^2 (values up to ~1.3 million) - scale
-        # to 10^6 km^2 for a readable axis
-        axes[0].plot(sub[DATE_COL], sub[SIA_ANOMALY_COL] / 1e6,
-                      color=color, linewidth=0.6, alpha=0.85, label=sector)
-        axes[1].plot(sub[DATE_COL], sub[WIND_STRESS_ANOMALY_COL],
-                      color=color, linewidth=0.6, alpha=0.85, label=sector)
+
+        sia_smooth = (sub[SIA_ANOMALY_COL] / 1e6).rolling(
+            ROLLING_WINDOW_DAYS, min_periods=ROLLING_WINDOW_DAYS // 2, center=True
+        ).mean()
+        wind_smooth = sub[WIND_STRESS_ANOMALY_COL].rolling(
+            ROLLING_WINDOW_DAYS, min_periods=ROLLING_WINDOW_DAYS // 2, center=True
+        ).mean()
+
+        axes[0].plot(sia_smooth.index, sia_smooth.values,
+                      color=color, linewidth=1.1, alpha=0.9, label=sector)
+        axes[1].plot(wind_smooth.index, wind_smooth.values,
+                      color=color, linewidth=1.1, alpha=0.9, label=sector)
 
     shift_date = pd.Timestamp(f'{REGIME_SHIFT_YEAR}-01-01')
     for ax in axes:
@@ -152,9 +165,11 @@ def make_stacked_panels(outpath=OUTPUT_DIR + 'sia_wind_stacked_panels.png'):
         ax.spines[['top', 'right']].set_visible(False)
 
     axes[0].set_ylabel('SIA anomaly (10\u2076 km\u00b2)')
-    axes[0].set_title('Sea ice area anomaly by sector', fontsize=11, loc='left')
+    axes[0].set_title(f'Sea ice area anomaly by sector ({ROLLING_WINDOW_DAYS}-day mean)',
+                       fontsize=11, loc='left')
     axes[1].set_ylabel('Wind stress anomaly (N/m\u00b2)')
-    axes[1].set_title('Wind stress anomaly by sector (deseasonalized)', fontsize=11, loc='left')
+    axes[1].set_title(f'Wind stress anomaly by sector, deseasonalized ({ROLLING_WINDOW_DAYS}-day mean)',
+                       fontsize=11, loc='left')
 
     axes[1].xaxis.set_major_locator(mdates.YearLocator(8))
     axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
