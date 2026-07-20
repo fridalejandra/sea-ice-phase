@@ -31,10 +31,13 @@ SECTORS = {
     "ABS":             {"lon_min": 230.0, "lon_max": 300.0, "color": "#2196F3", "abbrev": "ABS"},
 }
 
-ALPHA = 0.55
+ALPHA = 0.8  # raised from 0.55 - at low alpha, all fills blended toward
+             # muddy olive/khaki against the warm beige ocean, making
+             # yellow/orange/green hard to tell apart. Strokes (alpha=0.9)
+             # stayed visually distinct for the same reason.
 
 
-def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-42, n=100):
+def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-35, n=100):
     # Normalize both bounds to 0-360 first, then detect wraparound
     # generically (lon_max <= lon_min after normalization means the
     # sector crosses 0deg/360deg, e.g. Weddell's -60 to 20). This fixes
@@ -156,8 +159,9 @@ verts = np.vstack([np.sin(theta), np.cos(theta)]).T
 circle = mpath.Path(verts * 0.5 + 0.5)
 ax.set_boundary(circle, transform=ax.transAxes)
 
-# light neutral land/ocean - reads clean at small thumbnail size
-ax.add_feature(cfeature.OCEAN, color="#F1EFE8", zorder=0)
+# neutral near-white ocean instead of warm beige - beige was pulling
+# every semi-transparent sector color toward a muddy olive tone
+ax.add_feature(cfeature.OCEAN, color="#FAFAF7", zorder=0)
 ax.add_feature(cfeature.LAND, color="#D3D1C7", zorder=2)
 ax.add_feature(cfeature.COASTLINE, linewidth=0.4, color="#888780", zorder=3)
 
