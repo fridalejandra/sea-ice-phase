@@ -22,6 +22,7 @@ Adjust COLUMN NAMES / FILE PATHS in the CONFIG block below to match your
 actual analysis_table_daily_anomaly.csv.
 """
 
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -45,7 +46,8 @@ WIND_STRESS_ANOMALY_COL = 'wind_stress_anomaly'  # deseasonalized wind stress an
                                             # this column. Don't mix them up.
 REGIME_SHIFT_YEAR = 2016
 
-OUTPUT_DIR = '/mnt/user-data/outputs/'
+OUTPUT_DIR = '/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/poster/figures/'
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Sector display order + colors (Cove categorical palette, matches
 # earlier mockup so the poster stays visually consistent). Names match
