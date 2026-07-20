@@ -1,4 +1,4 @@
-""""""
+"""
 Poster Section 2 figures - built from real data, not mockup values
 =====================================================================
 
