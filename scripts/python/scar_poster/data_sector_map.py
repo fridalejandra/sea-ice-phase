@@ -167,6 +167,12 @@ ax.add_feature(cfeature.COASTLINE, linewidth=0.4, color="#888780", zorder=3)
 
 for name, props in SECTORS.items():
     lons, lats = sector_polygon(props["lon_min"], props["lon_max"])
+    print(name, props["color"])   # <-- add this line temporarily
+    ax.fill(lons, lats, transform=ccrs.PlateCarree(),
+            color=props["color"], alpha=ALPHA, zorder=1)
+
+for name, props in SECTORS.items():
+    lons, lats = sector_polygon(props["lon_min"], props["lon_max"])
     ax.fill(lons, lats, transform=ccrs.PlateCarree(),
             color=props["color"], alpha=ALPHA, zorder=1)
     ax.plot(np.append(lons, lons[0]), np.append(lats, lats[0]),
