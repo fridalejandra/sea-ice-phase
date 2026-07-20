@@ -21,14 +21,13 @@ GDRIVE     = "gdrive:My Drive/scar_poster/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Canonical Raphael & Hobbs (2014) sector boundaries - matches the
-# convention cited throughout the poster text. (Previous version used
-# the Ch3 script's boundaries, which are shifted ~5-10 deg from this.)
+# convention cited throughout the poster text.
 SECTORS = {
-    "Weddell":         {"lon_min": -60.0, "lon_max":  20.0, "color": "#2196F3"},
-    "King Haakon":     {"lon_min":  20.0, "lon_max":  90.0, "color": "#9C27B0"},
-    "East Antarctica": {"lon_min":  90.0, "lon_max": 160.0, "color": "#FF9800"},
-    "Ross":            {"lon_min": 160.0, "lon_max": 230.0, "color": "#4CAF50"},
-    "ABS":             {"lon_min": 230.0, "lon_max": 300.0, "color": "#F44336"},
+    "Weddell":         {"lon_min": -65.0, "lon_max":  -25.0, "color": "#F44336"},  # red
+    "King Haakon":     {"lon_min":  -25.0, "lon_max":  70.0, "color": "#FFC107"},  # yellow
+    "East Antarctica": {"lon_min":  70.0, "lon_max": 165.0, "color": "#FF9800"},  # orange
+    "Ross":            {"lon_min": 165.0, "lon_max": 250.0, "color": "#4CAF50"},  # green
+    "ABS":             {"lon_min": 250.0, "lon_max": 295.0, "color": "#2196F3"},  # blue
 }
 
 ALPHA = 0.55
@@ -51,7 +50,7 @@ def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-50, n=100):
 
 fig = plt.figure(figsize=(3.2, 3.2))
 ax = fig.add_axes([0.02, 0.02, 0.96, 0.96], projection=ccrs.SouthPolarStereo())
-ax.set_extent([-180, 180, -90, -46], crs=ccrs.PlateCarree())
+ax.set_extent([-180, 180, -90, -35], crs=ccrs.PlateCarree())
 
 theta = np.linspace(0, 2 * np.pi, 100)
 verts = np.vstack([np.sin(theta), np.cos(theta)]).T
@@ -76,7 +75,7 @@ ax.gridlines(draw_labels=False, linewidth=0.4, linestyle="--",
              color="#888780", alpha=0.7, zorder=4,
              xlocs=range(-180, 181, 30), ylocs=range(-80, -49, 10))
 
-LON_LABEL_RADIUS_LAT = -48  # just outside the sector fill, inside the frame edge
+LON_LABEL_RADIUS_LAT = -40  # sits in the margin ring outside the sector fill (-50) and outside the frame's inner gridlines
 for lon_deg in range(-180, 181, 30):
     if lon_deg == 180 or lon_deg == -180:
         label = "180"
