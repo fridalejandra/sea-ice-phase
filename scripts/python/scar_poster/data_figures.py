@@ -1,159 +1,77 @@
 """
-Poster Section 2 figures - built from real data, not mockup values
-=====================================================================
+fig_sector_map_poster.py
 
-Produces two files:
-  1. sector_map.png              - polar-stereographic map, 5 real sectors
-  2. sia_wind_stacked_panels.png - SIA anomaly + wind stress anomaly by
-                                   sector, stacked, 2016 marked
-
-Requires: matplotlib, numpy, pandas, cartopy (for the real coastline map)
-    pip install cartopy --break-system-packages   # if not already installed
-
-Sector longitude boundaries follow Raphael & Hobbs (2014), the same
-convention already used for your 5-sector mask:
-    Weddell:              60W - 20E
-    King Haakon VII:      20E  - 90E
-    East Antarctica:      90E  - 160E
-    Ross-Amundsen:        160E - 130W
-    Amundsen-Bellingshausen: 130W - 60W
-
-Adjust COLUMN NAMES / FILE PATHS in the CONFIG block below to match your
-actual analysis_table_daily_anomaly.csv.
+Compact, single-panel version of fig_sector_map.py, sized for a poster
+corner thumbnail (paired with a separate legend, not on-map labels).
+Reuses the real sector longitude boundaries from the Ch3 script.
 """
 
+import os
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import matplotlib.path as mpath
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import warnings
+warnings.filterwarnings("ignore")
 
-# ---------------------------------------------------------------------
-# CONFIG - adjust to match your actual files/columns
-# ---------------------------------------------------------------------
+OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/plotting/poster/figures"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-ANALYSIS_TABLE_PATH = (
-    '/user/geog/falejandraperez/sea-ice-phase/data/merged/'
-    'analysis_table_daily_anomaly.csv'
-)
-DATE_COL = 'date'
-SECTOR_COL = 'sector'
-SIA_ANOMALY_COL = 'SIA_anomaly'          # deseasonalized SIA anomaly
-WIND_STRESS_COL = 'wind_stress'          # daily wind stress magnitude
-REGIME_SHIFT_YEAR = 2016
-
-OUTPUT_DIR = '/mnt/user-data/outputs/'
-
-# Sector display order + colors (Cove categorical palette, matches
-# earlier mockup so the poster stays visually consistent)
-SECTORS = ['Weddell', 'King Haakon', 'East Antarctica',
-           'Ross-Amundsen', 'Amundsen-Bellingshausen']
-SECTOR_COLORS = {
-    'Weddell':                  '#2a78d6',
-    'King Haakon':               '#eb6834',
-    'East Antarctica':           '#1baf7a',
-    'Ross-Amundsen':             '#eda100',
-    'Amundsen-Bellingshausen':   '#e87ba4',
+# Same real boundaries as fig_sector_map.py - swap colors here if you want
+# to match a different palette (e.g. to match the SIA/wind timeseries panel)
+SECTORS = {
+    "Weddell":         {"lon_min": -65.0, "lon_max": -25.0, "color": "#2196F3"},
+    "King Haakon":     {"lon_min": -25.0, "lon_max":  70.0, "color": "#9C27B0"},
+    "East Antarctica": {"lon_min":  70.0, "lon_max": 165.0, "color": "#FF9800"},
+    "Ross":            {"lon_min": 165.0, "lon_max": 250.0, "color": "#4CAF50"},
+    "ABS":             {"lon_min": 250.0, "lon_max": 295.0, "color": "#F44336"},
 }
 
-# Longitude boundaries per sector, degrees East, 0-360 convention
-# (matches the convention fix already applied in build_forcing_sector_table.py)
-SECTOR_LON_BOUNDS = {
-    'Weddell':                  (300, 380),   # 60W (300E) to 20E (wraps past 360)
-    'King Haakon':               (20, 90),
-    'East Antarctica':           (90, 160),
-    'Ross-Amundsen':             (160, 230),  # 160E to 130W (230E)
-    'Amundsen-Bellingshausen':   (230, 300),  # 130W to 60W
-}
+ALPHA = 0.55
 
 
-# ---------------------------------------------------------------------
-# Figure 1: real sector map
-# ---------------------------------------------------------------------
-
-def make_sector_map(outpath=OUTPUT_DIR + 'sector_map.png'):
-    try:
-        import cartopy.crs as ccrs
-        import cartopy.feature as cfeature
-    except ImportError:
-        print("cartopy not installed - run: pip install cartopy --break-system-packages")
-        return
-
-    fig = plt.figure(figsize=(4, 4))
-    ax = plt.axes(projection=ccrs.SouthPolarStereo())
-    ax.set_extent([-180, 180, -90, -50], ccrs.PlateCarree())
-
-    for sector in SECTORS:
-        lon_start, lon_end = SECTOR_LON_BOUNDS[sector]
-        # build a wedge from the pole out to the plotted latitude limit
-        lons = np.linspace(lon_start, lon_end, 50)
-        lons_wrapped = ((lons + 180) % 360) - 180  # to -180..180 for plotting
-        lats_outer = np.full_like(lons, -50)
-        # wedge polygon: pole -> outer arc -> back to pole
-        poly_lons = np.concatenate([[lons_wrapped[0]], lons_wrapped, [lons_wrapped[-1]]])
-        poly_lats = np.concatenate([[-90], lats_outer, [-90]])
-        ax.fill(poly_lons, poly_lats, transform=ccrs.PlateCarree(),
-                 color=SECTOR_COLORS[sector], alpha=0.55, edgecolor='none')
-
-    ax.add_feature(cfeature.LAND, facecolor='#e8e6dd', zorder=2)
-    ax.coastlines(resolution='50m', linewidth=0.4, zorder=3)
-    ax.set_boundary(_polar_boundary_circle(ax), transform=ax.transAxes)
-
-    fig.tight_layout()
-    fig.savefig(outpath, dpi=300, bbox_inches='tight', transparent=True)
-    print(f"Saved {outpath}")
+def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-50, n=100):
+    if lon_min < 0:
+        lon_min += 360
+    if lon_max < 0:
+        lon_max += 360
+    lons_top = np.linspace(lon_min, lon_max, n)
+    lons_bot = np.linspace(lon_max, lon_min, n)
+    lats_top = np.full(n, lat_max)
+    lats_bot = np.full(n, lat_min)
+    lons = np.concatenate([lons_top, lons_bot])
+    lats = np.concatenate([lats_top, lats_bot])
+    lons = np.where(lons > 180, lons - 360, lons)
+    return lons, lats
 
 
-def _polar_boundary_circle(ax):
-    """Clip the polar stereo axes to a circle instead of a square."""
-    import matplotlib.path as mpath
-    theta = np.linspace(0, 2 * np.pi, 100)
-    center, radius = [0.5, 0.5], 0.5
-    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
-    return mpath.Path(verts * radius + center)
+fig = plt.figure(figsize=(3.2, 3.2))
+ax = fig.add_axes([0.02, 0.02, 0.96, 0.96], projection=ccrs.SouthPolarStereo())
+ax.set_extent([-180, 180, -90, -50], crs=ccrs.PlateCarree())
 
+theta = np.linspace(0, 2 * np.pi, 100)
+verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+circle = mpath.Path(verts * 0.5 + 0.5)
+ax.set_boundary(circle, transform=ax.transAxes)
 
-# ---------------------------------------------------------------------
-# Figure 2: stacked SIA anomaly + wind stress anomaly by sector
-# ---------------------------------------------------------------------
+# light neutral land/ocean - reads clean at small thumbnail size
+ax.add_feature(cfeature.OCEAN, color="#F1EFE8", zorder=0)
+ax.add_feature(cfeature.LAND, color="#D3D1C7", zorder=2)
+ax.add_feature(cfeature.COASTLINE, linewidth=0.4, color="#888780", zorder=3)
 
-def make_stacked_panels(outpath=OUTPUT_DIR + 'sia_wind_stacked_panels.png'):
-    df = pd.read_csv(ANALYSIS_TABLE_PATH, parse_dates=[DATE_COL])
+for name, props in SECTORS.items():
+    lons, lats = sector_polygon(props["lon_min"], props["lon_max"])
+    ax.fill(lons, lats, transform=ccrs.PlateCarree(),
+            color=props["color"], alpha=ALPHA, zorder=1)
+    ax.plot(np.append(lons, lons[0]), np.append(lats, lats[0]),
+            transform=ccrs.PlateCarree(),
+            color=props["color"], linewidth=1.0, alpha=0.9, zorder=3)
 
-    fig, axes = plt.subplots(2, 1, figsize=(9, 6), sharex=True)
+# no on-map labels, no gridlines, no title - this is a thumbnail meant to
+# be paired with a legend + the SIA/wind timeseries panel, not read alone
 
-    for sector in SECTORS:
-        sub = df[df[SECTOR_COL] == sector].sort_values(DATE_COL)
-        color = SECTOR_COLORS[sector]
-        axes[0].plot(sub[DATE_COL], sub[SIA_ANOMALY_COL],
-                      color=color, linewidth=0.6, alpha=0.85, label=sector)
-        axes[1].plot(sub[DATE_COL], sub[WIND_STRESS_COL],
-                      color=color, linewidth=0.6, alpha=0.85, label=sector)
-
-    shift_date = pd.Timestamp(f'{REGIME_SHIFT_YEAR}-01-01')
-    for ax in axes:
-        ax.axvline(shift_date, color='#52514e', linestyle='--', linewidth=1)
-        ax.grid(True, color='#e1e0d9', linewidth=0.5)
-        ax.spines[['top', 'right']].set_visible(False)
-
-    axes[0].set_ylabel('SIA anomaly (10\u2076 km\u00b2)')
-    axes[0].set_title('Sea ice area anomaly by sector', fontsize=11, loc='left')
-    axes[1].set_ylabel('Wind stress anomaly (N/m\u00b2)')
-    axes[1].set_title('Wind stress anomaly by sector', fontsize=11, loc='left')
-
-    axes[1].xaxis.set_major_locator(mdates.YearLocator(8))
-    axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
-
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', ncol=5,
-               bbox_to_anchor=(0.5, -0.02), frameon=False, fontsize=9)
-
-    fig.tight_layout(rect=[0, 0.05, 1, 1])
-    fig.savefig(outpath, dpi=300, bbox_inches='tight', transparent=True)
-    print(f"Saved {outpath}")
-
-
-# ---------------------------------------------------------------------
-
-if __name__ == '__main__':
-    make_sector_map()
-    make_stacked_panels()
+fpath = os.path.join(OUTPUT_DIR, "sector_map_poster.png")
+fig.savefig(fpath, dpi=300, bbox_inches="tight", transparent=True)
+plt.close()
+print(f"Saved -> {fpath}")
