@@ -233,22 +233,47 @@ def run_efold_tests(df):
 
         pre = compute_period_efold(sub[sub["period"] == "pre"])
         post = compute_period_efold(sub[sub["period"] == "post"])
+
         if pre is None or post is None:
+            print(f"  [{sector}] SKIPPED: not enough data in pre or post period "
+                  f"(pre={'OK' if pre else 'insufficient (<100 obs)'}, "
+                  f"post={'OK' if post else 'insufficient (<100 obs)'})")
             continue
 
-        boot = block_bootstrap_efold_shift(sub, seed=42)
-        if boot is None:
-            continue
+        print(f"  [{sector}] real efold_pre={pre['efold']}, real efold_post={post['efold']} "
+              f"(NaN means ACF never dropped below 1/e within MAX_LAG={MAX_LAG} days)")
 
-        results.append({
+        row = {
             "sector": sector,
             "efold_pre": pre["efold"],
             "efold_post": post["efold"],
-            "efold_shift": post["efold"] - pre["efold"] if not (np.isnan(pre["efold"]) or np.isnan(post["efold"])) else np.nan,
+            "efold_shift": (post["efold"] - pre["efold"]
+                             if not (np.isnan(pre["efold"]) or np.isnan(post["efold"]))
+                             else np.nan),
             "n_obs_pre": pre["n_obs"],
             "n_obs_post": post["n_obs"],
-            **boot,
-        })
+            "ci_low": np.nan, "ci_high": np.nan, "p_value": np.nan,
+            "significant_uncorrected": False, "n_bootstrap_used": 0,
+        }
+
+        # Only attempt the bootstrap if the REAL data produced finite
+        # e-folding values in both periods - if the real series can't
+        # even produce a number, the bootstrap won't either.
+        if not (np.isnan(pre["efold"]) or np.isnan(post["efold"])):
+            boot = block_bootstrap_efold_shift(sub, seed=42)
+            if boot is None:
+                print(f"  [{sector}] bootstrap FAILED (too many resampled draws had "
+                      f"NaN e-fold, or too few blocks) - real efold values above are "
+                      f"still valid point estimates, just no CI/p-value.")
+            else:
+                row.update(boot)
+        else:
+            print(f"  [{sector}] bootstrap SKIPPED - real e-fold itself is NaN in at "
+                  f"least one period, so no finite shift exists to bootstrap. This "
+                  f"sector's memory genuinely exceeds MAX_LAG={MAX_LAG} days in that "
+                  f"period - consider raising MAX_LAG if you want a number here.")
+
+        results.append(row)
 
         for lag, val in enumerate(pre["acf"]):
             acf_curves.append({"sector": sector, "period": "pre", "lag": lag, "acf": val})
@@ -259,11 +284,15 @@ def run_efold_tests(df):
     acf_df = pd.DataFrame(acf_curves)
 
     if len(results_df) > 0:
-        rejected, p_adj, _, _ = multipletests(
-            results_df["p_value"], alpha=FDR_ALPHA, method="fdr_bh"
-        )
-        results_df["p_value_fdr"] = p_adj
-        results_df["significant_fdr"] = rejected
+        valid = results_df["p_value"].notna()
+        results_df["p_value_fdr"] = np.nan
+        results_df["significant_fdr"] = False
+        if valid.sum() > 0:
+            rejected, p_adj, _, _ = multipletests(
+                results_df.loc[valid, "p_value"], alpha=FDR_ALPHA, method="fdr_bh"
+            )
+            results_df.loc[valid, "p_value_fdr"] = p_adj
+            results_df.loc[valid, "significant_fdr"] = rejected
 
     return results_df, acf_df
 
