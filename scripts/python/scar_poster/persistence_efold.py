@@ -1,34 +1,40 @@
 """
 persistence_efold_test.py
 
-Tests whether the MEMORY/DECORRELATION TIMESCALE of deseasonalized SIA
-anomalies has shifted across the 2016 regime shift, by sector.
+Tests whether the MEMORY/DECORRELATION TIMESCALE of r_t - the residual
+of the interaction-term regression, i.e. daily tendency NOT explained by
+wind stress - has shifted across the 2016 regime shift, by sector.
 
-This replaces the earlier single-lag AR(1) persistence test, which came
-back null everywhere - but the accompanying ACF diagnostic at the time
-showed autocorrelation staying high out to lag 10 (0.80-0.91), meaning
-single-lag AR(1) was almost certainly too blunt an instrument to detect
-a real shift in memory that operates on a multi-day/weekly timescale,
-not a 1-day one. This script tests the thing that diagnostic actually
-pointed at: the full ACF curve and its e-folding decay timescale.
-
-This is the r-term / memory pathway from the Ch4 framework:
+CORRECTED VERSION: earlier versions of this test ran on SIA_anomaly (the
+LEVEL, X_t) directly. That was the wrong quantity. Your Ch4 equation is:
     X_t+1 = X_t + (dX/dt)|atmos + r
-The interaction-term regression (wind_sensitivity_interaction_test.py)
-tested the (dX/dt)|atmos term (mechanical sensitivity, beta) and found no
-robust shift anywhere. This script tests a different term - whether the
-SYSTEM'S MEMORY (how long a perturbation persists before the anomaly
-decorrelates) has shifted, motivated directly by Feba et al. (2026) and
-Spira et al. (2025): the ocean's changed capacity to sustain or damp a
-perturbation, not a change in how hard wind pushes on the ice.
+and your own chapter text is explicit that persistence is about how r -
+"oceanic forcing or internal sea ice dynamics" - reinforces or dampens
+over time, NOT about the autocorrelation of X_t itself. Testing X_t
+directly is actively misleading: X_t is a RUNNING SUM of daily
+tendencies, and any accumulated/integrated series shows artificially
+long, slow-decaying autocorrelation almost mechanically, regardless of
+the true memory of the underlying daily increments - the same reason you
+would never test a random walk's memory by looking at the walk itself
+rather than its increments. This is a likely major contributor to the
+implausibly long/NaN e-folding times found when SIA_anomaly was tested
+directly.
 
-Method:
-  1. Compute the autocorrelation function (ACF) of SIA_anomaly out to
-     MAX_LAG days, separately for pre-2016 and post-2016, per sector.
+r_t is produced by extract_interaction_residuals.py: the residual of
+the SAME interaction-term regression used in
+wind_sensitivity_interaction_test.py (delta_SIA_anomaly ~ wind_stress +
+post + wind_stress:post), fit per sector x season, concatenated into one
+continuous daily series per sector. Because r_t is already a residual of
+a model fit on delta_SIA_anomaly (a DIFFERENCED quantity, not a level),
+it does not have the integrated-series artifact problem - this is the
+textbook-correct way to test whether "shocks" to the system have their
+own memory, independent of that artifact.
+
+Method (unchanged from before, just pointed at r_t instead of X_t):
+  1. Compute the autocorrelation function (ACF) of r_t out to MAX_LAG
+     days, separately for pre-2016 and post-2016, per sector.
   2. Extract the e-folding timescale: the first lag at which ACF drops
-     below 1/e (~0.368) - a standard, assumption-light way to summarize
-     a decay timescale without committing to a specific functional form
-     (e.g. pure exponential, which real geophysical ACFs often aren't).
+     below 1/e (~0.368).
   3. Block-bootstrap (same 3yr blocks used elsewhere in this pipeline)
      to get a CI and p-value on the SHIFT in e-folding time pre vs post.
 
@@ -44,7 +50,7 @@ pairs and is likely a minor bias, but it is a real approximation, not an
 exact method - flag this if presenting the CI as more precise than it is.
 
 Verified against synthetic AR(1) data with known true e-folding time
-before running on real data.
+before running on real data (see conversation history).
 """
 
 import numpy as np
@@ -52,15 +58,15 @@ import pandas as pd
 from statsmodels.stats.multitest import multipletests
 
 IN_CSV = (
-    "/user/geog/falejandraperez/sea-ice-phase/data/merged/"
-    "analysis_table_daily_anomaly.csv"
+    "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_results/"
+    "interaction_residuals_daily.csv"
 )
 OUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_results/"
 
 DATE_COL = "date"
 SECTOR_COL = "sector"
-RESPONSE_COL = "SIA_anomaly"   # the LEVEL anomaly, not delta - ACF/memory is
-                                # a property of the anomaly series itself
+RESPONSE_COL = "residual"   # r_t from extract_interaction_residuals.py -
+                             # NOT SIA_anomaly. See docstring for why.
 
 REGIME_SHIFT_YEAR = 2016
 MAX_LAG = 60           # days - raised from an initial 30. Your original ACF
