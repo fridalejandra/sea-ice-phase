@@ -62,12 +62,17 @@ def make_diff_map(outpath=OUTPUT_DIR + "sic_wind_diff_map.png"):
     u_sub = ds["tau_x_diff"].values[::QUIVER_STRIDE, ::QUIVER_STRIDE]
     v_sub = ds["tau_y_diff"].values[::QUIVER_STRIDE, ::QUIVER_STRIDE]
 
-    ax.quiver(
+    q = ax.quiver(
         lon_sub, lat_sub, u_sub, v_sub,
         transform=ccrs.PlateCarree(),
-        scale=0.3, scale_units="xy", width=0.003,
+        scale=0.03, scale_units="inches", width=0.003,
         color="#2b2a28", zorder=3,
     )
+    # reference arrow, since raw wind-stress-difference magnitudes (~0.001-
+    # 0.008 N/m^2) aren't self-explanatory without one - same convention as
+    # Feba/Kusahara-style figures
+    ax.quiverkey(q, X=0.85, Y=-0.05, U=0.005, label="0.005 N/m$^2$",
+                 labelpos="E", coordinates="axes", fontproperties={"size": 8})
 
     try:
         ax.add_feature(cfeature.LAND, facecolor="#e8e6dd", zorder=2)
