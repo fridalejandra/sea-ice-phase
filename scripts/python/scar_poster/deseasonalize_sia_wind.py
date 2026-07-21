@@ -1,71 +1,113 @@
 """
-deseasonalize_sia_and_wind.py
+deseasonalize_sia_and_wind_v2_periodclim.py
 
-Extends deseasonalize_sia_wind.py: computes day-of-year climatology and anomaly
-for BOTH SIA and wind stress, per sector. Previously only SIA was
-deseasonalized - wind_stress passed through build_forcing_sector_table.py
-unchanged, as raw magnitude. That's fine for the regression itself (delta_
-SIA_anomaly ~ wind_stress uses raw wind stress as the predictor, which is
-correct - wind stress IS the forcing, you're not trying to remove its own
-seasonality from the regression). But for the Section 2 overview figure -
-"did forcing change, did response change" - both panels should get the
-same treatment (deseasonalized anomaly) so they're visually comparable on
-the same terms, and so wind stress's OWN seasonal cycle (much stronger in
-winter) doesn't swamp the plot the way raw SIA's seasonal cycle would have.
+Fixes a real problem surfaced by diagnose_climatology_drift.py: the
+original deseasonalize_sia_and_wind.py used ONE day-of-year climatology
+computed across the full 1979-2024 record. That climatology drifted
+meaningfully across the record - 12-19% of the seasonal cycle's own
+range, consistent across all 5 sectors (not noise-looking; a systematic
+signal present everywhere). The likely cause: the record spans a real
+regime shift (2016), and a single full-record climatology represents
+neither period well, systematically over/under-subtracting in each -
+leaving residual seasonal structure in what's supposed to be a pure
+stochastic anomaly. This is a strong candidate explanation for the
+implausibly long e-folding memory timescales found in
+persistence_efold_test.py (multiple sectors never decorrelating within
+60+ days).
 
-Method matches deseasonalize_sia_wind.py exactly: full-record day-of-year mean
-climatology, no leave-one-year-out, pandas dayofyear (366-day calendar,
-handles Feb 29 the same way).
+Fix: compute SEPARATE day-of-year climatologies for the pre-2016
+(1979-2015) and post-2016 (2016-2024) periods, per sector, for both SIA
+and wind_stress, and apply each row's own period's climatology - the
+same two-regime framework already used everywhere else in this pipeline
+(interaction-term regression, trend analysis), now applied to the
+deseasonalization step itself.
+
+TRANSITION-DAY HANDLING: delta_SIA_anomaly (the day-over-day change) is
+set to NaN on the single day each sector crosses from pre- to
+post-climatology (Jan 1, 2016), rather than computed as a naive diff.
+That diff would otherwise combine a real physical daily change with the
+DISCONTINUITY between the two climatologies at that calendar day - up to
+~735,000 km^2 for King Haakon VII per the drift diagnostic - which would
+inject one severe, non-physical outlier per sector into every downstream
+test. Dropping 5 rows total (one per sector) is a small, principled cost
+compared to letting that artifact sit in the data.
+
+REMAINING CAVEAT: this addresses drift AT THE 2016 BOUNDARY specifically
+- it does not rule out additional slower drift WITHIN the pre-2016
+period itself (the original drift diagnostic's 3-way split included a
+1979-1997 vs 1998-2015 comparison that could reflect either real
+within-period drift or just noise). If you want to check that
+specifically, re-run diagnose_climatology_drift.py comparing only the
+two pre-2016 sub-periods.
+
+Output columns match the original deseasonalize_sia_and_wind.py exactly
+(same names), so downstream scripts just need IN_CSV repointed at this
+script's OUT_CSV - no other changes needed in
+wind_sensitivity_interaction_test.py, trend_analysis_sector_month_season.py,
+or persistence_efold_test.py.
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-IN_CSV = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_table_daily.csv"
-OUT_CSV = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_table_daily_anomaly.csv"
+IN_CSV = (
+    "/user/geog/falejandraperez/sea-ice-phase/data/merged/"
+    "analysis_table_daily.csv"
+)
+OUT_CSV = (
+    "/user/geog/falejandraperez/sea-ice-phase/data/merged/"
+    "analysis_table_daily_anomaly_periodclim.csv"
+)
 
-df = pd.read_csv(IN_CSV, parse_dates=["date"])
-df["doy"] = df["date"].dt.dayofyear
+DATE_COL = "date"
+SECTOR_COL = "sector"
+REGIME_SHIFT_YEAR = 2016
 
-# ---------------- SIA climatology + anomaly (unchanged from original) ----------------
-print("Computing day-of-year climatology per sector: SIA...")
-sia_climatology = df.groupby(["sector", "doy"])["SIA"].mean().reset_index()
-sia_climatology = sia_climatology.rename(columns={"SIA": "SIA_climatology"})
+df = pd.read_csv(IN_CSV, parse_dates=[DATE_COL])
+df["doy"] = df[DATE_COL].dt.dayofyear
+df["period"] = np.where(df[DATE_COL].dt.year >= REGIME_SHIFT_YEAR, "post", "pre")
 
-df = df.merge(sia_climatology, on=["sector", "doy"], how="left")
+# ---------------- SIA: period-specific climatology + anomaly ----------------
+print("Computing PERIOD-SPECIFIC day-of-year climatology per sector: SIA...")
+sia_clim = df.groupby([SECTOR_COL, "period", "doy"])["SIA"].mean().reset_index()
+sia_clim = sia_clim.rename(columns={"SIA": "SIA_climatology"})
+df = df.merge(sia_clim, on=[SECTOR_COL, "period", "doy"], how="left")
 df["SIA_anomaly"] = df["SIA"] - df["SIA_climatology"]
 
-df = df.sort_values(["sector", "date"])
-df["delta_SIA_anomaly"] = df.groupby("sector")["SIA_anomaly"].diff()
+df = df.sort_values([SECTOR_COL, DATE_COL]).reset_index(drop=True)
+df["delta_SIA_anomaly"] = df.groupby(SECTOR_COL)["SIA_anomaly"].diff()
 
-# ---------------- NEW: wind stress climatology + anomaly ----------------
-print("Computing day-of-year climatology per sector: wind_stress...")
-wind_climatology = df.groupby(["sector", "doy"])["wind_stress"].mean().reset_index()
-wind_climatology = wind_climatology.rename(columns={"wind_stress": "wind_stress_climatology"})
+# --- blank out the transition-day diff (crosses from pre- to post-climatology) ---
+transition_date = pd.Timestamp(f"{REGIME_SHIFT_YEAR}-01-01")
+is_transition_day = df[DATE_COL] == transition_date
+n_blanked = is_transition_day.sum()
+df.loc[is_transition_day, "delta_SIA_anomaly"] = np.nan
+print(f"Blanked delta_SIA_anomaly on {n_blanked} transition-day rows "
+      f"(one per sector, {transition_date.date()}) - see docstring for why.")
 
-df = df.merge(wind_climatology, on=["sector", "doy"], how="left")
+# ---------------- wind_stress: period-specific climatology + anomaly ----------------
+print("Computing PERIOD-SPECIFIC day-of-year climatology per sector: wind_stress...")
+wind_clim = df.groupby([SECTOR_COL, "period", "doy"])["wind_stress"].mean().reset_index()
+wind_clim = wind_clim.rename(columns={"wind_stress": "wind_stress_climatology"})
+df = df.merge(wind_clim, on=[SECTOR_COL, "period", "doy"], how="left")
 df["wind_stress_anomaly"] = df["wind_stress"] - df["wind_stress_climatology"]
-
-# NOTE: the regression itself (delta_SIA_anomaly ~ wind_stress) should
-# keep using raw wind_stress as the predictor, NOT wind_stress_anomaly -
-# wind stress is the forcing variable, and its magnitude (not its
-# deviation from typical-for-that-day) is what mechanically drives ice
-# motion/divergence. wind_stress_anomaly is for the Section 2 overview
-# figure only, so both panels share the same "deviation from normal"
-# visual language - don't swap it into the regression by mistake.
+# NOTE: wind_stress itself (raw) has no transition-day artifact issue since
+# it's not differenced anywhere in this pipeline - only SIA_anomaly is.
 
 # ---------------- Sanity checks ----------------
-print("\nSIA anomaly summary by sector:")
-print(df.groupby("sector")["SIA_anomaly"].describe())
+print("\nSIA anomaly mean by sector x period (should be ~0 within each):")
+print(df.groupby([SECTOR_COL, "period"])["SIA_anomaly"].mean())
 
-print("\nWind stress anomaly summary by sector:")
-print(df.groupby("sector")["wind_stress_anomaly"].describe())
+print("\nWind stress anomaly mean by sector x period (should be ~0 within each):")
+print(df.groupby([SECTOR_COL, "period"])["wind_stress_anomaly"].mean())
 
-print("\nChecking both anomalies are roughly mean-zero per sector (should be near 0):")
-print(df.groupby("sector")[["SIA_anomaly", "wind_stress_anomaly"]].mean())
+print(f"\ndelta_SIA_anomaly non-null count: {df['delta_SIA_anomaly'].notna().sum()} "
+      f"(should be total rows minus ~5*number_of_sectors: 1 transition day + "
+      f"1 first-day-per-sector-per-period diff() edge, x5 sectors)")
 
-# ---------------- Save ----------------
+# ---------------- Save (drop helper columns to match original schema) ----------------
+df = df.drop(columns=["period"])
 df.to_csv(OUT_CSV, index=False)
 print(f"\nSaved to: {OUT_CSV}")
-print("New columns: SIA_climatology, SIA_anomaly, delta_SIA_anomaly, "
-      "wind_stress_climatology, wind_stress_anomaly")
+print("New/changed columns: SIA_climatology, SIA_anomaly, delta_SIA_anomaly, "
+      "wind_stress_climatology, wind_stress_anomaly (all now period-specific)")
