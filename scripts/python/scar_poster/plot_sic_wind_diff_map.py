@@ -65,13 +65,15 @@ def make_diff_map(outpath=OUTPUT_DIR + "sic_wind_diff_map.png"):
     q = ax.quiver(
         lon_sub, lat_sub, u_sub, v_sub,
         transform=ccrs.PlateCarree(),
-        scale=0.03, scale_units="inches", width=0.003,
+        scale=0.01, scale_units="inches", width=0.0015,
+        headwidth=2.5, headlength=3, headaxislength=2.5,
         color="#2b2a28", zorder=3,
     )
-    # reference arrow, since raw wind-stress-difference magnitudes (~0.001-
-    # 0.008 N/m^2) aren't self-explanatory without one - same convention as
-    # Feba/Kusahara-style figures
-    ax.quiverkey(q, X=0.85, Y=-0.05, U=0.005, label="0.005 N/m$^2$",
+    # reference arrow calibrated to the actual MEDIAN magnitude (~0.0005
+    # N/m^2), not an arbitrary round number - the field spans an 18x range
+    # (median 0.0005, max 0.0092), so a single key can't represent both
+    # ends, but anchoring to the median gives an honest sense of "typical"
+    ax.quiverkey(q, X=0.85, Y=-0.05, U=0.0005, label="0.0005 N/m$^2$ (typical)",
                  labelpos="E", coordinates="axes", fontproperties={"size": 8})
 
     try:
