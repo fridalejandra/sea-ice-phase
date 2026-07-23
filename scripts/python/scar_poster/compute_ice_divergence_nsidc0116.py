@@ -48,7 +48,7 @@ import pandas as pd
 import xarray as xr
 
 # ---------------- CONFIG ----------------
-DRIFT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/drift_nsidc/"                                  # dir of annual *_sh_*.nc files
+DRIFT_DIR = "."                                  # dir of annual *_sh_*.nc files
 DRIFT_GLOB = "icemotion_daily_sh_25km_*_v4.1.nc"
 
 U_VAR = "u"
@@ -109,9 +109,41 @@ def grid_spacing(ds):
     return abs(float(dx[0])), float(np.sign(dy[0]))
 
 
+def decode_time(ds):
+    """Build a proper datetime64 time coordinate.
+
+    The files declare calendar="julian" with units "days since 1970-01-01".
+    Taken literally that is the Julian calendar, which xarray decodes into
+    cftime.DatetimeJulian objects (not convertible to pandas datetimes) and
+    which would place every date ~13 days off Gregorian in the modern era.
+    NSIDC almost certainly means ordinary dates -- verify by checking that the
+    first value of the 1978 file is 3226 (= days from 1970-01-01 to
+    1978-11-01), not 3213.
+
+    This decodes against the proleptic Gregorian calendar, which is what the
+    filenames imply.
+    """
+    t = ds[TIME_COORD]
+    units = t.attrs.get("units", "days since 1970-01-01")
+    if "since" not in units:
+        raise ValueError(f"Unrecognised time units: {units!r}")
+
+    interval, epoch_str = [s.strip() for s in units.split("since", 1)]
+    epoch = pd.Timestamp(epoch_str)
+
+    unit_map = {"days": "D", "hours": "h", "minutes": "m", "seconds": "s"}
+    if interval not in unit_map:
+        raise ValueError(f"Unsupported time interval: {interval!r}")
+
+    return epoch + pd.to_timedelta(t.values, unit=unit_map[interval])
+
+
 def load_drift(path):
     """Open one annual file, apply quality masks, convert to m/s."""
-    ds = xr.open_dataset(path, mask_and_scale=True, decode_times=True)
+    # decode_times=False: the julian calendar attribute would otherwise
+    # produce cftime objects. See decode_time() for why.
+    ds = xr.open_dataset(path, mask_and_scale=True, decode_times=False)
+    ds = ds.assign_coords({TIME_COORD: decode_time(ds)})
 
     u = ds[U_VAR]
     v = ds[V_VAR]
@@ -238,7 +270,7 @@ def aggregate_by_sector(div, sector_mask):
     for name in SECTORS:
         d = div.where(sector_mask == name)
         frames.append(pd.DataFrame({
-            "date": pd.to_datetime(div[TIME_COORD].values),
+            "date": pd.DatetimeIndex(div[TIME_COORD].values),
             "sector": name,
             "div_net": d.mean(dim=[X_COORD, Y_COORD], skipna=True).values,
             "div_positive": d.where(d > 0).mean(dim=[X_COORD, Y_COORD],
@@ -296,6 +328,7 @@ def run():
 
     table = pd.concat(sector_parts, ignore_index=True).sort_values(
         ["sector", "date"])
+    table = table[table["n_valid_cells"] > 0]
     table.to_csv(OUTPUT_SECTOR_TABLE, index=False)
     print(f"Wrote sector table -> {OUTPUT_SECTOR_TABLE}")
 
