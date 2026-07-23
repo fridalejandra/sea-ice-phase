@@ -45,7 +45,7 @@ DIVERGENCE_PATH = "ice_divergence_by_sector_season.csv"
 # columns: date, sector, div_net, div_positive, div_negative, n_valid_cells,
 #          year, month, season
 
-WIND_PATH = "/user/geog/falejandraperez/sea-ice-phase/data/drift_nsidc/wind_stress_by_sector_daily.csv"
+WIND_PATH = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/scar_poster/"
 # expected columns: date, sector, wind   (sector-mean daily wind stress)
 
 OCEAN_STATE_PATH = None
