@@ -48,7 +48,7 @@ import pandas as pd
 import xarray as xr
 
 # ---------------- CONFIG ----------------
-DRIFT_DIR = "."                                  # dir of annual *_sh_*.nc files
+DRIFT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/drift_nsidc/"                                  # dir of annual *_sh_*.nc files
 DRIFT_GLOB = "icemotion_daily_sh_25km_*_v4.1.nc"
 
 U_VAR = "u"
