@@ -45,8 +45,16 @@ DIVERGENCE_PATH = "ice_divergence_by_sector_season.csv"
 # columns: date, sector, div_net, div_positive, div_negative, n_valid_cells,
 #          year, month, season
 
-WIND_PATH = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/scar_poster/"
-# expected columns: date, sector, wind   (sector-mean daily wind stress)
+WIND_PATH = ("/user/geog/falejandraperez/sea-ice-phase/data/merged/"
+             "analysis_table_daily_anomaly_periodclim.csv")
+# columns: date, sector, wind_stress, SIA, delta_SIA, doy, SIA_climatology,
+#          SIA_anomaly, delta_SIA_anomaly, wind_stress_climatology,
+#          wind_stress_anomaly
+# wind_stress_anomaly is ALREADY deseasonalized against period-specific
+# climatologies, so it is used directly and not deseasonalized again here.
+# Using the same file as the SIA sensitivity test keeps the two analyses
+# directly comparable -- identical wind data, identical anomaly construction.
+WIND_COL = "wind_stress_anomaly"
 
 OCEAN_STATE_PATH = None
 # optional: path to per-(year, sector) ocean state, e.g. Ch3 amplitude anomaly
@@ -59,7 +67,19 @@ RUN_ALL_DIV_VARIANTS = True       # also run positive/negative separately
 SPLIT_YEAR = 2016
 EXCLUDE_YEARS = [1978, 1987, 1991, 1995]   # partial year + record gaps (as Ch2)
 
-SECTORS = ["ABS", "WED", "KHV", "EA", "RA"]
+SECTOR_RENAME = {
+    "ABS": "Amundsen-Bellingshausen",
+    "WED": "Weddell",
+    "KHV": "King Haakon VII",
+    "EA":  "East Antarctica",
+    "RA":  "Ross-Amundsen",
+}
+# compute_ice_divergence_nsidc0116.py writes short codes; the existing analysis
+# tables use full names. Mapped here rather than re-running the divergence
+# computation.
+
+SECTORS = ["Amundsen-Bellingshausen", "Weddell", "King Haakon VII",
+           "East Antarctica", "Ross-Amundsen"]
 SEASONS = ["DJF", "MAM", "JJA", "SON"]
 
 N_BOOT = 2000
@@ -79,16 +99,33 @@ def load_and_merge():
     div = pd.read_csv(DIVERGENCE_PATH, parse_dates=["date"])
     wind = pd.read_csv(WIND_PATH, parse_dates=["date"])
 
+    div["sector"] = div["sector"].replace(SECTOR_RENAME)
+    unmapped = set(div["sector"]) - set(SECTORS)
+    if unmapped:
+        print(f"[warn] divergence sectors not in SECTORS list: {unmapped}")
+
     # drop padded/empty days (1978 pre-November, record gaps)
     if "n_valid_cells" in div.columns:
         before = len(div)
         div = div[div["n_valid_cells"] > 0]
         print(f"Dropped {before - len(div):,} rows with no valid cells")
 
-    df = div.merge(wind[["date", "sector", "wind"]], on=["date", "sector"],
-                   how="inner")
+    if WIND_COL not in wind.columns:
+        raise KeyError(f"{WIND_COL!r} not in {WIND_PATH}. "
+                       f"Available: {list(wind.columns)}")
+
+    wind = wind[["date", "sector", WIND_COL]].rename(
+        columns={WIND_COL: "wind_anom"})
+
+    df = div.merge(wind, on=["date", "sector"], how="inner")
     print(f"Merged: {len(df):,} sector-days "
           f"({df['date'].min().date()} to {df['date'].max().date()})")
+
+    if df.empty:
+        raise ValueError(
+            "Merge produced no rows. Check that sector labels match between "
+            "the two files (e.g. 'ABS' vs 'A-B', 'WED' vs 'Weddell')."
+        )
 
     df = df[~df["year"].isin(EXCLUDE_YEARS)]
     df["post"] = (df["year"] >= SPLIT_YEAR).astype(int)
@@ -240,7 +277,11 @@ def main():
                 else ["div_net", "div_positive", "div_negative"])
     div_cols = [c for c in div_cols if c in df.columns]
 
-    df = deseasonalize(df, div_cols + ["wind"])
+    # Only divergence needs deseasonalizing -- wind arrives as an anomaly
+    # already computed against period-specific climatologies. Deseasonalizing
+    # it a second time would remove structure that is no longer there and
+    # distort the regression.
+    df = deseasonalize(df, div_cols)
 
     for col in div_cols:
         suffix = "" if col == "div_net" else f"_{col}"
