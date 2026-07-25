@@ -56,7 +56,8 @@ WIND_PATH = ("/user/geog/falejandraperez/sea-ice-phase/data/merged/"
 # directly comparable -- identical wind data, identical anomaly construction.
 WIND_COL = "wind_stress_anomaly"
 
-OCEAN_STATE_PATH = None
+OCEAN_STATE_PATH = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/scar_poster/sst_anomaly_by_sector_daily.csv"
+
 # optional: path to per-(year, sector) ocean state, e.g. Ch3 amplitude anomaly
 # expected columns: year, sector, ocean_state
 # set to None to skip Test B
