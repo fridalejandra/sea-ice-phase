@@ -13,13 +13,13 @@ the SCAR wind-sensitivity analysis could not do.
 
 POSITIONING
 Holland & Kwok (2012) established wind-divergence coupling for the pre-2010
-expansion era; de Jager & Vichi (2025) examined rotational coupling through 2020
+expansion era; de Jager & Vichi (2022) examined rotational coupling through 2020
 but stopped short of divergence. Neither asks whether wind->divergence coupling
 inflected at 2016.
 
 MODELS
   Test A (binary):     div ~ wind + post + wind:post
-  Test B (continuous): div ~ wind + ocean_state + wind:ocean_state
+  Test B (continuous): div ~ wind + sst_anom + wind:sst_anom
 
 Both fitted per sector x season (20 tests each), with stationary block bootstrap
 CIs and Benjamini-Hochberg FDR correction across the 20-test family.
@@ -32,6 +32,13 @@ that threshold is lenient: passing it does not mean a cell was well constrained
 by observations. Interpret a POSITIVE coupling result cautiously -- some of it
 may be built in by construction. A NULL result is not affected by this concern,
 since built-in coupling would bias toward finding coupling, not away from it.
+
+SST COVERAGE CAVEAT (Test B only)
+sst_anom comes from process_era5_sst_sector.py, which masks ERA5 SST wherever
+the coupled sea-ice model has ice on -- i.e. winter (JJA) sector means are
+skewed toward whatever open water/leads remain, not representative of the
+whole sector. Check that script's printed [warn] coverage block before
+trusting any JJA Test B result, significant or null.
 """
 
 import numpy as np
@@ -56,11 +63,15 @@ WIND_PATH = ("/user/geog/falejandraperez/sea-ice-phase/data/merged/"
 # directly comparable -- identical wind data, identical anomaly construction.
 WIND_COL = "wind_stress_anomaly"
 
-OCEAN_STATE_PATH = "/user/geog/falejandraperez/sea-ice-phase/scripts/python/scar_poster/sst_anomaly_by_sector_daily.csv"
-
-# optional: path to per-(year, sector) ocean state, e.g. Ch3 amplitude anomaly
-# expected columns: year, sector, ocean_state
+OCEAN_STATE_PATH = ("/user/geog/falejandraperez/sea-ice-phase/scripts/python/"
+                     "scar_poster/sst_anomaly_by_sector_daily.csv")
+# from process_era5_sst_sector.py
+# columns: date, sector, sst, sst_anom, n_valid_cells
+# DAILY grain, matched on (date, sector) -- NOT (year, sector). sst_anom is
+# already deseasonalized against period-specific climatologies (same logic
+# as wind_stress_anomaly above), so it is used directly here too.
 # set to None to skip Test B
+OCEAN_STATE_COL = "sst_anom"
 
 DIV_VARIABLE = "div_net"          # div_net | div_positive | div_negative
 RUN_ALL_DIV_VARIANTS = True       # also run positive/negative separately
@@ -138,6 +149,39 @@ def load_and_merge():
     return df
 
 
+def merge_ocean_state(df):
+    """Merge the daily sector-mean SST anomaly onto the wind/divergence
+    table. Grain is (date, sector) -- NOT (year, sector) -- since sst_anom
+    is a daily series, matching the daily resolution of everything else in
+    this regression. An earlier version of this function assumed an annual
+    (year, sector, ocean_state) schema left over from a prior draft of the
+    ocean-state file; that schema no longer exists and the merge below
+    replaces it.
+    """
+    ocean = pd.read_csv(OCEAN_STATE_PATH, parse_dates=["date"])
+
+    if OCEAN_STATE_COL not in ocean.columns:
+        raise KeyError(f"{OCEAN_STATE_COL!r} not in {OCEAN_STATE_PATH}. "
+                       f"Available: {list(ocean.columns)}")
+
+    ocean = ocean[["date", "sector", OCEAN_STATE_COL]]
+    before = len(df)
+    df = df.merge(ocean, on=["date", "sector"], how="left")
+    assert len(df) == before, (
+        "Row count changed after ocean-state merge -- check for duplicate "
+        "(date, sector) rows in the SST file."
+    )
+
+    n_miss = df[OCEAN_STATE_COL].isna().sum()
+    if n_miss:
+        print(f"\n[warn] {n_miss:,}/{len(df):,} rows lack an "
+              f"{OCEAN_STATE_COL} value after merge. If this is large, check "
+              f"date-range overlap between the divergence/wind record and "
+              f"the ERA5 SST pull, and whether EXCLUDE_YEARS differs between "
+              f"process_era5_sst_sector.py and this script.")
+    return df
+
+
 def deseasonalize(df, columns):
     """Remove period-specific day-of-year climatologies.
 
@@ -211,7 +255,7 @@ def block_bootstrap_ci(df, formula, term, n_boot=N_BOOT,
 
 
 def run_test(df, div_col, moderator, out_path, label):
-    """moderator: 'post' (binary) or 'ocean_state' (continuous)."""
+    """moderator: 'post' (binary) or OCEAN_STATE_COL, e.g. 'sst_anom' (continuous)."""
     y = f"{div_col}_anom"
     formula = f"{y} ~ wind_anom * {moderator}"
     term = f"wind_anom:{moderator}"
@@ -279,9 +323,10 @@ def main():
     div_cols = [c for c in div_cols if c in df.columns]
 
     # Only divergence needs deseasonalizing -- wind arrives as an anomaly
-    # already computed against period-specific climatologies. Deseasonalizing
-    # it a second time would remove structure that is no longer there and
-    # distort the regression.
+    # already computed against period-specific climatologies, and so does
+    # sst_anom once merged in below. Deseasonalizing either a second time
+    # would remove structure that is no longer there and distort the
+    # regression.
     df = deseasonalize(df, div_cols)
 
     for col in div_cols:
@@ -291,15 +336,10 @@ def main():
                  "Test A (binary pre/post)")
 
     if OCEAN_STATE_PATH:
-        ocean = pd.read_csv(OCEAN_STATE_PATH)
-        df = df.merge(ocean[["year", "sector", "ocean_state"]],
-                      on=["year", "sector"], how="left")
-        n_miss = df["ocean_state"].isna().sum()
-        if n_miss:
-            print(f"\n[warn] {n_miss:,} rows lack an ocean_state value")
+        df = merge_ocean_state(df)
         for col in div_cols:
             suffix = "" if col == "div_net" else f"_{col}"
-            run_test(df, col, "ocean_state",
+            run_test(df, col, OCEAN_STATE_COL,
                      OUT_CONTINUOUS.replace(".csv", f"{suffix}.csv"),
                      "Test B (continuous ocean state)")
     else:
@@ -307,9 +347,11 @@ def main():
 
     print("\nCoefficients are in day^-1 per unit wind stress. Interpretation: "
           "a positive interaction means a given wind stress produces MORE "
-          "divergence post-2016 (or at higher ocean-state values); negative "
+          "divergence post-2016 (or at higher sst_anom values); negative "
           "means less. Sign conventions differ by sector, so compare the "
-          "magnitude of the marginal effect, not the raw sign, across sectors.")
+          "magnitude of the marginal effect, not the raw sign, across sectors. "
+          "Check JJA results against process_era5_sst_sector.py's coverage "
+          "warning before trusting them either way.")
 
 
 if __name__ == "__main__":
