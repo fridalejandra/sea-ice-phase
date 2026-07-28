@@ -26,7 +26,7 @@ import numpy as np
 import xarray as xr
 
 # ---------------- CONFIG ----------------
-SIC_PATH = "bootstrap_sic_with_latlon.nc"
+SIC_PATH = "bootstrap_sic_masked_latlon.nc"
 EASE_REF_PATH = "ease_divergence_with_latlon.nc"
 
 SIC_VAR = "N07_ICECON"     # VERIFY against Checkpoint 1 output; use the merged/
