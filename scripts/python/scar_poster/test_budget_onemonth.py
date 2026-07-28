@@ -60,9 +60,7 @@ def main():
 
     D = div[DIV_VAR]
     A = sic[SIC_VAR]
-    if float(A.max()) > 1.5:
-        print("Converting SIC percent -> fraction.")
-        A = A / 100.0
+
 
     # align time and slice the test month
     D = D.sel(time=slice(TEST_START, TEST_END))
