@@ -27,12 +27,12 @@ import numpy as np
 import xarray as xr
 
 # ---------------- CONFIG ----------------
-SIC_PATH = ("/user/geog/falejandraperez/sea-ice-phase/data/merged/"
-            "SMMR_merged_19781101_20251231_complete.nc")
+SIC_PATH = "bootstrap_sic_with_latlon.nc"
+
 # use the explicit-date complete file for the real run; _latest.nc for a quick test
 
-EASE_REF_PATH = ("/user/geog/falejandraperez/sea-ice-phase/scripts/python/"
-                 "scar_poster/ice_divergence_daily_sh.nc")
+EASE_REF_PATH = "ease_divergence_with_latlon.nc"
+
 # provides the TARGET grid (x/y and, ideally, 2D lat/lon). We only need its
 # grid, not its data.
 
