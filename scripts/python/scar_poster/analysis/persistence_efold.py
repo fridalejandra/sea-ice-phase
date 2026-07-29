@@ -309,7 +309,7 @@ def run_efold_tests(df):
 
 if __name__ == "__main__":
     df = pd.read_csv(IN_CSV, parse_dates=[DATE_COL])
-
+    df = df[df[DATE_COL].dt.year >= 1988]  # drop SMMR every-other-day era
     print("Running e-folding decorrelation-timescale shift tests, per sector...")
     results_df, acf_df = run_efold_tests(df)
 
