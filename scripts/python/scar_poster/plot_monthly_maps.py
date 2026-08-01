@@ -1,9 +1,9 @@
 """
 plot_monthly_maps.py
 
-Monthly pre/post-2016 difference maps for divergence, convergence, and sea ice
-concentration, on the native EASE-Grid 2.0 South grid -- BEFORE any
-sector/season aggregation.
+Monthly pre/post-2016 difference maps for divergence, convergence, sea ice
+concentration, wind stress magnitude, and wind stress curl, on the EASE-Grid
+2.0 South grid -- BEFORE any sector/season aggregation.
 
 WHY
 The coupling tests collapse everything to 5 sectors x 4 seasons before testing.
@@ -65,6 +65,14 @@ DPI = 130
 # -----------------------------------------
 
 
+def _tname(da):
+    """Resolve time coordinate name -- ERA5 uses 'valid_time', others use 'time'."""
+    for candidate in ("time", "valid_time"):
+        if candidate in da.dims:
+            return candidate
+    raise KeyError(f"No time-like dimension found. Dims: {list(da.dims)}")
+
+
 def load(path, var, negate=False):
     ds = xr.open_dataset(path)
     if var not in ds:
@@ -72,7 +80,7 @@ def load(path, var, negate=False):
     da = ds[var]
     if negate:
         da = -da
-    tname = "time" if "time" in da.dims else "valid_time"
+    tname = _tname(da)
     yrs = da[tname].dt.year
     da = da.sel({tname: ~yrs.isin(EXCLUDE_YEARS)})
     return da
@@ -80,10 +88,11 @@ def load(path, var, negate=False):
 
 def yearly_means_for_month(da, month):
     """-> (n_years, y, x) array of that month's mean for each year."""
-    sub = da.sel(time=da["time"].dt.month == month)
-    if sub.sizes["time"] == 0:
+    tname = _tname(da)
+    sub = da.sel({tname: da[tname].dt.month == month})
+    if sub.sizes[tname] == 0:
         return None
-    return sub.groupby(sub["time"].dt.year).mean(dim="time").load()
+    return sub.groupby(sub[tname].dt.year).mean(dim=tname).load()
 
 
 def panel(fig, ax, field, title, cmap, vmax=None, x=None, y=None):
@@ -172,9 +181,6 @@ def main():
             continue
         make_maps(label, path, var, cmap, units, negate=negate)
     print(f"\nAll maps in ./{OUT_DIR}/")
-    print("Look for: does the divergence difference respect your sector "
-          "boundaries or cut across them? Is the null spatially flat, or "
-          "offsetting patches that cancel in the sector mean?")
 
 
 if __name__ == "__main__":
