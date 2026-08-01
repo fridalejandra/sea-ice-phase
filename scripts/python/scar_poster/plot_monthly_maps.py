@@ -1,8 +1,9 @@
 """
 plot_monthly_maps.py
 
-Monthly pre/post-2016 difference maps for divergence and sea ice concentration,
-on the native EASE-Grid 2.0 South grid -- BEFORE any sector/season aggregation.
+Monthly pre/post-2016 difference maps for divergence, convergence, and sea ice
+concentration, on the native EASE-Grid 2.0 South grid -- BEFORE any
+sector/season aggregation.
 
 WHY
 The coupling tests collapse everything to 5 sectors x 4 seasons before testing.
@@ -39,9 +40,14 @@ from scipy import stats
 
 # ---------------- CONFIG ----------------
 VARIABLES = {
-    # label: (path, varname, colormap, units)
-    "divergence": ("ice_divergence_daily_sh.nc", "divergence", "RdBu_r", "s^-1"),
-    "sic":        ("sic_bootstrap_on_ease_sh.nc", "sic", "RdBu_r", "fraction"),
+    # label: (path, varname, colormap, units, negate)
+    # negate=True flips the sign (convergence = -divergence)
+    "divergence":  ("ice_divergence_daily_sh.nc", "divergence", "RdBu_r", "s^-1", False),
+    "convergence": ("ice_divergence_daily_sh.nc", "divergence", "RdBu_r", "s^-1", True),
+    "sic":         ("sic_bootstrap_on_ease_sh.nc", "sic", "RdBu_r", "fraction", False),
+    # uncomment after wind regrid completes:
+    # "wind_stress": ("wind_stress_on_ease_sh.nc", "tau_mag", "YlOrRd", "Pa", False),
+    # "wind_curl":   ("wind_stress_curl_on_ease_sh.nc", "tau_curl", "RdBu_r", "Pa/m", False),
 }
 
 # EASE-Grid 2.0 South (EPSG:6932) = Lambert Azimuthal Equal-Area, lat_0=-90
@@ -55,16 +61,18 @@ EXCLUDE_YEARS = [1978, 1987, 1991, 1995]
 MIN_YEARS_PER_PERIOD = 3
 
 OUT_DIR = "maps"
-MONTHS = range(1, 13)          # set to e.g. [2, 5, 9, 11] for a quick pass
+MONTHS = [9]                   # September for a quick pass; range(1, 13) for all
 DPI = 130
 # -----------------------------------------
 
 
-def load(path, var):
+def load(path, var, negate=False):
     ds = xr.open_dataset(path)
     if var not in ds:
         raise KeyError(f"{var!r} not in {path}. Available: {list(ds.data_vars)}")
     da = ds[var]
+    if negate:
+        da = -da
     yrs = da["time"].dt.year
     da = da.sel(time=~yrs.isin(EXCLUDE_YEARS))
     return da
@@ -92,9 +100,9 @@ def panel(fig, ax, field, title, cmap, vmax=None, x=None, y=None):
     return im
 
 
-def make_maps(label, path, var, cmap, units):
+def make_maps(label, path, var, cmap, units, negate=False):
     print(f"\n=== {label} ===")
-    da = load(path, var)
+    da = load(path, var, negate=negate)
     x = da["x"].values
     y = da["y"].values
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -158,11 +166,11 @@ def make_maps(label, path, var, cmap, units):
 
 
 def main():
-    for label, (path, var, cmap, units) in VARIABLES.items():
+    for label, (path, var, cmap, units, negate) in VARIABLES.items():
         if not os.path.exists(path):
             print(f"[skip] {label}: {path} not found")
             continue
-        make_maps(label, path, var, cmap, units)
+        make_maps(label, path, var, cmap, units, negate=negate)
     print(f"\nAll maps in ./{OUT_DIR}/")
     print("Look for: does the divergence difference respect your sector "
           "boundaries or cut across them? Is the null spatially flat, or "
