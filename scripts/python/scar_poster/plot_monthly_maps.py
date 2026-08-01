@@ -45,9 +45,8 @@ VARIABLES = {
     "divergence":  ("ice_divergence_daily_sh.nc", "divergence", "RdBu_r", "s^-1", False),
     "convergence": ("ice_divergence_daily_sh.nc", "divergence", "RdBu_r", "s^-1", True),
     "sic":         ("sic_bootstrap_on_ease_sh.nc", "sic", "RdBu_r", "fraction", False),
-    # uncomment after wind regrid completes:
-    # "wind_stress": ("wind_stress_on_ease_sh.nc", "tau_mag", "YlOrRd", "Pa", False),
-    # "wind_curl":   ("wind_stress_curl_on_ease_sh.nc", "tau_curl", "RdBu_r", "Pa/m", False),
+    "wind_stress": ("wind_stress_on_ease_sh.nc", "tau_mag", "YlOrRd", "Pa", False),
+    "wind_curl":   ("wind_stress_curl_on_ease_sh.nc", "tau_curl", "RdBu_r", "Pa/m", False),
 }
 
 # EASE-Grid 2.0 South (EPSG:6932) = Lambert Azimuthal Equal-Area, lat_0=-90
