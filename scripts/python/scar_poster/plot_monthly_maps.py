@@ -72,8 +72,9 @@ def load(path, var, negate=False):
     da = ds[var]
     if negate:
         da = -da
-    yrs = da["time"].dt.year
-    da = da.sel(time=~yrs.isin(EXCLUDE_YEARS))
+    tname = "time" if "time" in da.dims else "valid_time"
+    yrs = da[tname].dt.year
+    da = da.sel({tname: ~yrs.isin(EXCLUDE_YEARS)})
     return da
 
 
