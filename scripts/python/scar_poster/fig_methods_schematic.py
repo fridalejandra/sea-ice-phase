@@ -6,6 +6,7 @@ showing the wind-vs-ΔSIA scatter pre and post-2016 with fitted slopes.
 The visual point: the two slopes are indistinguishable. β didn't shift.
 """
 
+import os
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -21,6 +22,7 @@ SECTOR = "Amundsen-Bellingshausen"
 SEASON = "JJA"
 
 OUT = "fig_methods_schematic.png"
+RCLONE_REMOTE = "gdrive:scar_poster/"
 
 
 def main():
@@ -81,6 +83,11 @@ def main():
         mask = np.isfinite(x) & np.isfinite(y)
         coef = np.polyfit(x[mask], y[mask], 1)
         print(f"  {label}: β = {coef[0]:.1f} km²/(N/m²)")
+
+    # upload to Google Drive
+    print(f"\nUploading to {RCLONE_REMOTE}...")
+    os.system(f"rclone copy {OUT} {RCLONE_REMOTE}")
+    print("done.")
 
 
 if __name__ == "__main__":
