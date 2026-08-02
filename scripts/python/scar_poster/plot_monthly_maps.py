@@ -47,6 +47,7 @@ VARIABLES = {
     "sic":         ("sic_bootstrap_on_ease_sh.nc", "sic", "RdBu_r", "fraction", False),
     "wind_stress": ("wind_stress_on_ease_sh.nc", "tau_mag", "YlOrRd", "Pa", False),
     "wind_curl":   ("wind_stress_curl_on_ease_sh.nc", "tau_curl", "RdBu_r", "Pa/m", False),
+    "dsic": ("dsic_daily_on_ease_sh.nc", "dsic", "RdBu_r", "fraction/day", False),
 }
 
 # EASE-Grid 2.0 South (EPSG:6932) = Lambert Azimuthal Equal-Area, lat_0=-90
