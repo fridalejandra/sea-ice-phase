@@ -1,8 +1,9 @@
 """
 fig_sector_map_poster.py
 
-Sector map for the poster. Fully opaque fills, white background,
-distinct colors matching all other poster figures.
+Sector map for the poster. Sectors drawn as thin longitude strips to avoid
+dateline-wrapping polygon bugs. Fully opaque, distinct colors matching all
+other poster figures.
 """
 
 import os
@@ -40,20 +41,28 @@ NSIDC_SH_CRS = ccrs.Stereographic(
 )
 
 
-def sector_polygon(lon_min, lon_max, lat_min=-90, lat_max=-35, n=100):
+def draw_sector(ax, lon_min, lon_max, color, lat_min=-90, lat_max=-35):
+    """Fill a sector as many thin longitude strips — avoids dateline
+    polygon-wrapping bugs entirely."""
     lon_min = lon_min % 360
     lon_max = lon_max % 360
     if lon_max <= lon_min:
         lon_max += 360
-    lons_top = np.linspace(lon_min, lon_max, n)
-    lons_bot = np.linspace(lon_max, lon_min, n)
-    lats_top = np.full(n, lat_max)
-    lats_bot = np.full(n, lat_min)
-    lons = np.concatenate([lons_top, lons_bot])
-    lats = np.concatenate([lats_top, lats_bot])
-    lons = lons % 360
-    lons = np.where(lons > 180, lons - 360, lons)
-    return lons, lats
+    edges = np.linspace(lon_min, lon_max, 60)
+    for a, b in zip(edges[:-1], edges[1:]):
+        a_ = ((a + 180) % 360) - 180
+        b_ = ((b + 180) % 360) - 180
+        if b_ < a_:  # strip crosses dateline; split it
+            ax.fill([a_, 180, 180, a_],
+                    [lat_max, lat_max, lat_min, lat_min],
+                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=1)
+            ax.fill([-180, b_, b_, -180],
+                    [lat_max, lat_max, lat_min, lat_min],
+                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=1)
+        else:
+            ax.fill([a_, b_, b_, a_],
+                    [lat_max, lat_max, lat_min, lat_min],
+                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=1)
 
 
 def sector_midpoint_lon(lon_min, lon_max):
@@ -99,19 +108,16 @@ def main():
     circle = mpath.Path(verts * 0.5 + 0.5)
     ax.set_boundary(circle, transform=ax.transAxes)
 
-    # white ocean background
     ax.add_feature(cfeature.OCEAN, color="white", zorder=0)
     ax.add_feature(cfeature.COASTLINE, linewidth=0.5, color="0.4", zorder=5)
 
-    # sectors — fully opaque, no alpha
+    # sectors — strip fill, fully opaque
     for name, props in SECTORS.items():
-        lons, lats = sector_polygon(props["lon_min"], props["lon_max"])
-        ax.fill(lons, lats, transform=ccrs.PlateCarree(),
-                color=props["color"], alpha=1.0, zorder=1)
+        draw_sector(ax, props["lon_min"], props["lon_max"], props["color"])
 
-        # sector boundary lines
-        ax.plot(np.append(lons, lons[0]), np.append(lats, lats[0]),
-                transform=ccrs.PlateCarree(),
+        # radial white boundary line at each sector's start
+        lm = ((props["lon_min"] + 180) % 360) - 180
+        ax.plot([lm, lm], [-90, -35], transform=ccrs.PlateCarree(),
                 color="white", linewidth=1.5, zorder=2)
 
         # label
@@ -122,16 +128,13 @@ def main():
                 color="white", zorder=7,
                 path_effects=[pe.withStroke(linewidth=3, foreground="0.2")])
 
-    # ice edge outline
     if ADD_MEAN_SIA_OUTLINE:
         add_mean_sia_outline(ax)
 
-    # gridlines
     ax.gridlines(draw_labels=False, linewidth=0.3, linestyle="--",
                  color="0.5", alpha=0.5, zorder=4,
                  xlocs=range(-180, 181, 30), ylocs=range(-80, -49, 10))
 
-    # longitude labels
     for lon_deg in range(-150, 181, 30):
         if lon_deg == 180 or lon_deg == -180:
             label = "180"
