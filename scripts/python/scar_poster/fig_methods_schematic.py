@@ -19,7 +19,7 @@ EXCLUDE_YEARS = [1978, 1987, 1991, 1995]
 SPLIT_YEAR = 2016
 
 SECTOR = "Amundsen-Bellingshausen"
-SEASON = "JJA"
+SEASON = "SON"
 
 OUT = "fig_methods_schematic.png"
 RCLONE_REMOTE = "gdrive:scar_poster/"
