@@ -1,9 +1,8 @@
 """
 fig_sic_wind_overlay.py
 
-Poster section 1 figure: SIC difference (post-pre, color fill) with wind
-stress difference overlaid as vectors. One image: ice declined everywhere,
-wind pushed harder everywhere, and it didn't matter.
+Poster section 1: SIC difference (color) + wind stress difference (vectors),
+two panels — March (minimum extent) and September (maximum extent).
 """
 
 import os
@@ -21,10 +20,14 @@ SIC_VAR = "sic"
 
 SPLIT_YEAR = 2016
 EXCLUDE_YEARS = [1978, 1987, 1991, 1995]
-MONTH = 9
+MONTHS = [3, 9]
+MONTH_NAMES = {3: "March (min extent)", 9: "September (max extent)"}
 
-# subsample vectors so the plot isn't a wall of arrows
-QUIVER_SKIP = 8    # plot every Nth grid cell
+QUIVER_SKIP = 12
+QUIVER_SCALE = 0.04
+QUIVER_WIDTH = 0.003
+QUIVER_COLOR = "0.15"
+QUIVER_ALPHA = 0.6
 
 EASE_CRS = ccrs.LambertAzimuthalEqualArea(
     central_latitude=-90.0, central_longitude=0.0
@@ -42,8 +45,7 @@ def _tname(da):
     raise KeyError(f"No time dim in {list(da.dims)}")
 
 
-def monthly_prepost(path, var, month):
-    ds = xr.open_dataset(path)
+def monthly_prepost_field(ds, var, month):
     da = ds[var]
     tn = _tname(da)
     yrs = da[tn].dt.year
@@ -51,66 +53,70 @@ def monthly_prepost(path, var, month):
     sub = da.sel({tn: da[tn].dt.month == month})
     ym = sub.groupby(sub[tn].dt.year).mean(dim=tn).load()
     years = ym["year"].values
-    pre = ym.values[years < SPLIT_YEAR]
-    post = ym.values[years >= SPLIT_YEAR]
-    return np.nanmean(pre, axis=0), np.nanmean(post, axis=0), ds["x"].values, ds["y"].values
+    pre = np.nanmean(ym.values[years < SPLIT_YEAR], axis=0)
+    post = np.nanmean(ym.values[years >= SPLIT_YEAR], axis=0)
+    return pre, post
 
 
 def main():
-    # SIC difference
-    sic_pre, sic_post, x, y = monthly_prepost(SIC_PATH, SIC_VAR, MONTH)
-    sic_diff = sic_post - sic_pre
-
-    # wind stress components
+    sic_ds = xr.open_dataset(SIC_PATH)
     wind_ds = xr.open_dataset(WIND_PATH)
-    tn = _tname(wind_ds["tau_x"])
-    yrs = wind_ds[tn].dt.year
+    x_sic = sic_ds["x"].values
+    y_sic = sic_ds["y"].values
+    x_wind = wind_ds["x"].values
+    y_wind = wind_ds["y"].values
 
-    wind_ds = wind_ds.sel({tn: ~yrs.isin(EXCLUDE_YEARS)})
-    wind_ds = wind_ds.sel({tn: wind_ds[tn].dt.month == MONTH})
-    ym_tx = wind_ds["tau_x"].groupby(wind_ds[tn].dt.year).mean(dim=tn).load()
-    ym_ty = wind_ds["tau_y"].groupby(wind_ds[tn].dt.year).mean(dim=tn).load()
+    # compute global vmax across both months for consistent color scale
+    all_diffs = []
+    for month in MONTHS:
+        pre, post = monthly_prepost_field(sic_ds, SIC_VAR, month)
+        all_diffs.append(post - pre)
+    vmax_sic = np.nanpercentile(np.abs(np.concatenate([d.ravel() for d in all_diffs])), 98)
 
-    years = ym_tx["year"].values
-    tx_pre = np.nanmean(ym_tx.values[years < SPLIT_YEAR], axis=0)
-    tx_post = np.nanmean(ym_tx.values[years >= SPLIT_YEAR], axis=0)
-    ty_pre = np.nanmean(ym_ty.values[years < SPLIT_YEAR], axis=0)
-    ty_post = np.nanmean(ym_ty.values[years >= SPLIT_YEAR], axis=0)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 7),
+                             subplot_kw={"projection": EASE_CRS})
 
-    dtx = tx_post - tx_pre
-    dty = ty_post - ty_pre
-    wx = wind_ds["x"].values
-    wy = wind_ds["y"].values
+    for ax, month in zip(axes, MONTHS):
+        # SIC difference
+        sic_pre, sic_post = monthly_prepost_field(sic_ds, SIC_VAR, month)
+        sic_diff = sic_post - sic_pre
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 8),
-                           subplot_kw={"projection": EASE_CRS})
+        im = ax.pcolormesh(x_sic, y_sic, sic_diff, transform=EASE_CRS,
+                           cmap="RdBu_r", vmin=-vmax_sic, vmax=vmax_sic,
+                           shading="auto", zorder=1)
 
-    # SIC difference as color fill
-    vmax_sic = np.nanpercentile(np.abs(sic_diff), 98)
-    im = ax.pcolormesh(x, y, sic_diff, transform=EASE_CRS,
-                       cmap="RdBu_r", vmin=-vmax_sic, vmax=vmax_sic,
-                       shading="auto", zorder=1)
+        # wind stress vectors
+        tx_pre, tx_post = monthly_prepost_field(wind_ds, "tau_x", month)
+        ty_pre, ty_post = monthly_prepost_field(wind_ds, "tau_y", month)
+        dtx = tx_post - tx_pre
+        dty = ty_post - ty_pre
 
-    # wind stress difference as vectors, subsampled
-    s = QUIVER_SKIP
-    xx, yy = np.meshgrid(wx[::s], wy[::s])
-    u = dtx[::s, ::s]
-    v = dty[::s, ::s]
+        s = QUIVER_SKIP
+        xx, yy = np.meshgrid(x_wind[::s], y_wind[::s])
+        u = dtx[::s, ::s]
+        v = dty[::s, ::s]
 
-    ax.quiver(xx, yy, u, v, transform=EASE_CRS,
-              color="black", alpha=0.7, scale=0.03, width=0.003,
-              headwidth=4, headlength=5, zorder=3)
+        q = ax.quiver(xx, yy, u, v, transform=EASE_CRS,
+                      color=QUIVER_COLOR, alpha=QUIVER_ALPHA,
+                      scale=QUIVER_SCALE, width=QUIVER_WIDTH,
+                      headwidth=4, headlength=4, zorder=3)
 
-    ax.add_feature(cfeature.LAND, zorder=4, facecolor="0.85", edgecolor="none")
-    ax.coastlines(resolution="50m", linewidth=0.5, zorder=5)
-    ax.set_extent([-180, 180, -90, -50], crs=PLATE)
+        ax.add_feature(cfeature.LAND, zorder=4, facecolor="0.85",
+                       edgecolor="none")
+        ax.coastlines(resolution="50m", linewidth=0.5, zorder=5)
+        ax.set_extent([-180, 180, -90, -50], crs=PLATE)
+        ax.set_title(MONTH_NAMES[month], fontsize=13)
 
-    cb = fig.colorbar(im, ax=ax, orientation="horizontal", fraction=0.045,
-                      pad=0.05, label="ΔSIC (fraction, post − pre)")
+    # reference arrow
+    axes[1].quiverkey(q, 0.85, 0.02, 0.002, "0.002 Pa",
+                      labelpos="E", fontproperties={"size": 10})
 
-    ax.set_title("September: sea ice declined (color)\n"
-                 "wind stress change (vectors)",
-                 fontsize=14)
+    # shared colorbar
+    fig.colorbar(im, ax=axes, orientation="horizontal", fraction=0.04,
+                 pad=0.06, label="ΔSIC (fraction, post − pre)")
+
+    fig.suptitle("Sea ice declined (color) while wind stress changed (vectors)",
+                 fontsize=15, y=0.98)
 
     fig.savefig(OUT, dpi=200, bbox_inches="tight")
     print(f"-> {OUT}")
