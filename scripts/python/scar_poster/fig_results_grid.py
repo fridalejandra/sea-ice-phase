@@ -20,13 +20,10 @@ SHORT = {"Amundsen-Bellingshausen": "ABS", "Weddell": "WED",
          "Ross-Amundsen": "RA"}
 SEASONS = ["DJF", "MAM", "JJA", "SON"]
 
-# (csv, column title, row label)
 PANELS = [
-    # top row: binary pre/post
     ("wind_divergence_binary_test.csv",              "Net"),
     ("wind_divergence_binary_test_div_positive.csv", "Lead-opening"),
     ("wind_divergence_binary_test_div_negative.csv", "Convergence"),
-    # bottom row: SST-conditioned
     ("wind_divergence_oceanstate_test.csv",               "Net"),
     ("wind_divergence_oceanstate_test_div_positive.csv",  "Lead-opening"),
     ("wind_divergence_oceanstate_test_div_negative.csv",  "Convergence"),
@@ -55,7 +52,6 @@ avail = [(c, t) for c, t in PANELS if os.path.exists(c)]
 if not avail:
     raise SystemExit("No result CSVs found in this directory.")
 
-# common symmetric colour scale
 allvals = []
 for c, _ in avail:
     g, _ = grid_from(c)
@@ -84,11 +80,9 @@ for idx, (ax, (csv, title)) in enumerate(zip(axes.flat, avail)):
     ax.set_yticklabels([SHORT[s] for s in SECTORS] if idx % ncol == 0 else [],
                        fontsize=11)
 
-    # column title only on top row
     if idx < ncol:
         ax.set_title(title, fontsize=13, fontweight="bold")
 
-# row labels on the left
 for row, label in enumerate(ROW_LABELS):
     axes[row, 0].text(-0.35, 0.5, label, transform=axes[row, 0].transAxes,
                       fontsize=12, fontweight="bold", va="center", ha="right",
@@ -96,7 +90,7 @@ for row, label in enumerate(ROW_LABELS):
 
 fig.subplots_adjust(hspace=0.15, wspace=0.08)
 
-cb = fig.colorbar(im, ax=axes.tolist(), orientation="horizontal",
+cb = fig.colorbar(im, ax=axes.ravel().tolist(), orientation="horizontal",
                   fraction=0.04, pad=0.08)
 cb.set_label("interaction coefficient (day⁻¹ per unit wind stress)",
              fontsize=11)
@@ -107,9 +101,6 @@ print(f"-> {OUT}")
 os.system(f"rclone copy {OUT} {RCLONE_REMOTE}")
 print("uploaded.")
 
-# summary
 for csv, title in avail:
     _, sig = grid_from(csv)
     print(f"  {title}: {int(sig.sum())}/20 significant")
-
-    #fix2
