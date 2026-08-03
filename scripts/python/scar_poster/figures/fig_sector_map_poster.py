@@ -55,14 +55,14 @@ def draw_sector(ax, lon_min, lon_max, color, lat_min=-90, lat_max=-35):
         if b_ < a_:  # strip crosses dateline; split it
             ax.fill([a_, 180, 180, a_],
                     [lat_max, lat_max, lat_min, lat_min],
-                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=1)
+                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=3)
             ax.fill([-180, b_, b_, -180],
                     [lat_max, lat_max, lat_min, lat_min],
-                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=1)
+                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=3)
         else:
             ax.fill([a_, b_, b_, a_],
                     [lat_max, lat_max, lat_min, lat_min],
-                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=1)
+                    transform=ccrs.PlateCarree(), color=color, lw=0, zorder=3)
 
 
 def sector_midpoint_lon(lon_min, lon_max):
@@ -132,7 +132,7 @@ def main():
         add_mean_sia_outline(ax)
 
     ax.gridlines(draw_labels=False, linewidth=0.3, linestyle="--",
-                 color="0.5", alpha=0.5, zorder=4,
+                 color="0.5", alpha=0.55, zorder=4,
                  xlocs=range(-180, 181, 30), ylocs=range(-80, -49, 10))
 
     for lon_deg in range(-150, 181, 30):
