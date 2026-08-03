@@ -112,4 +112,4 @@ for csv, title in avail:
     _, sig = grid_from(csv)
     print(f"  {title}: {int(sig.sum())}/20 significant")
 
-    #fix
+    #fix2
