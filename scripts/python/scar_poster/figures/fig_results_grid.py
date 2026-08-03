@@ -1,12 +1,9 @@
 """
 fig_results_grid.py
 
-Poster Fig 2: the 20-cell results grid. Sector x season, coloured by the
-interaction coefficient, hatched where significant after FDR. One row per
-test so the null is visible at a glance rather than asserted in text.
-
-Reads the CSVs already written by wind_divergence_coupling_test.py.
-Run from the directory containing them (or edit PATHS).
+Poster figure: 6-panel results grid. Sector × season, coloured by
+interaction coefficient, starred where significant after FDR.
+Clean version — no main title, no significance counts in subtitles.
 """
 
 import os
@@ -23,17 +20,21 @@ SHORT = {"Amundsen-Bellingshausen": "ABS", "Weddell": "WED",
          "Ross-Amundsen": "RA"}
 SEASONS = ["DJF", "MAM", "JJA", "SON"]
 
-# label: (csv, panel title)
+# (csv, column title, row label)
 PANELS = [
-    ("wind_divergence_binary_test.csv",              "Net divergence — pre/post 2016"),
-    ("wind_divergence_binary_test_div_positive.csv", "Lead-opening divergence — pre/post 2016"),
-    ("wind_divergence_binary_test_div_negative.csv", "Convergence — pre/post 2016"),
-    ("wind_divergence_oceanstate_test.csv",               "Net divergence — SST-conditioned"),
-    ("wind_divergence_oceanstate_test_div_positive.csv",  "Lead-opening divergence — SST-conditioned"),
-    ("wind_divergence_oceanstate_test_div_negative.csv",  "Convergence — SST-conditioned"),
+    # top row: binary pre/post
+    ("wind_divergence_binary_test.csv",              "Net"),
+    ("wind_divergence_binary_test_div_positive.csv", "Lead-opening"),
+    ("wind_divergence_binary_test_div_negative.csv", "Convergence"),
+    # bottom row: SST-conditioned
+    ("wind_divergence_oceanstate_test.csv",               "Net"),
+    ("wind_divergence_oceanstate_test_div_positive.csv",  "Lead-opening"),
+    ("wind_divergence_oceanstate_test_div_negative.csv",  "Convergence"),
 ]
+ROW_LABELS = ["Pre/post 2016", "SST-conditioned"]
 
 OUT = "fig_results_grid.png"
+RCLONE_REMOTE = "gdrive:scar_poster/"
 
 
 def grid_from(csv):
@@ -47,27 +48,26 @@ def grid_from(csv):
                 continue
             coef[i, j] = r.iloc[0]["interaction_coef"]
             sig[i, j] = bool(r.iloc[0].get("significant_fdr", False))
-    return coef, sig, df
+    return coef, sig
 
 
 avail = [(c, t) for c, t in PANELS if os.path.exists(c)]
 if not avail:
     raise SystemExit("No result CSVs found in this directory.")
 
-# common symmetric colour scale across panels so they are comparable
+# common symmetric colour scale
 allvals = []
 for c, _ in avail:
-    g, _, _ = grid_from(c)
+    g, _ = grid_from(c)
     allvals.append(g[np.isfinite(g)])
 vmax = np.percentile(np.abs(np.concatenate(allvals)), 98)
 
+nrow = 2
 ncol = 3
-nrow = int(np.ceil(len(avail) / ncol))
-fig, axes = plt.subplots(nrow, ncol, figsize=(4.1 * ncol, 3.1 * nrow))
-axes = np.atleast_1d(axes).ravel()
+fig, axes = plt.subplots(nrow, ncol, figsize=(11, 6.5))
 
-for ax, (csv, title) in zip(axes, avail):
-    coef, sig, df = grid_from(csv)
+for idx, (ax, (csv, title)) in enumerate(zip(axes.flat, avail)):
+    coef, sig = grid_from(csv)
     im = ax.imshow(coef, cmap="RdBu_r", vmin=-vmax, vmax=vmax, aspect="auto")
 
     for i in range(len(SECTORS)):
@@ -76,32 +76,38 @@ for ax, (csv, title) in zip(axes, avail):
                 ax.add_patch(plt.Rectangle((j - .5, i - .5), 1, 1, fill=False,
                                             edgecolor="k", lw=2.2))
                 ax.text(j, i, "*", ha="center", va="center",
-                        fontsize=15, fontweight="bold")
+                        fontsize=16, fontweight="bold")
 
-    n_sig = int(sig.sum())
-    n_tot = int(np.isfinite(coef).sum())
-    ax.set_xticks(range(len(SEASONS)), SEASONS, fontsize=9)
-    ax.set_yticks(range(len(SECTORS)),
-                  [SHORT[s] for s in SECTORS], fontsize=9)
-    ax.set_title(f"{title}\n{n_sig}/{n_tot} significant (FDR q=0.05)",
-                 fontsize=9.5)
+    ax.set_xticks(range(len(SEASONS)))
+    ax.set_xticklabels(SEASONS if idx >= ncol else [], fontsize=11)
+    ax.set_yticks(range(len(SECTORS)))
+    ax.set_yticklabels([SHORT[s] for s in SECTORS] if idx % ncol == 0 else [],
+                       fontsize=11)
 
-for ax in axes[len(avail):]:
-    ax.axis("off")
+    # column title only on top row
+    if idx < ncol:
+        ax.set_title(title, fontsize=13, fontweight="bold")
+
+# row labels on the left
+for row, label in enumerate(ROW_LABELS):
+    axes[row, 0].text(-0.35, 0.5, label, transform=axes[row, 0].transAxes,
+                      fontsize=12, fontweight="bold", va="center", ha="right",
+                      rotation=90)
+
+fig.subplots_adjust(hspace=0.15, wspace=0.08)
 
 cb = fig.colorbar(im, ax=axes.tolist(), orientation="horizontal",
-                  fraction=0.04, pad=0.07)
-cb.set_label("interaction coefficient  (day$^{-1}$ per unit wind stress)\n"
-             "positive = more divergence per unit wind after 2016 / at higher SST",
-             fontsize=9)
+                  fraction=0.04, pad=0.08)
+cb.set_label("interaction coefficient (day⁻¹ per unit wind stress)",
+             fontsize=11)
 
-fig.suptitle("Wind–divergence sensitivity did not shift across 2016",
-             fontsize=13, y=0.99)
 fig.savefig(OUT, dpi=200, bbox_inches="tight")
 print(f"-> {OUT}")
 
-# printed summary for the poster text / advisor meeting
-print("\nPanel summary:")
+os.system(f"rclone copy {OUT} {RCLONE_REMOTE}")
+print("uploaded.")
+
+# summary
 for csv, title in avail:
-    _, sig, df = grid_from(csv)
-    print(f"  {title}: {int(sig.sum())}/{len(df)} significant")
+    _, sig = grid_from(csv)
+    print(f"  {title}: {int(sig.sum())}/20 significant")
