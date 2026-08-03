@@ -2,20 +2,16 @@
 fig_variance_decomposition.py
 
 Poster figure: wind's share of daily area-change variance, pre vs post-2016,
-by sector. The key finding: wind's share ROSE in every sector — not because
-wind got stronger, but because the residual (non-wind) variability collapsed.
-
-Shows three things per sector:
-  - var(ΔSIA) pre vs post (total variability collapsed)
-  - wind's share pre vs post (rose everywhere)
-  - var(wind) pre vs post (unchanged — confirms the shift isn't forcing-driven)
+by sector. Sector colors match fig_sector_map_poster.py.
 """
 
+import os
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import statsmodels.formula.api as smf
 
 IN_CSV = ("/user/geog/falejandraperez/sea-ice-phase/data/merged/"
@@ -29,7 +25,23 @@ SHORT = {"Amundsen-Bellingshausen": "ABS", "Weddell": "WED",
          "King Haakon VII": "KHV", "East Antarctica": "EA",
          "Ross-Amundsen": "RA"}
 
+# match fig_sector_map_poster.py
+SECTOR_COLORS = {
+    "Amundsen-Bellingshausen": "#2196F3",
+    "Weddell":                 "#F44336",
+    "King Haakon VII":         "#FFC107",
+    "East Antarctica":         "#FF9800",
+    "Ross-Amundsen":           "#4CAF50",
+}
+
 OUT = "fig_variance_decomposition.png"
+RCLONE_REMOTE = "gdrive:scar_poster/"
+
+
+def lighten(hex_color, factor=0.45):
+    """Return a lighter version of a hex color for the post-2016 bars."""
+    rgb = mcolors.to_rgb(hex_color)
+    return tuple(c + (1 - c) * factor for c in rgb)
 
 
 def main():
@@ -56,60 +68,60 @@ def main():
 
     res = pd.DataFrame(rows)
 
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5.5))
+    bar_h = 0.35
 
-    # Panel 1: var(ΔSIA) collapsed
-    ax = axes[0]
-    for i, s in enumerate(SECTORS):
-        pre = res[(res.sector == s) & (res.period == "pre")].iloc[0]
-        post = res[(res.sector == s) & (res.period == "post")].iloc[0]
-        pct = (post.var_dSIA - pre.var_dSIA) / pre.var_dSIA * 100
-        ax.barh(i - 0.15, pre.var_dSIA / 1e9, height=0.3, color="steelblue",
-                label="pre-2016" if i == 0 else "")
-        ax.barh(i + 0.15, post.var_dSIA / 1e9, height=0.3, color="coral",
-                label="post-2016" if i == 0 else "")
-        ax.text(max(pre.var_dSIA, post.var_dSIA) / 1e9 + 0.05,
-                i, f"{pct:+.0f}%", va="center", fontsize=9)
-    ax.set_yticks(range(len(SECTORS)))
-    ax.set_yticklabels([SHORT[s] for s in SECTORS])
-    ax.set_xlabel("var(ΔSIA)  (×10⁹ km⁴)")
-    ax.set_title("Total daily variability\ncollapsed 30–70%")
-    ax.legend(fontsize=9)
+    for panel, (ax, col, xlabel, title) in enumerate(zip(axes,
+        ["var_dSIA", "wind_share", "var_wind"],
+        ["var(ΔSIA)  (×10⁹ km⁴)", "wind's share of var(ΔSIA)  (%)",
+         "var(wind stress anom)  (×10⁻⁶)"],
+        ["Total daily variability", "Wind's share",
+         "Wind variance"])):
 
-    # Panel 2: wind's share rose
-    ax = axes[1]
-    for i, s in enumerate(SECTORS):
-        pre = res[(res.sector == s) & (res.period == "pre")].iloc[0]
-        post = res[(res.sector == s) & (res.period == "post")].iloc[0]
-        ax.barh(i - 0.15, pre.wind_share, height=0.3, color="steelblue")
-        ax.barh(i + 0.15, post.wind_share, height=0.3, color="coral")
-        ax.text(max(pre.wind_share, post.wind_share) + 0.2,
-                i, f"{post.wind_share - pre.wind_share:+.1f}pp", va="center",
-                fontsize=9)
-    ax.set_yticks(range(len(SECTORS)))
-    ax.set_yticklabels([SHORT[s] for s in SECTORS])
-    ax.set_xlabel("wind's share of var(ΔSIA)  (%)")
-    ax.set_title("Wind's share rose\n(not because wind got stronger)")
+        for i, s in enumerate(SECTORS):
+            pre = res[(res.sector == s) & (res.period == "pre")].iloc[0]
+            post = res[(res.sector == s) & (res.period == "post")].iloc[0]
+            color = SECTOR_COLORS[s]
+            light = lighten(color)
 
-    # Panel 3: var(wind) unchanged
-    ax = axes[2]
-    for i, s in enumerate(SECTORS):
-        pre = res[(res.sector == s) & (res.period == "pre")].iloc[0]
-        post = res[(res.sector == s) & (res.period == "post")].iloc[0]
-        ax.barh(i - 0.15, pre.var_wind * 1e6, height=0.3, color="steelblue")
-        ax.barh(i + 0.15, post.var_wind * 1e6, height=0.3, color="coral")
-    ax.set_yticks(range(len(SECTORS)))
-    ax.set_yticklabels([SHORT[s] for s in SECTORS])
-    ax.set_xlabel("var(wind stress anom)  (×10⁻⁶)")
-    ax.set_title("Wind variance\nunchanged")
+            if col == "var_dSIA":
+                v_pre, v_post = pre[col] / 1e9, post[col] / 1e9
+            elif col == "var_wind":
+                v_pre, v_post = pre[col] * 1e6, post[col] * 1e6
+            else:
+                v_pre, v_post = pre[col], post[col]
 
-    fig.suptitle("The atmosphere pushed steadily — the system got quieter",
-                 fontsize=13, y=1.02)
+            ax.barh(i + bar_h/2, v_pre, height=bar_h, color=color,
+                    edgecolor="none",
+                    label="pre-2016" if i == 0 and panel == 0 else "")
+            ax.barh(i - bar_h/2, v_post, height=bar_h, color=light,
+                    edgecolor=color, linewidth=1.2,
+                    label="post-2016" if i == 0 and panel == 0 else "")
+
+            if col == "var_dSIA":
+                pct = (post[col] - pre[col]) / pre[col] * 100
+                ax.text(max(v_pre, v_post) + 0.05, i,
+                        f"{pct:+.0f}%", va="center", fontsize=11,
+                        fontweight="bold")
+            elif col == "wind_share":
+                diff = post[col] - pre[col]
+                ax.text(max(v_pre, v_post) + 0.2, i,
+                        f"{diff:+.1f}pp", va="center", fontsize=11)
+
+        ax.set_yticks(range(len(SECTORS)))
+        ax.set_yticklabels([SHORT[s] for s in SECTORS], fontsize=13)
+        ax.set_xlabel(xlabel, fontsize=12)
+        ax.set_title(title, fontsize=14, fontweight="bold")
+
+    axes[0].legend(fontsize=11, loc="lower right")
+
     fig.tight_layout()
     fig.savefig(OUT, dpi=200, bbox_inches="tight")
     print(f"-> {OUT}")
 
-    # print the table too
+    os.system(f"rclone copy {OUT} {RCLONE_REMOTE}")
+    print("uploaded.")
+
     print(res[["short", "period", "var_dSIA", "wind_share",
                "resid_share"]].to_string(index=False))
 
