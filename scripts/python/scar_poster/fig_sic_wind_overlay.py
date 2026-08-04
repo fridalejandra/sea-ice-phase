@@ -30,10 +30,10 @@ SEASONS = {
 }
 
 QUIVER_SKIP = 12
-QUIVER_SCALE = 0.025
+QUIVER_SCALE = 0.008
 QUIVER_WIDTH = 0.0025
-QUIVER_COLOR = "0.2"
-QUIVER_ALPHA = 0.65
+QUIVER_COLOR = "black"
+QUIVER_ALPHA = 0.8
 
 EASE_CRS = ccrs.LambertAzimuthalEqualArea(
     central_latitude=-90.0, central_longitude=0.0
