@@ -2,12 +2,9 @@
 fig_sic_wind_overlay.py
 
 Poster section 1: SIC difference (color) + wind stress difference (vectors),
-two panels — March (minimum extent) and September (maximum extent).
-
-VECTOR FIX: tau_x/tau_y are eastward/northward in geographic coordinates.
-Must plot with transform=PlateCarree so cartopy rotates them into the
-map projection correctly. Positions converted to lat/lon from the EASE
-grid for the quiver call.
+two panels — DJF and MAM composites. These are the seasons where the wind
+stress trend is actually significant (Mann-Kendall, FDR-corrected), so the
+figure matches the stated result rather than an arbitrary month choice.
 """
 
 import os
@@ -26,8 +23,11 @@ SIC_VAR = "sic"
 
 SPLIT_YEAR = 2016
 EXCLUDE_YEARS = [1978, 1987, 1991, 1995]
-MONTHS = [3, 9]
-MONTH_NAMES = {3: "March (min extent)", 9: "September (max extent)"}
+
+SEASONS = {
+    "DJF": [12, 1, 2],
+    "MAM": [3, 4, 5],
+}
 
 QUIVER_SKIP = 12
 QUIVER_SCALE = 0.025
@@ -51,12 +51,12 @@ def _tname(da):
     raise KeyError(f"No time dim in {list(da.dims)}")
 
 
-def monthly_prepost_field(ds, var, month):
+def seasonal_prepost_field(ds, var, months):
     da = ds[var]
     tn = _tname(da)
     yrs = da[tn].dt.year
     da = da.sel({tn: ~yrs.isin(EXCLUDE_YEARS)})
-    sub = da.sel({tn: da[tn].dt.month == month})
+    sub = da.sel({tn: da[tn].dt.month.isin(months)})
     ym = sub.groupby(sub[tn].dt.year).mean(dim=tn).load()
     years = ym["year"].values
     pre = np.nanmean(ym.values[years < SPLIT_YEAR], axis=0)
@@ -71,15 +71,13 @@ def main():
 
     x_sic = sic_ds["x"].values
     y_sic = sic_ds["y"].values
+    lat2d = latlon_ds["lat"].values
+    lon2d = latlon_ds["lon"].values
 
-    # 2D lat/lon for vector positioning — vectors need geographic coords
-    lat2d = latlon_ds["lat"].values   # (y, x)
-    lon2d = latlon_ds["lon"].values   # (y, x)
-
-    # compute global vmax across both months
+    # global vmax across both seasons
     all_diffs = []
-    for month in MONTHS:
-        pre, post = monthly_prepost_field(sic_ds, SIC_VAR, month)
+    for season, months in SEASONS.items():
+        pre, post = seasonal_prepost_field(sic_ds, SIC_VAR, months)
         all_diffs.append(post - pre)
     vmax_sic = np.nanpercentile(np.abs(np.concatenate(
         [d.ravel() for d in all_diffs])), 98)
@@ -87,19 +85,18 @@ def main():
     fig, axes = plt.subplots(1, 2, figsize=(14, 7),
                              subplot_kw={"projection": EASE_CRS})
 
-    for ax, month in zip(axes, MONTHS):
-        # SIC difference — plot on EASE grid (pcolormesh)
-        sic_pre, sic_post = monthly_prepost_field(sic_ds, SIC_VAR, month)
+    for ax, (season, months) in zip(axes, SEASONS.items()):
+        # SIC difference
+        sic_pre, sic_post = seasonal_prepost_field(sic_ds, SIC_VAR, months)
         sic_diff = sic_post - sic_pre
 
         im = ax.pcolormesh(x_sic, y_sic, sic_diff, transform=EASE_CRS,
                            cmap="RdBu_r", vmin=-vmax_sic, vmax=vmax_sic,
                            shading="auto", zorder=1)
 
-        # wind stress vectors — use lat/lon + PlateCarree so cartopy
-        # rotates geographic east/north into projection coordinates
-        tx_pre, tx_post = monthly_prepost_field(wind_ds, "tau_x", month)
-        ty_pre, ty_post = monthly_prepost_field(wind_ds, "tau_y", month)
+        # wind stress vectors
+        tx_pre, tx_post = seasonal_prepost_field(wind_ds, "tau_x", months)
+        ty_pre, ty_post = seasonal_prepost_field(wind_ds, "tau_y", months)
         dtx = tx_post - tx_pre
         dty = ty_post - ty_pre
 
@@ -109,7 +106,6 @@ def main():
         u_sub = dtx[::s, ::s]
         v_sub = dty[::s, ::s]
 
-        # mask NaN positions
         valid = np.isfinite(lon_sub) & np.isfinite(lat_sub) & \
                 np.isfinite(u_sub) & np.isfinite(v_sub)
         lon_sub = np.where(valid, lon_sub, np.nan)
@@ -127,18 +123,13 @@ def main():
                        edgecolor="none")
         ax.coastlines(resolution="50m", linewidth=0.5, zorder=5)
         ax.set_extent([-180, 180, -90, -50], crs=PLATE)
-        ax.set_title(MONTH_NAMES[month], fontsize=13)
+        ax.set_title(season, fontsize=15, fontweight="bold")
 
-    # reference arrow
     axes[1].quiverkey(q, 0.85, 0.02, 0.002, "0.002 Pa",
                       labelpos="E", fontproperties={"size": 10})
 
-    # shared colorbar
     fig.colorbar(im, ax=axes, orientation="horizontal", fraction=0.04,
                  pad=0.06, label="ΔSIC (fraction, post − pre)")
-
-    fig.suptitle("Sea ice declined (color) while wind stress changed (vectors)",
-                 fontsize=15, y=0.98)
 
     fig.savefig(OUT, dpi=200, bbox_inches="tight")
     print(f"-> {OUT}")
