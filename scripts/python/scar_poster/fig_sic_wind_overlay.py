@@ -30,7 +30,7 @@ SEASONS = {
 }
 
 QUIVER_SKIP = 12
-QUIVER_SCALE = 0.008
+QUIVER_SCALE = 0.03
 QUIVER_WIDTH = 0.0025
 QUIVER_COLOR = "black"
 QUIVER_ALPHA = 0.8
@@ -125,7 +125,7 @@ def main():
         ax.set_extent([-180, 180, -90, -50], crs=PLATE)
         ax.set_title(season, fontsize=15, fontweight="bold")
 
-    axes[1].quiverkey(q, 0.85, 0.02, 0.002, "0.002 Pa",
+    axes[1].quiverkey(q, 0.85, 0.02, 0.02, "0.02 Pa",
                       labelpos="E", fontproperties={"size": 10})
 
     fig.colorbar(im, ax=axes, orientation="horizontal", fraction=0.04,
