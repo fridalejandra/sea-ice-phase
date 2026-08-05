@@ -1,9 +1,10 @@
 """
-fig_results_grid.py
+fig_results_grid_sst_supplementary.py
 
-Poster figure: 6-panel results grid. Sector × season, coloured by
-interaction coefficient, starred where significant after FDR.
-Clean version — no main title, no significance counts in subtitles.
+SUPPLEMENTARY figure: the SST-conditioned row that was dropped from the
+main poster results grid. Same 3 panels (Net / Divergence / Convergence),
+but the interaction term is wind x SST instead of wind x post.
+Uploaded to gdrive:scar_poster/supplementary/.
 """
 
 import os
@@ -21,14 +22,13 @@ SHORT = {"Amundsen-Bellingshausen": "ABS", "Weddell": "WED",
 SEASONS = ["DJF", "MAM", "JJA", "SON"]
 
 PANELS = [
-    ("wind_divergence_binary_test.csv",              "Net"),
-    ("wind_divergence_binary_test_div_positive.csv", "Divergence"),
-    ("wind_divergence_binary_test_div_negative.csv", "Convergence"),
+    ("wind_divergence_oceanstate_test.csv",              "Net"),
+    ("wind_divergence_oceanstate_test_div_positive.csv", "Divergence"),
+    ("wind_divergence_oceanstate_test_div_negative.csv", "Convergence"),
 ]
-ROW_LABELS = ["Pre/post 2016"]
 
-OUT = "fig_results_grid.png"
-RCLONE_REMOTE = "gdrive:scar_poster/"
+OUT = "fig_results_grid_sst_conditioned_supplementary.png"
+RCLONE_REMOTE = "gdrive:scar_poster/supplementary/"
 
 
 def grid_from(csv):
@@ -47,7 +47,7 @@ def grid_from(csv):
 
 avail = [(c, t) for c, t in PANELS if os.path.exists(c)]
 if not avail:
-    raise SystemExit("No result CSVs found in this directory.")
+    raise SystemExit("No SST-conditioned result CSVs found in this directory.")
 
 allvals = []
 for c, _ in avail:
@@ -55,9 +55,7 @@ for c, _ in avail:
     allvals.append(g[np.isfinite(g)])
 vmax = np.percentile(np.abs(np.concatenate(allvals)), 98)
 
-nrow = 1
-ncol = 3
-fig, axes = plt.subplots(nrow, ncol, figsize=(13, 4.2))
+fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
 
 for idx, (ax, (csv, title)) in enumerate(zip(axes, avail)):
     coef, sig = grid_from(csv)
@@ -72,27 +70,24 @@ for idx, (ax, (csv, title)) in enumerate(zip(axes, avail)):
                         fontsize=16, fontweight="bold")
 
     ax.set_xticks(range(len(SEASONS)))
-    ax.set_xticklabels(SEASONS, fontsize=11)  # always show -- single row
+    ax.set_xticklabels(SEASONS, fontsize=11)
     ax.set_yticks(range(len(SECTORS)))
-    ax.set_yticklabels([SHORT[s] for s in SECTORS] if idx == 0 else [],
-                       fontsize=11)
+    ax.set_yticklabels([SHORT[s] for s in SECTORS] if idx == 0 else [], fontsize=11)
+    ax.set_title(title, fontsize=14, fontweight="bold")
 
-    ax.set_title(title, fontsize=14, fontweight="bold")  # always -- single row
-
-# single row now -- axes is 1D, no row label needed (panels are self-explanatory)
-
+fig.suptitle("SST-conditioned (supplementary)", fontsize=13, y=1.03)
 fig.subplots_adjust(hspace=0.15, wspace=0.08)
 
 cb = fig.colorbar(im, ax=axes.ravel().tolist(), orientation="vertical",
                   fraction=0.025, pad=0.02)
-cb.set_label("interaction coefficient (day⁻¹ per unit wind stress)",
-             fontsize=11)
+cb.set_label("interaction coefficient (day⁻¹ per unit SST anomaly)", fontsize=11)
 
 fig.savefig(OUT, dpi=200, bbox_inches="tight")
 print(f"-> {OUT}")
 
+os.system(f"rclone mkdir {RCLONE_REMOTE}")
 os.system(f"rclone copy {OUT} {RCLONE_REMOTE}")
-print("uploaded.")
+print("uploaded to supplementary.")
 
 for csv, title in avail:
     _, sig = grid_from(csv)
