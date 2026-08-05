@@ -29,11 +29,11 @@ SEASONS = {
     "MAM": [3, 4, 5],
 }
 
-QUIVER_SKIP = 16
-QUIVER_SCALE = 0.8
+QUIVER_SKIP = 12
+QUIVER_SCALE = 0.025
 QUIVER_WIDTH = 0.0025
-QUIVER_COLOR = "black"
-QUIVER_ALPHA = 0.8
+QUIVER_COLOR = "0.2"
+QUIVER_ALPHA = 0.65
 
 EASE_CRS = ccrs.LambertAzimuthalEqualArea(
     central_latitude=-90.0, central_longitude=0.0
@@ -125,11 +125,11 @@ def main():
         ax.set_extent([-180, 180, -90, -50], crs=PLATE)
         ax.set_title(season, fontsize=15, fontweight="bold")
 
-    axes[1].quiverkey(q, 0.85, 0.02, 0.02, "0.02 Pa",
+    axes[1].quiverkey(q, 0.85, 0.02, 0.002, "0.002 Pa",
                       labelpos="E", fontproperties={"size": 10})
 
-    fig.colorbar(im, ax=axes, orientation="horizontal", fraction=0.04,
-                 pad=0.06, label="ΔSIC (fraction, post − pre)")
+    fig.colorbar(im, ax=axes, orientation="vertical", fraction=0.025,
+                 pad=0.02, label="ΔSIC (fraction, post − pre)")
 
     fig.savefig(OUT, dpi=200, bbox_inches="tight")
     print(f"-> {OUT}")

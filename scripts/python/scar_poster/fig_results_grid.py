@@ -90,8 +90,8 @@ for row, label in enumerate(ROW_LABELS):
 
 fig.subplots_adjust(hspace=0.15, wspace=0.08)
 
-cb = fig.colorbar(im, ax=axes.ravel().tolist(), orientation="horizontal",
-                  fraction=0.04, pad=0.08)
+cb = fig.colorbar(im, ax=axes.ravel().tolist(), orientation="vertical",
+                  fraction=0.025, pad=0.02)
 cb.set_label("interaction coefficient (day⁻¹ per unit wind stress)",
              fontsize=11)
 
