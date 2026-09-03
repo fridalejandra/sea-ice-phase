@@ -1,24 +1,23 @@
 """
-Two-panel detection schematic from real Bootstrap SIC data.
+Figure 1: detection schematic from real Bootstrap SIC data. Three panels.
 
-Panel (a): a clean interior seasonal pixel-year. Daily c(t), the 15% threshold,
-the completed k-day run below theta (blue shading), the k-day run above theta
-that begins at Freeze Start (orange shading), FS and MS marked.
-Panel (b): a high-crossing-count pixel-year, showing repeated transient
-crossings that the persistence criterion rejects.
+(a) Circumpolar SIE annual cycle for the chosen ice year (Feb 15 to Feb 14),
+    the familiar smooth aggregate.
+(b) A clean interior seasonal pixel: daily c(t), theta, the completed k-day
+    run on the departing side (shaded, state color) and the qualifying k-day
+    run on the arriving side (shaded), FS and MS marked at run starts.
+(c) A repeated-crossing pixel: same construction, showing the transient
+    crossings the persistence criterion rejects.
 
-Pixel-years are chosen programmatically so the caption can state the rule:
-(a) among pixels whose series crosses 15% exactly twice in the chosen year,
-    the one whose FS date is the median of that set;
-(b) the pixel with the maximum number of 15% crossings in the same year.
+Pixel selection rule (stated in caption): among pixels crossing theta exactly
+twice within the ice year, panel (b) is the pixel with the median FS date;
+panel (c) is the pixel with the maximum crossing count.
 
-Usage on the cluster (from sea-ice-phase/):
-    python figures/fig_schematic_detection.py \
-        --nc data/merged/merged_bootstrap_SH_latest.nc --year 2019
-Optional: --pixel-a IY,IX --pixel-b IY,IX to override the automatic choice.
-
-Read-only with respect to the detection pipeline; safe to run alongside
-anything except another job holding the merged file open for writing.
+Usage:
+    python fig_schematic_detection.py \
+        --nc /path/to/merged_bootstrap_SH_latest.nc --year 2019 \
+        --out schematic_detection.png
+    Optional: --pixel-b IY,IX --pixel-c IY,IX
 """
 
 import argparse
@@ -26,64 +25,48 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 THETA = 0.15
 K = 5
 GREY = "0.35"
+CELL_KM2 = 25.0 * 25.0
+COL_BELOW = "#377eb8"   # below-theta state
+COL_ABOVE = "#e6550d"   # above-theta state
+COL_LINE = "#54278f"
 
 def unpack(da):
-    """Mask flags (1100 missing, 1200 land) and scale to fraction."""
     v = da.where(da < 1050)
     if float(v.max()) > 1.5:
         v = v / 1000.0
     return v
 
-def runs(mask, k):
-    """Start indices of runs of >= k consecutive True."""
-    m = np.asarray(mask, dtype=bool)
-    if m.size < k:
-        return np.array([], dtype=int)
-    starts = []
-    count = 0
-    for i, val in enumerate(m):
-        count = count + 1 if val else 0
-        if count == k:
-            starts.append(i - k + 1)
-    # keep only run beginnings (previous day not part of a qualifying run)
-    out = []
-    for s in starts:
-        if not out or s > out[-1]:
-            # collapse consecutive window starts within one long run
-            if out and s == out[-1] + 1 and m[out[-1]:s + k].all():
-                continue
-            out.append(s)
-    return np.array(out, dtype=int)
+def run_segments(mask, k):
+    """(start, end) inclusive of maximal runs of True with length >= k."""
+    m = np.asarray(mask, dtype=bool).astype(int)
+    if m.size == 0:
+        return []
+    d = np.diff(np.concatenate([[0], m, [0]]))
+    starts = np.where(d == 1)[0]
+    ends = np.where(d == -1)[0] - 1
+    return [(s, e) for s, e in zip(starts, ends) if e - s + 1 >= k]
 
-def detect_fs(c, k=K, theta=THETA):
-    """First start of a k-run above theta preceded by a completed k-run below."""
-    above = runs(c >= theta, k)
-    below = runs(c <= theta, k)
-    for t in above:
-        if any(b + k <= t for b in below):
-            first_below = below[below + k <= t]
-            return t, first_below[0]
-    return None, None
-
-
-def detect_ms(c, k=K, theta=THETA):
-    """First start of a k-run below theta preceded by a completed k-run above.
-    Searched after the FS-side maximum so the same calendar-year series can
-    illustrate both transitions in one panel (the paper's true MS search uses
-    the Aug 15 to Feb 28 window; for a single-year schematic we search from
-    day 200 onward)."""
-    c2 = np.asarray(c)
-    start = 200
-    above = runs(c2[start:] >= theta, k) + start
-    below = runs(c2[start:] <= theta, k) + start
-    for t in below:
-        if any(a + k <= t for a in above):
-            first_above = above[above + k <= t]
-            return t, first_above[0]
+def detect(c, order, search_from=0, search_to=None, k=K, theta=THETA):
+    """order='fs': below-run completed, then above-run begins (FS at its start).
+    order='ms': above-run completed, then below-run begins. Returns
+    (date_idx, precondition_run) with runs as (start, end) tuples."""
+    c = np.asarray(c)
+    above = run_segments(c >= theta, k)
+    below = run_segments(c <= theta, k)
+    first, second = (below, above) if order == "fs" else (above, below)
+    if search_to is None:
+        search_to = len(c)
+    for s2, e2 in second:
+        if s2 < search_from or s2 > search_to:
+            continue
+        pre = [r for r in first if r[0] + k - 1 < s2]
+        if pre:
+            return s2, pre[-1]
     return None, None
 
 def crossings(c, theta=THETA):
@@ -91,100 +74,119 @@ def crossings(c, theta=THETA):
     s[s == 0] = 1
     return int(np.sum(s[1:] != s[:-1]))
 
-def pick_pixels(ds, year, stride=4):
-    """Programmatic pixel choice on a strided subsample for speed."""
-    t = pd.to_datetime(ds.time.values)
-    sel = (t >= f"{year}-02-15") & (t <= f"{year}-12-31")
-    c = unpack(ds["N07_ICECON"].isel(time=np.where(sel)[0])).values
-    ny, nx = c.shape[1], c.shape[2]
+def pick_pixels(c_all, stride=4):
+    ny, nx = c_all.shape[1], c_all.shape[2]
     clean, messy, max_cross = [], None, -1
     for iy in range(0, ny, stride):
         for ix in range(0, nx, stride):
-            series = c[:, iy, ix]
-            if np.isnan(series).mean() > 0.2:
+            s = c_all[:, iy, ix]
+            if np.isnan(s).mean() > 0.2:
                 continue
-            if np.nanmin(series) > 0.10 or np.nanmax(series) < 0.80:
+            if np.nanmin(s) > 0.10 or np.nanmax(s) < 0.80:
                 continue
-            n = crossings(np.nan_to_num(series, nan=0.0))
+            sz = np.nan_to_num(s, nan=0.0)
+            n = crossings(sz)
             if n == 2:
-                fs, _ = detect_fs(np.nan_to_num(series, nan=0.0))
+                fs, _ = detect(sz, "fs")
                 if fs is not None:
                     clean.append((fs, iy, ix))
             if n > max_cross:
                 max_cross, messy = n, (iy, ix)
     clean.sort()
-    a = clean[len(clean) // 2][1:] if clean else None
-    return a, messy, max_cross
+    b = clean[len(clean) // 2][1:] if clean else None
+    return b, messy, max_cross
 
-def shade_pair(ax, days, first, second, color_first, color_second,
-               mark, label):
-    if first is not None:
-        ax.axvspan(days[first], days[first + K - 1],
-                   color=color_first, alpha=0.18, lw=0)
-    if second is not None:
-        ax.axvspan(days[second], days[second + K - 1],
-                   color=color_second, alpha=0.18, lw=0)
-        ax.axvline(days[second], color=mark, lw=1.2)
-        ax.annotate(label, xy=(days[second], 1.0),
-                    xytext=(days[second], 1.06),
+def shade(ax, dates, run, color):
+    if run is not None:
+        ax.axvspan(dates[run[0]], dates[min(run[1], len(dates) - 1)],
+                   color=color, alpha=0.18, lw=0)
+
+def mark(ax, dates, idx, color, label):
+    if idx is not None:
+        ax.axvline(dates[idx], color=color, lw=1.3)
+        ax.annotate(label, xy=(dates[idx], 1.0), xytext=(dates[idx], 1.05),
                     ha="center", fontsize=8, fontweight="bold",
-                    color=mark, annotation_clip=False)
+                    color=color, annotation_clip=False)
 
-def style(ax, letter, title):
+def style(ax, letter, title, ylab=None):
     ax.set_title(title, fontweight="bold", fontsize=9)
-    ax.text(0.02, 0.95, letter, transform=ax.transAxes,
+    ax.text(0.03, 0.96, letter, transform=ax.transAxes,
             fontweight="bold", fontsize=11, va="top")
-    for lab in (ax.xaxis.label, ax.yaxis.label):
-        lab.set_fontweight("bold")
-        lab.set_color(GREY)
-    ax.tick_params(colors=GREY, labelsize=8)
+    if ylab:
+        ax.set_ylabel(ylab, fontweight="bold", color=GREY)
+    ax.xaxis.label.set_fontweight("bold")
+    ax.xaxis.label.set_color(GREY)
+    ax.yaxis.label.set_fontweight("bold")
+    ax.yaxis.label.set_color(GREY)
+    ax.tick_params(colors=GREY, labelsize=7.5)
     for s in ax.spines.values():
         s.set_color(GREY)
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--nc", required=True)
     p.add_argument("--year", type=int, default=2019)
-    p.add_argument("--pixel-a", default=None)
     p.add_argument("--pixel-b", default=None)
-    p.add_argument("--out", default="figures/schematic_detection.png")
+    p.add_argument("--pixel-c", default=None)
+    p.add_argument("--out", default="schematic_detection.png")
     args = p.parse_args()
 
     ds = xr.open_dataset(args.nc)
     t = pd.to_datetime(ds.time.values)
-    sel = np.where((t >= f"{args.year}-01-01") & (t <= f"{args.year}-12-31"))[0]
-    days = t[sel].dayofyear
+    y = args.year
+    sel = np.where((t >= f"{y}-02-15") & (t <= f"{y + 1}-02-28"))[0]
+    dates = t[sel]
+    ms_from = int(np.searchsorted(dates, pd.Timestamp(f"{y}-08-15")))
+    fs_to = int(np.searchsorted(dates, pd.Timestamp(f"{y}-09-30")))
 
-    if args.pixel_a and args.pixel_b:
-        pa = tuple(int(v) for v in args.pixel_a.split(","))
+    c_all = unpack(ds["N07_ICECON"].isel(time=sel)).values
+
+    if args.pixel_b and args.pixel_c:
         pb = tuple(int(v) for v in args.pixel_b.split(","))
-        ncross = None
+        pc = tuple(int(v) for v in args.pixel_c.split(","))
     else:
-        pa, pb, ncross = pick_pixels(ds, args.year)
-        print(f"panel a pixel (iy,ix) = {pa}, panel b = {pb}, "
-              f"max crossings = {ncross}")
+        pb, pc, ncr = pick_pixels(c_all)
+        print(f"panel b pixel (iy,ix) = {pb}, panel c = {pc}, "
+              f"max crossings = {ncr}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(6.9, 3.1), sharey=True)
+    sie = np.nansum(c_all >= THETA, axis=(1, 2)) * CELL_KM2 / 1e6
+
+    fig, axes = plt.subplots(1, 3, figsize=(6.9, 2.5))
+
+    ax = axes[0]
+    ax.plot(dates, sie, lw=1.2, color=COL_LINE)
+    style(ax, "(a)", "Circumpolar", "SIE (10$^6$ km$^2$)")
+
     for ax, px, letter, title in zip(
-            axes, (pa, pb), ("(a)", "(b)"),
+            axes[1:], (pb, pc), ("(b)", "(c)"),
             ("Interior seasonal pixel", "Repeated-crossing pixel")):
-        c = unpack(ds["N07_ICECON"].isel(
-            time=sel, y=px[0], x=px[1])).values
+        c = c_all[:, px[0], px[1]]
         cz = np.nan_to_num(c, nan=0.0)
-        ax.plot(days, c, lw=0.9, color="#54278f")
+        ax.plot(dates, c, lw=0.8, color=COL_LINE)
         ax.axhline(THETA, color=GREY, lw=0.8, ls="--")
-        d = np.asarray(days)
-        fs, fb = detect_fs(cz)
-        shade_pair(ax, d, fb, fs, "#377eb8", "#e6550d", "#e6550d", "FS")
-        ms, ma = detect_ms(cz)
-        shade_pair(ax, d, ma, ms, "#e6550d", "#377eb8", "#377eb8", "MS")
-        ax.set_xlabel("Day of year")
-        ax.set_ylim(-0.02, 1.12)
+        fs, fs_pre = detect(cz, "fs", search_to=fs_to)
+        ms, ms_pre = detect(cz, "ms", search_from=ms_from)
+        shade(ax, dates, fs_pre, COL_BELOW)
+        if fs is not None:
+            shade(ax, dates, (fs, fs + K - 1), COL_ABOVE)
+        shade(ax, dates, ms_pre, COL_ABOVE)
+        if ms is not None:
+            shade(ax, dates, (ms, ms + K - 1), COL_BELOW)
+        mark(ax, dates, fs, COL_ABOVE, "FS")
+        mark(ax, dates, ms, COL_BELOW, "MS")
+        for (i0, i1), col, yy in (((0, fs_to), COL_ABOVE, -0.10),
+                                  ((ms_from, len(dates) - 1), COL_BELOW, -0.16)):
+            ax.plot([dates[i0], dates[i1]], [yy, yy], lw=2.0,
+                    color=col, alpha=0.45, solid_capstyle="butt",
+                    clip_on=False)
+        ax.set_ylim(-0.20, 1.12)
         style(ax, letter, title)
-        n = crossings(cz)
-        ax.text(0.98, 0.05, f"{n} crossings of θ",
-                transform=ax.transAxes, ha="right", fontsize=8, color=GREY)
-    axes[0].set_ylabel("SIC (fraction)")
+        ax.text(0.03, 0.78, f"{crossings(cz)} crossings of " + r"$\theta$",
+                transform=ax.transAxes, fontsize=7.5, color=GREY)
+    axes[1].set_ylabel("SIC (fraction)", fontweight="bold", color=GREY)
+
     fig.tight_layout()
     fig.savefig(args.out, dpi=300)
     print(f"wrote {args.out}")
