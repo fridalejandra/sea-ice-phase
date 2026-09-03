@@ -112,8 +112,8 @@ def mark(ax, dates, idx, c, color, label):
 
 def style(ax, letter, title, ylab=None):
     ax.set_title(title, fontweight="bold", fontsize=9)
-    ax.text(0.03, 0.96, letter, transform=ax.transAxes,
-            fontweight="bold", fontsize=11, va="top")
+    ax.text(-0.04, 1.10, letter, transform=ax.transAxes,
+            fontweight="bold", fontsize=11, va="bottom", ha="left")
     if ylab:
         ax.set_ylabel(ylab, fontweight="bold", color=GREY)
     ax.xaxis.label.set_fontweight("bold")
@@ -153,7 +153,7 @@ def main():
         print(f"panel b pixel (iy,ix) = {pb}, panel c = {pc}, "
               f"max crossings = {ncr}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(6.9, 2.8), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(6.9, 3.3), sharey=True)
 
     for ax, px, letter, title in zip(
             axes, (pb, pc), ("(a)", "(b)"),
@@ -206,9 +206,9 @@ def main():
                       mec="white", label="detected MS"),
     ]
     fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=7,
-               frameon=False, bbox_to_anchor=(0.5, -0.02))
+               frameon=False, bbox_to_anchor=(0.5, 0.0))
 
-    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    fig.tight_layout(rect=(0, 0.16, 1, 0.98))
     fig.savefig(args.out, dpi=300)
     print(f"wrote {args.out}")
 
