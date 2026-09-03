@@ -99,7 +99,7 @@ def pick_pixels(c_all, stride=4):
 def shade(ax, dates, run, color):
     if run is not None:
         ax.axvspan(dates[run[0]], dates[min(run[1], len(dates) - 1)],
-                   color=color, alpha=0.18, lw=0)
+                   color=color, alpha=0.35, lw=0)
 
 def mark(ax, dates, idx, color, label):
     if idx is not None:
@@ -151,16 +151,10 @@ def main():
         print(f"panel b pixel (iy,ix) = {pb}, panel c = {pc}, "
               f"max crossings = {ncr}")
 
-    sie = np.nansum(c_all >= THETA, axis=(1, 2)) * CELL_KM2 / 1e6
-
-    fig, axes = plt.subplots(1, 3, figsize=(6.9, 2.5))
-
-    ax = axes[0]
-    ax.plot(dates, sie, lw=1.2, color=COL_LINE)
-    style(ax, "(a)", "Circumpolar", "SIE (10$^6$ km$^2$)")
+    fig, axes = plt.subplots(1, 2, figsize=(6.9, 2.8), sharey=True)
 
     for ax, px, letter, title in zip(
-            axes[1:], (pb, pc), ("(b)", "(c)"),
+            axes, (pb, pc), ("(a)", "(b)"),
             ("Interior seasonal pixel", "Repeated-crossing pixel")):
         c = c_all[:, px[0], px[1]]
         cz = np.nan_to_num(c, nan=0.0)
@@ -168,24 +162,22 @@ def main():
         ax.axhline(THETA, color=GREY, lw=0.8, ls="--")
         fs, fs_pre = detect(cz, "fs", search_to=fs_to)
         ms, ms_pre = detect(cz, "ms", search_from=ms_from)
-        shade(ax, dates, fs_pre, COL_BELOW)
+        if fs_pre is not None:
+            shade(ax, dates, (fs_pre[1] - K + 1, fs_pre[1]), COL_BELOW)
         if fs is not None:
             shade(ax, dates, (fs, fs + K - 1), COL_ABOVE)
-        shade(ax, dates, ms_pre, COL_ABOVE)
+        if ms_pre is not None:
+            shade(ax, dates, (ms_pre[1] - K + 1, ms_pre[1]), COL_ABOVE)
         if ms is not None:
             shade(ax, dates, (ms, ms + K - 1), COL_BELOW)
         mark(ax, dates, fs, COL_ABOVE, "FS")
         mark(ax, dates, ms, COL_BELOW, "MS")
-        for (i0, i1), col, yy in (((0, fs_to), COL_ABOVE, -0.10),
-                                  ((ms_from, len(dates) - 1), COL_BELOW, -0.16)):
-            ax.plot([dates[i0], dates[i1]], [yy, yy], lw=2.0,
-                    color=col, alpha=0.45, solid_capstyle="butt",
-                    clip_on=False)
-        ax.set_ylim(-0.20, 1.12)
+        ax.set_ylim(-0.02, 1.12)
         style(ax, letter, title)
-        ax.text(0.03, 0.78, f"{crossings(cz)} crossings of " + r"$\theta$",
-                transform=ax.transAxes, fontsize=7.5, color=GREY)
-    axes[1].set_ylabel("SIC (fraction)", fontweight="bold", color=GREY)
+        ax.text(0.03, 0.86, f"{crossings(cz)} crossings of " + r"$\theta$",
+                transform=ax.transAxes, fontsize=7.5, color=GREY,
+                bbox=dict(fc="white", ec="none", alpha=0.7, pad=1.5))
+    axes[0].set_ylabel("SIC (fraction)", fontweight="bold", color=GREY)
 
     fig.tight_layout()
     fig.savefig(args.out, dpi=300)
