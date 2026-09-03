@@ -41,4 +41,3 @@ for yr in YEARS:
             out,
         )
         d += timedelta(days=1)
-why

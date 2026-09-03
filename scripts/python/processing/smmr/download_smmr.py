@@ -1,27 +1,37 @@
-import os
-from datetime import datetime
+# download_smmr.py
+
 import earthaccess
+from datetime import datetime
 
-# ---- CONFIG ---- #
-TEMP_DOWNLOAD_DIR = "/Users/fridaperez/Developer/repos/sea-ice-phase/data/bootstrap_smmr/test_downloads/"
-start_date = "2024-01-01"
-end_date = datetime.today().strftime("%Y-%m-%d")
-
-# ---- LOGIN ---- #
+# === AUTHENTICATION ===
 earthaccess.login()
 
-# ---- SEARCH & DOWNLOAD ---- #
+# === CONFIG ===
+
+# Date range
+# For a full redownload from scratch use 1978-10-01
+# For incremental updates change start_date to day after last granule
+start_date = "1978-10-01"
+end_date   = datetime.today().strftime("%Y-%m-%d")
+
+# Output directory
+output_dir = "/user/geog/falejandraperez/sea-ice-phase/data/smmr/raw/"
+
+# === SEARCH ===
+
+print(f"Searching for NSIDC-0079 granules from {start_date} to {end_date}...")
 results = earthaccess.search_data(
     short_name="NSIDC-0079",
     temporal=(start_date, end_date),
-    bounding_box=(-180, -90, 180, -50),
+    bounding_box=(-180, -90, 180, -50)  # Southern Hemisphere
 )
 
 print(f"Found {len(results)} granules.")
-downloaded_files = earthaccess.download(results, TEMP_DOWNLOAD_DIR)
 
-# ---- FILTER & DELETE NON-SH ---- #
-for f in downloaded_files:
-    if "PS_N25km" in os.path.basename(f):  # Northern Hemisphere
-        print("❌ Deleting NH granule:", os.path.basename(f))
-        os.remove(f)
+# === DOWNLOAD ===
+
+import os
+os.makedirs(output_dir, exist_ok=True)
+
+downloaded = earthaccess.download(results, output_dir)
+print(f"Downloaded {len(downloaded)} granules to: {output_dir}")

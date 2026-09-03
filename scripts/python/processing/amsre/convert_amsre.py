@@ -2,49 +2,54 @@ import os
 import h5py
 import xarray as xr
 import numpy as np
+from datetime import datetime
 from tqdm import tqdm
 
-# ---- CONFIG ----
-RAW_DIR = "data/amsre/raw"
-OUT_DIR = "data/amsre/daily_nc"
+RAW_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/amsre/raw"
+OUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/amsre/daily_nc"
 os.makedirs(OUT_DIR, exist_ok=True)
 
+SIC_PATH = "HDFEOS/GRIDS/SpPolarGrid12km/Data Fields/SI_12km_SH_ICECON_DAY"
+LAT_PATH = "HDFEOS/GRIDS/SpPolarGrid12km/lat"
+LON_PATH = "HDFEOS/GRIDS/SpPolarGrid12km/lon"
+
 def extract_date(filename):
-    # e.g., AMSR_E_L3_SeaIce12km_B04_20230101.he5
     parts = filename.split("_")
     for part in parts:
-        if part.isdigit() and len(part) == 8:
-            return part
+        cleaned = part.replace(".he5", "")
+        if cleaned.isdigit() and len(cleaned) == 8:
+            return cleaned
     return None
 
-# ---- CONVERSION ----
 files = sorted([f for f in os.listdir(RAW_DIR) if f.endswith(".he5")])
 
 for fname in tqdm(files, desc="Converting HE5 to NetCDF"):
     date = extract_date(fname)
     if not date:
-        print(f"⚠️ Skipping {fname}: date not found")
+        print(f"Skipping {fname}: date not found")
+        continue
+
+    out_path = os.path.join(OUT_DIR, f"SIC_{date}.nc")
+    if os.path.exists(out_path):
         continue
 
     in_path = os.path.join(RAW_DIR, fname)
-    out_path = os.path.join(OUT_DIR, f"SIC_{date}.nc")
-
     try:
         with h5py.File(in_path, "r") as f:
-            # Adjust this path if needed (this is common for AMSRE)
-            sic = f["HDFEOS/GRIDS/PolarGrid/Data Fields/Sea_Ice_Concentration"][:]
+            sic  = f[SIC_PATH][:].astype(np.float32)
+            lat  = f[LAT_PATH][:]
+            lon  = f[LON_PATH][:]
 
-            # Convert to proper units (often scaled by 10)
-            sic = sic.astype(np.float32) / 10.0
-            sic[sic > 100] = np.nan  # Mask fill values or bad data
+        sic[sic > 100] = np.nan  # mask fill values
 
-            # Wrap in xarray
-            da = xr.DataArray(sic, dims=("y", "x"), name="sic")
-            da.attrs["units"] = "percent"
-            da.attrs["long_name"] = "Sea Ice Concentration"
-            ds = xr.Dataset({"sic": da})
-            ds.attrs["source_file"] = fname
-
-            ds.to_netcdf(out_path)
+        t = np.datetime64(f"{date[:4]}-{date[4:6]}-{date[6:8]}")
+        ds = xr.Dataset(
+            {"SI_12km_SH_ICECON_DAY": (["y", "x"], sic)},
+            coords={"lat": (["y", "x"], lat),
+                    "lon": (["y", "x"], lon),
+                    "time": t},
+        )
+        ds["SI_12km_SH_ICECON_DAY"].attrs["units"] = "percent"
+        ds.to_netcdf(out_path)
     except Exception as e:
-        print(f"❌ Failed to convert {fname}: {e}")
+        print(f"Failed {fname}: {e}")
