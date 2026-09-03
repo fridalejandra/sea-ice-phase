@@ -101,10 +101,11 @@ def shade(ax, dates, run, color):
         ax.axvspan(dates[run[0]], dates[min(run[1], len(dates) - 1)],
                    color=color, alpha=0.35, lw=0)
 
-def mark(ax, dates, idx, color, label):
+def mark(ax, dates, idx, c, color, label):
     if idx is not None:
-        ax.axvline(dates[idx], color=color, lw=1.3)
-        ax.annotate(label, xy=(dates[idx], 1.0), xytext=(dates[idx], 1.05),
+        ytop = min(float(np.nan_to_num(c[idx], nan=0.0)) + 0.28, 0.95)
+        ax.plot([dates[idx], dates[idx]], [0, ytop], color=color, lw=1.4)
+        ax.annotate(label, xy=(dates[idx], ytop), xytext=(dates[idx], ytop + 0.04),
                     ha="center", fontsize=8, fontweight="bold",
                     color=color, annotation_clip=False)
 
@@ -158,8 +159,14 @@ def main():
             ("Interior seasonal pixel", "Repeated-crossing pixel")):
         c = c_all[:, px[0], px[1]]
         cz = np.nan_to_num(c, nan=0.0)
+        ax.axvspan(dates[0], dates[fs_to], color=COL_ABOVE, alpha=0.06, lw=0)
+        ax.axvspan(dates[ms_from], dates[-1], color=COL_BELOW, alpha=0.06, lw=0)
         ax.plot(dates, c, lw=0.8, color=COL_LINE)
         ax.axhline(THETA, color=GREY, lw=0.8, ls="--")
+        s = np.sign(cz - THETA); s[s == 0] = 1
+        xi = np.where(s[1:] != s[:-1])[0]
+        ax.plot(dates[xi], np.full(xi.size, THETA), ls="none", marker="o",
+                ms=2.2, mfc="0.2", mec="none", zorder=5)
         fs, fs_pre = detect(cz, "fs", search_to=fs_to)
         ms, ms_pre = detect(cz, "ms", search_from=ms_from)
         if fs_pre is not None:
@@ -170,16 +177,30 @@ def main():
             shade(ax, dates, (ms_pre[1] - K + 1, ms_pre[1]), COL_ABOVE)
         if ms is not None:
             shade(ax, dates, (ms, ms + K - 1), COL_BELOW)
-        mark(ax, dates, fs, COL_ABOVE, "FS")
-        mark(ax, dates, ms, COL_BELOW, "MS")
+        mark(ax, dates, fs, cz, COL_ABOVE, "FS")
+        mark(ax, dates, ms, cz, COL_BELOW, "MS")
         ax.set_ylim(-0.02, 1.12)
         style(ax, letter, title)
-        ax.text(0.03, 0.86, f"{crossings(cz)} crossings of " + r"$\theta$",
+        ax.text(0.03, 0.90, f"{crossings(cz)} crossings of " + r"$\theta$" + " (dots)",
                 transform=ax.transAxes, fontsize=7.5, color=GREY,
                 bbox=dict(fc="white", ec="none", alpha=0.7, pad=1.5))
     axes[0].set_ylabel("SIC (fraction)", fontweight="bold", color=GREY)
 
-    fig.tight_layout()
+    import matplotlib.patches as mpatches
+    import matplotlib.lines as mlines
+    handles = [
+        mpatches.Patch(fc=COL_ABOVE, alpha=0.25, label="FS search window (Feb 15 to Sep 30)"),
+        mpatches.Patch(fc=COL_BELOW, alpha=0.25, label="MS search window (Aug 15 to Feb 28)"),
+        mpatches.Patch(fc=COL_BELOW, alpha=0.35, label=r"$k$-day run at or below $\theta$"),
+        mpatches.Patch(fc=COL_ABOVE, alpha=0.35, label=r"$k$-day run at or above $\theta$"),
+        mlines.Line2D([], [], color=GREY, ls="--", lw=0.8, label=r"$\theta$ = 0.15"),
+        mlines.Line2D([], [], color="0.2", marker="o", ls="none", ms=3,
+                      label=r"crossing of $\theta$"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=7,
+               frameon=False, bbox_to_anchor=(0.5, -0.02))
+
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     fig.savefig(args.out, dpi=300)
     print(f"wrote {args.out}")
 
