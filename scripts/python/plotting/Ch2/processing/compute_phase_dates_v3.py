@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-compute_phase_dates_v2.py
+compute_phase_dates_v3.py
 
 Master script for computing Freeze Start (FS) and Melt Start (MS) phase dates.
 Version 2: vectorized static method, fixed dynamic method, validation harness.
@@ -61,7 +61,7 @@ SENSOR_CONFIGS = {
         "units":       "fraction",
         "mask_above":  1.1,
         "years":       range(1979, 2026),
-        "bad_years":   [1987, 1991, 1995],  # verified gaps in merged record (ncview, Jul 2026)
+        "bad_years":   [1987],  # verified gaps in merged record (ncview, Jul 2026)
         "output_root": "/user/geog/falejandraperez/sea-ice-phase/data/SMMR_phase",
     },
     "AMSRE": {
@@ -245,13 +245,18 @@ def first_run_start_vectorized(ts: xr.DataArray,
 
     sustained_shifted = sustained.shift(time=-(k - 1), fill_value=False)
 
-    # v2.1 fix: require a genuine crossing — the opposite state must occur
-    # strictly BEFORE the run onset. Prevents window-start DOY assignment
-    # at pixels already in the target state when the season opens
-    # (perennial ice for FS, open ocean for MS). NaN days count as neither state.
+    # v3: SYMMETRIC PERSISTENCE. A transition requires a completed k-day run
+    # in the OPPOSITE state strictly before the k-day run in the target state,
+    # within the same search window. This replaces the v2.1 single-day
+    # crossing test. Perennial ice and open ocean are excluded by
+    # construction, and single-day flicker can no longer manufacture an
+    # onset, while ice that genuinely opens for k or more days is still
+    # detected. NaN days count as neither state.
     opposite = (ts < threshold) if above else (ts > threshold)
-    seen_opp = opposite.cumsum("time").shift(time=1, fill_value=0) > 0
-    sustained_shifted = sustained_shifted & seen_opp
+    opp_roll = opposite.rolling(time=k, min_periods=k).construct("window")
+    opp_run  = opp_roll.all("window")          # True on LAST day of opp run
+    prior_opp = opp_run.cumsum("time").shift(time=1, fill_value=0) > 0
+    sustained_shifted = sustained_shifted & prior_opp
 
     any_hit   = sustained_shifted.any("time")
     onset_idx = sustained_shifted.argmax("time")
@@ -380,7 +385,15 @@ def first_run_with_slope_vectorized(ts: xr.DataArray,
         slope_ok = slope < -slope_min
 
     sustained_shifted = sustained.shift(time=-(k - 1), fill_value=False)
-    valid     = sustained_shifted & slope_ok
+
+    # v3: same symmetric persistence requirement as the static method.
+    # The dynamic method previously had no crossing requirement at all.
+    opposite  = (ts < thr) if event == "FS" else (ts > thr)
+    opp_roll  = opposite.rolling(time=k, min_periods=k).construct("window")
+    opp_run   = opp_roll.all("window")
+    prior_opp = opp_run.cumsum("time").shift(time=1, fill_value=0) > 0
+
+    valid     = sustained_shifted & slope_ok & prior_opp
 
     any_hit   = valid.any("time")
     onset_idx = valid.argmax("time")
@@ -472,12 +485,13 @@ def validate(sensor: str = "SMMR", year: int = 2000,
         vals = ts_1d.values
         cond = (vals >= threshold) if above else (vals <= threshold)
         opp  = (vals <  threshold) if above else (vals >  threshold)
-        seen_opp = False
+        opp_run_done = False
         for i in range(len(cond) - k + 1):
-            if seen_opp and all(cond[i:i+k]):
+            if opp_run_done and all(cond[i:i+k]):
                 return i
-            if opp[i]:
-                seen_opp = True
+            # a k-day opposite run is complete once its last day is reached
+            if i >= k - 1 and all(opp[i-k+1:i+1]):
+                opp_run_done = True
         return None
 
     ts_FS      = slice_season(ice_sub, f"{year}{FS_START_MMDD}", f"{year}{FS_END_MMDD}")
