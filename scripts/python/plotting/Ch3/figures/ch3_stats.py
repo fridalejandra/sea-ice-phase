@@ -248,6 +248,35 @@ note("3.3b", f"pooled r(min-date, amplitude) {BREAK_YEAR}+", round(m_post["r_re"
 note("3.3b", f"shift pre/post {BREAK_YEAR} (min-date)", round(2 * stats.norm.sf(abs(zd)), 3), "pooled")
 
 
+# ── 3.3c  growth-season length (day of max − day of min) vs amplitude ────────
+# Unifies the max-date and min-date results: an early minimum and a late maximum
+# both lengthen the growth season. Tested per sector, pre/post-2016.
+ann["growth_len"] = ann["max_doy_raw"] - ann["min_doy_raw"]
+ai["growth_len"] = ai["max_doy_raw"] - ai["min_doy_raw"]
+GL = "growth_len"; rows = []
+for sec in SECTORS:
+    a = sec_df(ann, sec); pre, post = a[a.Year < BREAK_YEAR], a[a.Year >= BREAK_YEAR]
+    rf, pf, n = pear(a[GL], a[AMP]); r1, _, n1 = pear(pre[GL], pre[AMP]); r2, _, n2 = pear(post[GL], post[AMP])
+    _, psh = zshift(r1, n1, r2, n2)
+    rows.append(dict(sector=lab(sec), mean_len_days=float(a[GL].mean()), sd_len_pre=float(pre[GL].std(ddof=1)),
+                     sd_len_post=float(post[GL].std(ddof=1)), r_full=rf, p_full=pf, r_pre2016=r1, r_post2016=r2, p_shift=psh,
+                     r2_post2016=r2 ** 2))
+    note("3.3c", f"r(growth-season length, amplitude) pre/post {BREAK_YEAR}", f"{r1:+.2f} -> {r2:+.2f}", lab(sec), n2, psh)
+gl = pd.DataFrame(rows); gl.to_csv(os.path.join(TABLES_DIR, "t33c_growth_length_vs_amplitude.csv"), index=False)
+# Weddell year table for the text
+w = ann[(ann.sector == "SIE_Weddell") & (ann.Year >= BREAK_YEAR)][["Year", "min_doy_raw", "max_doy_raw", GL, "amplitude_raw_yr"]]
+w.to_csv(os.path.join(TABLES_DIR, "t33c_weddell_post2016_years.csv"), index=False)
+# does any index set Weddell growth-season length? (H5 atmospheric test, full record, all index cols)
+rows = []
+a = sec_df(ai, "SIE_Weddell")
+for ic in ICOLS:
+    r, p, n = pear(a[ic], a[GL]); rows.append(dict(index=ic, r=r, p=p, n=n))
+gw = pd.DataFrame(rows).sort_values("p"); gw["q_bh"] = bh(gw.p.values)
+gw.to_csv(os.path.join(TABLES_DIR, "t35_H5_weddell_growth_length_vs_indices.csv"), index=False)
+note("3.5/H5", "Weddell growth length ~ indices: best", f"{gw.iloc[0]['index']} r={gw.iloc[0].r:+.2f}", "Weddell", p=gw.iloc[0].p,
+     extra=f"BH q={gw.iloc[0].q_bh:.2f}; {int((gw.p < 0.05).sum())}/{len(gw)} at p<0.05")
+
+
 # ── 3.4  variance of the components, post/pre-2016 ───────────────────────────
 rows = []
 for sec in SECTORS:
@@ -381,6 +410,71 @@ if os.path.exists(asl_path):
 pd.DataFrame(detail).to_csv(os.path.join(TABLES_DIR, "t36_ross_asl_detail.csv"), index=False)
 
 
+# ── 3.5  hypothesis tests ─────────────────────────────────────────────────────
+# H2: the post-2016 amplitude-variance drop is not an atmospheric change — the
+#     atmosphere~amplitude relationships are unchanged across 2016 (descriptive,
+#     n=8 after) while amplitude variance fell.
+rows = []
+for sec, tv, ic, basis in PRIMARY_PAIRS:
+    if tv != AMP: continue
+    a = sec_df(ai, sec); pre, post = a[a.Year < BREAK_YEAR], a[a.Year >= BREAK_YEAR]
+    r1, _, n1 = pear(pre[ic], pre[tv]); r2, _, n2 = pear(post[ic], post[tv]); _, p = zshift(r1, n1, r2, n2)
+    vr = np.nanvar(post[tv], ddof=1) / np.nanvar(pre[tv], ddof=1)
+    rows.append(dict(sector=lab(sec), index=ic, r_pre2016=r1, r_post2016=r2, n_post=n2, p_shift=p, amp_var_ratio_post_pre=vr))
+    note("3.5/H2", f"{ic} ~ amplitude pre/post {BREAK_YEAR}", f"{r1:+.2f} -> {r2:+.2f}", lab(sec), n2, p, f"amp var ratio {vr:.2f}")
+pd.DataFrame(rows).to_csv(os.path.join(TABLES_DIR, "t35_H2_amplitude_relationships_2016.csv"), index=False)
+
+# H3: the ASL–Ross break tracks the ENSO→ASL teleconnection (IPO shift ~1999), not 2016.
+rows = []
+yrs_all = sorted(idx.Year.unique())
+for lo, hi, label in ((YEAR_MIN, SPLIT_YEAR - 1, f"{YEAR_MIN}-{SPLIT_YEAR-1}"), (SPLIT_YEAR, YEAR_MAX, f"{SPLIT_YEAR}-{YEAR_MAX}")):
+    sub = idx[idx.Year.between(lo, hi)]
+    for s_asl in ("annual", "SON", "RET"):
+        for s_n in ("annual", "SON", "RET"):
+            ca, cn = f"ASL_{s_asl}", f"Nino34_{s_n}"
+            if ca in sub.columns and cn in sub.columns:
+                r, p, n = pear(sub[ca], sub[cn], dt=False)
+                rows.append(dict(period=label, asl=s_asl, nino=s_n, r=r, p=p, n=n))
+    # and the ASL's relationship to SAM in the same periods/seasons
+    for s_asl in ("annual", "SON", "RET"):
+        ca, cs = f"ASL_{s_asl}", f"SAM_{s_asl}"
+        if ca in sub.columns and cs in sub.columns:
+            r, p, n = pear(sub[ca], sub[cs], dt=False)
+            rows.append(dict(period=label, asl=s_asl, nino="SAM_" + s_asl, r=r, p=p, n=n))
+h3 = pd.DataFrame(rows); h3.to_csv(os.path.join(TABLES_DIR, "t35_H3_asl_nino_teleconnection_2001.csv"), index=False)
+for s_asl in ("SON", "RET"):
+    g = h3[(h3.asl == s_asl) & (h3.nino == "SAM_" + s_asl)]
+    note("3.5/H3", f"ASL_{s_asl} ~ SAM_{s_asl}: pre/post {SPLIT_YEAR}", f"{g.r.iloc[0]:+.2f} -> {g.r.iloc[1]:+.2f}", "indices", extra=f"p {g.p.iloc[0]:.3f} -> {g.p.iloc[1]:.3f}")
+for (sa, sn), g in h3.groupby(["asl", "nino"]):
+    if sa == sn and not str(sn).startswith("SAM"):
+        r1 = g[g.period.str.startswith(str(YEAR_MIN))].r.iloc[0]; r2 = g[~g.period.str.startswith(str(YEAR_MIN))].r.iloc[0]
+        note("3.5/H3", f"ASL_{sa} ~ Nino34_{sn}: pre/post {SPLIT_YEAR}", f"{r1:+.2f} -> {r2:+.2f}", "indices")
+# partial: Ross amplitude ~ ASL controlling for Nino34, by period
+def partial(x, y, z):
+    x, y, z = detrend(x), detrend(y), detrend(z); ok = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
+    rxy = np.corrcoef(x[ok], y[ok])[0, 1]; rxz = np.corrcoef(x[ok], z[ok])[0, 1]; ryz = np.corrcoef(y[ok], z[ok])[0, 1]
+    return (rxy - rxz * ryz) / np.sqrt((1 - rxz ** 2) * (1 - ryz ** 2))
+ross = sec_df(ai, "SIE_Ross"); rows = []
+for lo, hi in ((YEAR_MIN, SPLIT_YEAR - 1), (SPLIT_YEAR, YEAR_MAX)):
+    b = ross[ross.Year.between(lo, hi)]
+    rows.append(dict(period=f"{lo}-{hi}", r_asl_amp=pear(b["ASL_annual"], b[AMP])[0],
+                     r_asl_amp_given_nino=partial(b["ASL_annual"], b[AMP], b["Nino34_annual"]),
+                     r_nino_amp=pear(b["Nino34_annual"], b[AMP])[0]))
+pd.DataFrame(rows).to_csv(os.path.join(TABLES_DIR, "t35_H3_ross_asl_partial_nino.csv"), index=False)
+for r in rows: note("3.5/H3", "Ross amp ~ ASL | Nino34 (partial)", round(r["r_asl_amp_given_nino"], 2), "Ross", extra=r["period"])
+
+
+# ── 3.4c  volatility (from R/ch3/05_volatility_gamlss.R, if present) ──────────
+_v = os.path.join(TABLES_DIR, "t34c_volatility_gamlss_post2016.csv")
+if os.path.exists(_v):
+    v = pd.read_csv(_v)
+    for _, r in v.iterrows():
+        ci = f"[{r.boot_lo:.2f}, {r.boot_hi:.2f}] n_boot={int(r.n_boot)}" if np.isfinite(r.get("boot_lo", np.nan)) else "no bootstrap yet"
+        note("3.4c", f"day-to-day volatility post/pre-{BREAK_YEAR} ({r.response}), season+sensor fixed",
+             round(r.vol_ratio_post2016, 3), lab(r.sector), extra=f"sensor factor {r.vol_ratio_ssmis_vs_ssmi:.2f}; {ci}; "
+             f"by season DJF {r.ratio_DJF:.2f} MAM {r.ratio_MAM:.2f} JJA {r.ratio_JJA:.2f} SON {r.ratio_SON:.2f}")
+
+
 # ── ledger ────────────────────────────────────────────────────────────────────
 led = pd.DataFrame(LEDGER); led.to_csv(NUMBERS_CSV, index=False)
 print(f"\nwrote {len(led)} ledger rows -> {NUMBERS_CSV}")
@@ -391,6 +485,26 @@ for _, r in led[led.section.isin(["3.3", "3.6"]) & led.quantity.str.contains("po
 
 
 # ── markdown digest (regenerated every run; do not edit by hand) ─────────────
+
+def _plain_md(df, index=True, **kw):
+    """Markdown table without the tabulate dependency."""
+    if True:
+        d = df.reset_index() if index else df
+        cols = [str(c) for c in d.columns]
+        fmt = lambda v: "" if (isinstance(v, float) and np.isnan(v)) else (f"{v:.2f}" if isinstance(v, float) else str(v))
+        lines = ["| " + " | ".join(cols) + " |", "|" + "|".join("---" for _ in cols) + "|"]
+        for _, r in d.iterrows():
+            lines.append("| " + " | ".join(fmt(v) for v in r.values) + " |")
+        return "\n".join(lines)
+
+try:
+    import tabulate  # noqa: F401  (pandas.to_markdown needs it)
+except ImportError:
+    pd.DataFrame.to_markdown = _plain_md   # fall back to the plain writer
+
+def _tomd(df, index=True):
+    return df.to_markdown(index=index)
+
 def _md():
     T = lambda name: pd.read_csv(os.path.join(TABLES_DIR, name))
     L = []
@@ -402,11 +516,11 @@ def _md():
 
     w("## S1 · Why fitted timing is not used (methods)\n")
     t = T("tS1_fitted_vs_raw.csv").pivot(index="sector", columns="quantity", values="r_fitted_vs_observed").round(2)
-    w(t.to_markdown() + "\n\nr(fitted, observed): amplitude is the same quantity; timing is not.\n")
+    w(_tomd(t) + "\n\nr(fitted, observed): amplitude is the same quantity; timing is not.\n")
 
     w("## 3.3 · Phase–amplitude coupling\n")
     t = T("t33_phase_amp_by_sector.csv").round(2)
-    w("**Full record 1979–2023, per sector**\n\n" + t.to_markdown(index=False) + "\n")
+    w("**Full record 1979–2023, per sector**\n\n" + _tomd(t, index=False) + "\n")
     s = T("t33_phase_amp_splits.csv")
     w("**Pooled across six sectors (random-effects), pre vs post split**\n")
     w("| split | method | r pre [95% CI] | r post [95% CI] | I² post | p post | p shift |\n|---|---|---|---|---|---|---|")
@@ -422,7 +536,7 @@ def _md():
       f"{int((loo.p > 0.05).sum())} of {len(loo)} drops lose p<0.05. → call it *emerging*.\n")
     rs = T("t33_phase_amp_rolling10_summary.csv").round(2)
     w("**10-yr rolling Spearman (fig03 statistic): mean of windows ending before/after 2016, and the clean 2007–15 vs 2016–23 contrast**\n\n"
-      + rs.to_markdown(index=False) + "\n\nABS 'decoupling' is a 2007–15 feature that reverses in 2016–23; East Antarctica is negative in both.\n")
+      + _tomd(rs, index=False) + "\n\nABS 'decoupling' is a 2007–15 feature that reverses in 2016–23; East Antarctica is negative in both.\n")
 
     w("## 3.3b · Day of minimum as the other phase marker (descriptive)\n")
     mn = T("t33b_mindate_vs_amplitude.csv").round(2)
@@ -432,10 +546,15 @@ def _md():
     w("Pooled (six sectors): " + "; ".join(f"{q}: {v}" for q, v in zip(l33b[l33b.sector == "pooled"].quantity, l33b[l33b.sector == "pooled"].value)) +
       ". Min-date is the sharper extremum (fitted == observed) and is independent of max-date; the two ends of the cycle need not couple to amplitude the same way.\n")
 
+    w("## 3.3c · Growth-season length (day of max − day of min) vs amplitude\n")
+    g = T("t33c_growth_length_vs_amplitude.csv").round(2)
+    w(_tomd(g[["sector", "mean_len_days", "sd_len_pre", "sd_len_post", "r_pre2016", "r_post2016", "p_shift"]], index=False) + "\n")
+    w("Weddell 2016–2023 by year:\n\n" + _tomd(T("t33c_weddell_post2016_years.csv").round(2), index=False) + "\n")
+
     w("## 3.4 · Component variance, post/pre-2016 (F-test, raw anomalies)\n")
     v = T("t34_variance_ratio_2016.csv").query("not detrended").pivot(index="sector", columns="variable", values="var_ratio_post_pre").round(2)
     pv = T("t34_variance_ratio_2016.csv").query("not detrended").pivot(index="sector", columns="variable", values="p_F").round(2)
-    w(v.to_markdown() + "\n\np (F-test):\n\n" + pv.to_markdown() +
+    w(_tomd(v) + "\n\np (F-test):\n\n" + _tomd(pv) +
       "\n\nTiming flat, amplitude down (circumpolar 0.23, p=0.05), extent up (n.s. at n=8). Ties to Ch.2: phase variance unchanged.\n")
 
     w("## 3.5 · Atmospheric modes by component and sector\n")
@@ -447,8 +566,25 @@ def _md():
     w(pp[["sector", "target", "index", "r", "p", "p_bonf7", "loo_worst_p", "seasons_p05_same_sign", "basis"]].to_markdown(index=False) + "\n")
     w("Bonferroni over 7 is post-hoc; the defence is mechanism + LOO + seasonal consistency. Weddell~ZW3R is the weakest (LOO 0.07) → supplement.\n")
     pm = T("t35_pooled_meta.csv").round(2)
-    w("**Pooled across the five sectors (the circumpolar test) — I² is the result:**\n\n" + pm.to_markdown(index=False) +
+    w("**Pooled across the five sectors (the circumpolar test) — I² is the result:**\n\n" + _tomd(pm, index=False) +
       "\n\nHigh I² for ENSO~amplitude = dipole (Weddell +, King Haakon −); nothing pools to a circumpolar effect.\n")
+
+    if os.path.exists(os.path.join(TABLES_DIR, "t34c_volatility_gamlss_post2016.csv")):
+        w("## 3.4c · Day-to-day volatility, post/pre-2016 (gamlss; R/ch3/05_volatility_gamlss.R)\n")
+        v = T("t34c_volatility_gamlss_post2016.csv").round(3)
+        v["sector"] = v["sector"].map(lambda x: SECTOR_LABELS.get(x, x))
+        w(_tomd(v[["sector", "response", "vol_ratio_post2016", "boot_lo", "boot_hi", "vol_ratio_ssmis_vs_ssmi",
+                   "ratio_DJF", "ratio_MAM", "ratio_JJA", "ratio_SON"]], index=False) + "\n")
+
+    w("## 3.5 · Hypothesis tests\n")
+    w("**H2 — amplitude relationships across 2016 (descriptive, n=8 after) vs amplitude variance ratio**\n\n" +
+      _tomd(T("t35_H2_amplitude_relationships_2016.csv").round(2), index=False) + "\n")
+    w("**H3 — ENSO→ASL teleconnection, pre/post 2001 (index-only, detrended indices)**\n\n" +
+      _tomd(T("t35_H3_asl_nino_teleconnection_2001.csv").query("asl == nino or nino.str.startswith('SAM')", engine="python").round(2), index=False) + "\n")
+    w("Ross amplitude ~ ASL, with and without Niño3.4 partialled out:\n\n" +
+      _tomd(T("t35_H3_ross_asl_partial_nino.csv").round(2), index=False) + "\n")
+    w("**H5 — does any index set Weddell growth-season length? (full record, all 35 index-seasons, BH)**\n\n" +
+      _tomd(T("t35_H5_weddell_growth_length_vs_indices.csv").head(8).round(3), index=False) + "\n")
 
     w("## 3.6 · Stationarity, 1979–2000 vs 2001–2023\n")
     st = T("t36_stationarity_2001.csv").round(3)

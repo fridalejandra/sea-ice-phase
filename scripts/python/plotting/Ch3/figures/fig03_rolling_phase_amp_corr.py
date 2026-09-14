@@ -37,9 +37,9 @@ for sec in SECTORS:
     b = roll_max[roll_max["sector"] == sec].sort_values("Year")
 
     sig_band(ax, R_SIG_45)
-    ax.plot(a["Year"], a["value"], color=c, lw=2.0, label="r(min date, amplitude)")
-    ax.plot(b["Year"], b["value"], color=c, lw=2.0, ls="--", alpha=0.65,
-            label="r(max date, amplitude)")
+    ax.plot(b["Year"], b["value"], color=c, lw=2.2, label="ρ(max date, amplitude)")
+    ax.plot(a["Year"], a["value"], color=c, lw=1.6, ls="--", alpha=0.55,
+            label="ρ(min date, amplitude)")
 
     mark_break(ax); year_axis(ax)
     ax.set_ylim(-1, 1)
@@ -53,7 +53,7 @@ for sec in SECTORS:
             f"max–amp (Spearman):  1979–2015 {r_pre:+.2f}   2016–2023 {r_post:+.2f}",
             transform=ax.transAxes, fontsize=7.5, color="#666666")
 
-axmap[SECTORS[0]].legend(fontsize=7.5, loc="upper left", frameon=False)
+axmap[SECTORS[0]].legend(fontsize=7.5, loc="upper right", frameon=False)
 panel_letters(list(axmap.values()))
 fig.suptitle("Rolling correlation between observed timing and amplitude anomalies",
              fontsize=13, fontweight="bold")
