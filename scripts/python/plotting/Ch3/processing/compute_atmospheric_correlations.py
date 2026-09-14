@@ -9,15 +9,18 @@ corrected separately from ZW3 correlations with amplitude.
 
 Indices:
     SAM     — Marshall (2003) observational index, monthly
-    ZW3R    — Raphael annual index
-    ASL     — Amundsen Sea Low relative central pressure, monthly ERA5 v3
+    ZW3R    — Raphael ZW3, monthly (computed in scripts/python/processing/ERA5_Reanalysis)
+    ZW3G    — Goyal ZW3 magnitude, monthly
+    ASL     — Amundsen Sea Low RELATIVE central pressure (RelCenPres), Hosking v3, ERA5
     Nino3.4 — CPC ERSSTv5 Nino 3.4 mean, monthly
 
 Seasons: DJF, MAM, JJA, SON, annual, ADV (Mar-Aug), RET (Oct-Jan)
 
 Outputs:
-    correlations_output.csv     — one row per (sector, variable, index, season)
-    master_index_detrended.csv  — detrended seasonal index table, wide format
+    results/ch3/tables/correlations_output.csv  — one row per (sector, variable, index, season)
+    data/ch3/master_index_detrended.csv         — detrended seasonal index table, wide format
+
+Input: data/ch3/annual_params_E.csv (Pipeline E, fit from 1979-01-01).
 """
 
 import os
@@ -30,21 +33,12 @@ from statsmodels.stats.multitest import multipletests
 
 warnings.filterwarnings("ignore")
 
-# --- Repo root: resolves local first, cluster as fallback -----------------
-_ROOTS = [os.environ.get("SEAICE_ROOT"),
-          os.path.expanduser("~/Research/repos/sea-ice-phase"),
-          "/Users/fridaperez/Research/repos/sea-ice-phase",
-          "/user/geog/falejandraperez/sea-ice-phase"]
-ROOT = next((r for r in _ROOTS if r and os.path.isdir(os.path.join(r, "scripts"))), None)
-if ROOT is None:
-    raise SystemExit("Cannot locate sea-ice-phase repo. Set SEAICE_ROOT.")
-INDEX_DIR  = os.path.join(ROOT, "data", "indices")
-DATA_DIR   = os.path.join(ROOT, "scripts", "R", "Ch3", "data")
-OUTPUT_DIR = DATA_DIR
-
-ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params_B.csv")
-YEAR_MIN   = 1979
-YEAR_MAX   = 2023
+# --- Paths: one source of truth (figures/ch3_config.py) --------------------
+import sys
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "figures"))
+from ch3_config import (ROOT, INDEX_DIR, DATA_DIR, TABLES_DIR, ANNUAL_CSV,
+                        INDEX_CSV, CORR_CSV, YEAR_MIN, YEAR_MAX)
 
 SECTORS = {
     "SIE_Weddell"                : "Weddell",
@@ -54,9 +48,9 @@ SECTORS = {
     "SIE_King_Haakon"            : "King Haakon",
 }
 
+# OBSERVED scalars only. Fitted timing (max_doy_anom) is a backfit construct
+# (r with observed day-of-max 0.11-0.55 by sector) and is not used for inference.
 APAC_VARS = {
-    "amplitude_anom"    : "amplitude_apac",
-    "max_doy_anom"      : "phase_apac",
     "amplitude_raw_anom": "amplitude_raw",
     "max_doy_raw_anom"  : "phase_max_raw",
     "min_doy_raw_anom"  : "phase_min_raw",
@@ -307,7 +301,7 @@ for col in [c for c in idx.columns if c != "year"]:
 idx = idx.rename(columns={"year": "Year"})
 print(f"  Master index table: {idx.shape} | {idx['Year'].min()}–{idx['Year'].max()}")
 
-idx_out = os.path.join(OUTPUT_DIR, "master_index_detrended.csv")
+idx_out = INDEX_CSV
 idx.to_csv(idx_out, index=False)
 print(f"  Saved: {idx_out}")
 
@@ -447,7 +441,7 @@ print(f"  {n_all} significant under ALL three methods (shown as *** in heatmap)"
 
 # --- Save -----------------------------------------------------------------
 
-out_path = os.path.join(OUTPUT_DIR, "correlations_output.csv")
+out_path = CORR_CSV
 results_df.to_csv(out_path, index=False)
 print(f"\nSaved: {out_path}")
 

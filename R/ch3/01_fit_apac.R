@@ -282,6 +282,7 @@ fit_sector <- function(raw_data, sector_col) {
     amplitude_component = fitted_amp  - iac_notrend - trend_component,
     phase_component     = fitted_apac - fitted_amp,
     raw_anomaly         = Extent - fitted_apac,
+    anomaly_from_iac    = Extent - iac_notrend,   # full anomaly = trend + amplitude + phase + residual
     est_anomaly = ifelse(is.na(est_anomaly_g),
                          as.numeric(stats::filter(raw_anomaly,
                                                   rep(1/11, 11), sides = 2)),
@@ -324,7 +325,7 @@ fit_sector <- function(raw_data, sector_col) {
            iac_notrend, trend_component, trend_component_k6,
            u_amp, fitted_amp, u_apac, fitted_apac, fitted_phase,
            residual_apac, volatility,
-           amplitude_component, phase_component, raw_anomaly, est_anomaly,
+           amplitude_component, phase_component, raw_anomaly, anomaly_from_iac, est_anomaly,
            trend_pct, amp_pct, phase_pct, raw_pct) %>%
     mutate(sector = sector_col)
   
