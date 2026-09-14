@@ -112,7 +112,7 @@ if RUNALL is None:
 
 # R pipeline location — edit if it lives elsewhere
 R_PIPELINE = os.path.expanduser(
-    "~/Research/repos/sea-ice-phase/scripts/R/Ch3/APAC_Sector_Pipeline_B.R")
+    "~/Research/repos/sea-ice-phase/scripts/R/Ch3/01_fit_apac.R")
 
 
 # ── Checkpoints ───────────────────────────────────────────────────────────────

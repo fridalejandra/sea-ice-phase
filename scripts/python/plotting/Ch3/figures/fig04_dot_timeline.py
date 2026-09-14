@@ -103,7 +103,7 @@ for (sec, yr), g in daily.groupby(["sector", "Year"]):
 
 dom_df = pd.DataFrame(rows)
 
-out_csv = os.path.join(DATA_DIR, "component_dominance.csv")
+out_csv = os.path.join(TABLES_DIR, "component_dominance.csv")
 dom_df.to_csv(out_csv, index=False)
 print(f"Wrote {out_csv}  ({len(dom_df)} sector-years)")
 print("\nDominant component counts:")

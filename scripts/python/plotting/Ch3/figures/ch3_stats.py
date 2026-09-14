@@ -277,6 +277,31 @@ note("3.5/H5", "Weddell growth length ~ indices: best", f"{gw.iloc[0]['index']} 
      extra=f"BH q={gw.iloc[0].q_bh:.2f}; {int((gw.p < 0.05).sum())}/{len(gw)} at p<0.05")
 
 
+# ── 3.3d  breakpoint sensitivity for the recent-period results ───────────────
+# Where the pre/post boundary is drawn matters for the pooled coupling and not
+# for the Weddell growth-season result; the table makes that visible.
+rows = []
+for B in range(2013, 2018):
+    rs, ns = [], []
+    for sec in SECTORS:
+        a = sec_df(ann, sec, B, YEAR_MAX); r, _, n = pear(a[PH], a[AMP]); rs.append(r); ns.append(n)
+    m2 = meta(rs, ns); rs, ns = [], []
+    for sec in SECTORS:
+        a = sec_df(ann, sec, YEAR_MIN, B - 1); r, _, n = pear(a[PH], a[AMP]); rs.append(r); ns.append(n)
+    m1 = meta(rs, ns)
+    zd = (fz(m1["r_re"]) - fz(m2["r_re"])) / np.sqrt(m1["se_z"] ** 2 + m2["se_z"] ** 2)
+    w_ = sec_df(ann, "SIE_Weddell"); pre, post = w_[w_.Year < B], w_[w_.Year >= B]
+    r1, _, n1 = pear(pre[GL], pre[AMP]); r2, _, n2 = pear(post[GL], post[AMP]); _, pw = zshift(r1, n1, r2, n2)
+    ea = sec_df(ann, "SIE_East_Antarctica"); vr = np.nanvar(ea[ea.Year >= B][AMP], ddof=1) / np.nanvar(ea[ea.Year < B][AMP], ddof=1)
+    rows.append(dict(breakpoint=B, n_post=YEAR_MAX - B + 1, pooled_r_pre=m1["r_re"], pooled_r_post=m2["r_re"],
+                     p_post=m2["p"], p_shift=2 * stats.norm.sf(abs(zd)),
+                     weddell_growth_r_pre=r1, weddell_growth_r_post=r2, weddell_growth_p_shift=pw,
+                     east_antarctica_amp_var_ratio=vr))
+bp = pd.DataFrame(rows); bp.to_csv(os.path.join(TABLES_DIR, "t33d_breakpoint_sensitivity.csv"), index=False)
+note("3.3d", "pooled coupling significant only for break =", ", ".join(str(int(b)) for b in bp[bp.p_post < 0.05].breakpoint), "pooled")
+note("3.3d", "Weddell growth-length shift p<0.05 for break in", ", ".join(str(int(b)) for b in bp[bp.weddell_growth_p_shift < 0.05].breakpoint), "Weddell")
+
+
 # ── 3.4  variance of the components, post/pre-2016 ───────────────────────────
 rows = []
 for sec in SECTORS:
@@ -550,6 +575,10 @@ def _md():
     g = T("t33c_growth_length_vs_amplitude.csv").round(2)
     w(_tomd(g[["sector", "mean_len_days", "sd_len_pre", "sd_len_post", "r_pre2016", "r_post2016", "p_shift"]], index=False) + "\n")
     w("Weddell 2016–2023 by year:\n\n" + _tomd(T("t33c_weddell_post2016_years.csv").round(2), index=False) + "\n")
+
+    w("## 3.3d · Breakpoint sensitivity (2013–2017)\n")
+    w(_tomd(T("t33d_breakpoint_sensitivity.csv").round(3), index=False) +
+      "\n\nThe pooled coupling exists for a 2016 break only; the Weddell growth-season result holds for 2014–2016; the East Antarctic amplitude-variance drop for 2014–2017.\n")
 
     w("## 3.4 · Component variance, post/pre-2016 (F-test, raw anomalies)\n")
     v = T("t34_variance_ratio_2016.csv").query("not detrended").pivot(index="sector", columns="variable", values="var_ratio_post_pre").round(2)
