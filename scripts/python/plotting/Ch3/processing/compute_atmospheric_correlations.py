@@ -30,11 +30,19 @@ from statsmodels.stats.multitest import multipletests
 
 warnings.filterwarnings("ignore")
 
-INDEX_DIR  = "/user/geog/falejandraperez/sea-ice-phase/data/indices"
-DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
+# --- Repo root: resolves local first, cluster as fallback -----------------
+_ROOTS = [os.environ.get("SEAICE_ROOT"),
+          os.path.expanduser("~/Research/repos/sea-ice-phase"),
+          "/Users/fridaperez/Research/repos/sea-ice-phase",
+          "/user/geog/falejandraperez/sea-ice-phase"]
+ROOT = next((r for r in _ROOTS if r and os.path.isdir(os.path.join(r, "scripts"))), None)
+if ROOT is None:
+    raise SystemExit("Cannot locate sea-ice-phase repo. Set SEAICE_ROOT.")
+INDEX_DIR  = os.path.join(ROOT, "data", "indices")
+DATA_DIR   = os.path.join(ROOT, "scripts", "R", "Ch3", "data")
 OUTPUT_DIR = DATA_DIR
 
-ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params.csv")
+ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params_B.csv")
 YEAR_MIN   = 1979
 YEAR_MAX   = 2023
 
@@ -50,7 +58,8 @@ APAC_VARS = {
     "amplitude_anom"    : "amplitude_apac",
     "max_doy_anom"      : "phase_apac",
     "amplitude_raw_anom": "amplitude_raw",
-    "max_doy_raw_anom"  : "phase_raw",
+    "max_doy_raw_anom"  : "phase_max_raw",
+    "min_doy_raw_anom"  : "phase_min_raw",
 }
 
 month_map = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
@@ -201,7 +210,7 @@ def permutation_p(x, y, n_perm=10000, seed=42):
 print("Loading SAM index...")
 sam_raw = pd.read_csv(
     os.path.join(INDEX_DIR, "marshall_sam_monthly.txt"),
-    delim_whitespace=True, header=0,
+    sep=r'\s+', header=0,
     names=["year","Jan","Feb","Mar","Apr","May","Jun",
            "Jul","Aug","Sep","Oct","Nov","Dec"]
 )

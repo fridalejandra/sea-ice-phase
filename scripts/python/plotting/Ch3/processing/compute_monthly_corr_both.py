@@ -31,10 +31,18 @@ from statsmodels.stats.multitest import multipletests
 warnings.filterwarnings("ignore")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-DATA_DIR  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
-INDEX_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/indices"
+# --- Repo root: resolves local first, cluster as fallback -----------------
+_ROOTS = [os.environ.get("SEAICE_ROOT"),
+          os.path.expanduser("~/Research/repos/sea-ice-phase"),
+          "/Users/fridaperez/Research/repos/sea-ice-phase",
+          "/user/geog/falejandraperez/sea-ice-phase"]
+ROOT = next((r for r in _ROOTS if r and os.path.isdir(os.path.join(r, "scripts"))), None)
+if ROOT is None:
+    raise SystemExit("Cannot locate sea-ice-phase repo. Set SEAICE_ROOT.")
+DATA_DIR  = os.path.join(ROOT, "scripts", "R", "Ch3", "data")
+INDEX_DIR = os.path.join(ROOT, "data", "indices")
 
-ANNUAL_CSV  = os.path.join(DATA_DIR, "annual_params.csv")
+ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params_B.csv")
 MONTHLY_CSV = os.path.join(DATA_DIR, "monthly_params.csv")
 
 YEAR_MIN = 1979
@@ -68,7 +76,7 @@ print("\nLoading monthly indices...")
 # SAM
 sam_raw = pd.read_csv(
     os.path.join(INDEX_DIR, "marshall_sam_monthly.txt"),
-    delim_whitespace=True, header=0,
+    sep=r'\s+', header=0,
     names=["year","Jan","Feb","Mar","Apr","May","Jun",
            "Jul","Aug","Sep","Oct","Nov","Dec"])
 sam_long = sam_raw.melt(id_vars="year", var_name="month_str", value_name="SAM")
@@ -128,7 +136,9 @@ lag_results = []
 for sec_col, sec_label in SECTORS.items():
     sec = annual[annual["sector"] == sec_col].copy().sort_values("Year")
 
-    for ice_var, var_label in [("amplitude_anom","amplitude"), ("max_doy_anom","phase")]:
+    for ice_var, var_label in [("amplitude_raw_anom", "amplitude"),
+                                   ("max_doy_raw_anom", "phase_max"),
+                                   ("min_doy_raw_anom", "phase_min")]:
         if ice_var not in sec.columns: continue
         y_annual = detrend(sec["Year"].values, sec[ice_var].values.astype(float))
         y_df = pd.DataFrame({"Year": sec["Year"].values, "y": y_annual})

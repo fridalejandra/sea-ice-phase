@@ -20,9 +20,21 @@ import os
 # PATHS
 # =============================================================================
 
-ANNUAL_CSV = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data/annual_params.csv"
-INDEX_CSV  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures/master_index_detrended.csv"
-OUTPUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/figures/"
+# --- Repo root: resolves local first, cluster as fallback -----------------
+_ROOTS = [os.environ.get("SEAICE_ROOT"),
+          os.path.expanduser("~/Research/repos/sea-ice-phase"),
+          "/Users/fridaperez/Research/repos/sea-ice-phase",
+          "/user/geog/falejandraperez/sea-ice-phase"]
+ROOT = next((r for r in _ROOTS if r and os.path.isdir(os.path.join(r, "scripts"))), None)
+if ROOT is None:
+    raise SystemExit("Cannot locate sea-ice-phase repo. Set SEAICE_ROOT.")
+DATA_DIR   = os.path.join(ROOT, "scripts", "R", "Ch3", "data")
+
+ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params_B.csv")
+# was Ch3/figures/master_index_detrended.csv — stale copy, now reads the one
+# that compute_atmospheric_correlations.py actually writes
+INDEX_CSV  = os.path.join(DATA_DIR, "master_index_detrended.csv")
+OUTPUT_DIR = os.path.join(ROOT, "scripts", "python", "plotting", "Ch3", "figures")
 YEAR_MIN, YEAR_MAX = 1979, 2023
 
 # =============================================================================
@@ -43,13 +55,13 @@ def detrend(df, year_col, val_col):
 
 # Ross phase
 ross = (annual[annual["sector"] == "SIE_Ross"]
-        [["Year","max_doy_anom"]].dropna().sort_values("Year"))
-ross = detrend(ross, "Year", "max_doy_anom")
+        [["Year","max_doy_raw_anom"]].dropna().sort_values("Year"))
+ross = detrend(ross, "Year", "max_doy_raw_anom")
 
 # EA amplitude
 ea = (annual[annual["sector"] == "SIE_East_Antarctica"]
-      [["Year","amplitude_anom"]].dropna().sort_values("Year"))
-ea = detrend(ea, "Year", "amplitude_anom")
+      [["Year","amplitude_raw_anom"]].dropna().sort_values("Year"))
+ea = detrend(ea, "Year", "amplitude_raw_anom")
 
 # =============================================================================
 # OUTLIER DIAGNOSTIC FUNCTION
@@ -126,7 +138,7 @@ def outlier_report(x_vals, y_vals, years, x_label, y_label, title):
 asl = idx[idx["Year"].between(YEAR_MIN, YEAR_MAX)][["Year","ASL_DJF"]].dropna()
 merged_ross = ross.merge(asl, on="Year").dropna()
 x = merged_ross["ASL_DJF"].values
-y = merged_ross["max_doy_anom"].values
+y = merged_ross["max_doy_raw_anom"].values
 years = merged_ross["Year"].values
 
 ross_df = outlier_report(x, y, years,
@@ -137,7 +149,7 @@ ross_df = outlier_report(x, y, years,
 sam = idx[idx["Year"].between(YEAR_MIN, YEAR_MAX)][["Year","SAM_annual"]].dropna()
 merged_ea = ea.merge(sam, on="Year").dropna()
 x2 = merged_ea["SAM_annual"].values
-y2 = merged_ea["amplitude_anom"].values
+y2 = merged_ea["amplitude_raw_anom"].values
 years2 = merged_ea["Year"].values
 
 ea_df = outlier_report(x2, y2, years2,
@@ -152,9 +164,9 @@ fig, axes = plt.subplots(1, 2, figsize=(13, 6))
 fig.subplots_adjust(wspace=0.30, top=0.90, bottom=0.12)
 
 for ax, merged, x_col, y_col, y_label, title, color in [
-    (axes[0], merged_ross, "ASL_DJF", "max_doy_anom",
+    (axes[0], merged_ross, "ASL_DJF", "max_doy_raw_anom",
      "Ross phase anomaly (days)", "Ross phase ~ ASL DJF", "#1D9E75"),
-    (axes[1], merged_ea, "SAM_annual", "amplitude_anom",
+    (axes[1], merged_ea, "SAM_annual", "amplitude_raw_anom",
      "EA amplitude anomaly (Mkm²)", "EA amplitude ~ SAM annual", "#185FA5"),
 ]:
     x_vals = merged[x_col].values
@@ -213,11 +225,12 @@ print(f"\nFigure saved: {outpath}")
 
 # Sync to Google Drive
 import subprocess
-result = subprocess.run(
-    ["rclone", "copy", outpath, "gdrive:results/Ch3_Figures/"],
-    capture_output=True, text=True
-)
-if result.returncode == 0:
-    print("Synced to gdrive:results/Ch3_Figures/")
-else:
-    print(f"rclone error: {result.stderr}")
+try:
+    result = subprocess.run(
+        ["rclone", "copy", outpath, "gdrive:sea-ice-phase/results/Ch3_Figures/"],
+        capture_output=True, text=True
+    )
+    print("Synced to Drive" if result.returncode == 0
+          else f"rclone error: {result.stderr.strip()}")
+except FileNotFoundError:
+    print("rclone not installed — skipping Drive sync.")

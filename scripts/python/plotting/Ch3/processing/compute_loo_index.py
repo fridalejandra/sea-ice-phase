@@ -37,8 +37,16 @@ from sklearn.metrics import mean_squared_error, r2_score
 warnings.filterwarnings("ignore")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-DATA_DIR  = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
-ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params.csv")
+# --- Repo root: resolves local first, cluster as fallback -----------------
+_ROOTS = [os.environ.get("SEAICE_ROOT"),
+          os.path.expanduser("~/Research/repos/sea-ice-phase"),
+          "/Users/fridaperez/Research/repos/sea-ice-phase",
+          "/user/geog/falejandraperez/sea-ice-phase"]
+ROOT = next((r for r in _ROOTS if r and os.path.isdir(os.path.join(r, "scripts"))), None)
+if ROOT is None:
+    raise SystemExit("Cannot locate sea-ice-phase repo. Set SEAICE_ROOT.")
+DATA_DIR  = os.path.join(ROOT, "scripts", "R", "Ch3", "data")
+ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params_B.csv")
 INDEX_CSV  = os.path.join(DATA_DIR, "master_index_detrended.csv")
 
 YEAR_MIN = 1979
@@ -54,8 +62,11 @@ SECTORS = {
 }
 
 APAC_VARS = {
-    "amplitude_anom": "amplitude",
-    "max_doy_anom"  : "phase",
+    # OBSERVED metrics — see ch3_config.ANALYSIS_VARS for why the fitted
+    # quantities (max_doy_anom / amplitude_anom) are not used here.
+    "max_doy_raw_anom"  : "phase_max",
+    "min_doy_raw_anom"  : "phase_min",
+    "amplitude_raw_anom": "amplitude",
 }
 
 # Annual index columns in master_index_detrended.csv

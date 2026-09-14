@@ -51,9 +51,17 @@ import os
 import numpy as np
 import pandas as pd
 
-DATA_DIR    = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
-DAILY_CSV   = os.path.join(DATA_DIR, "daily_fitted.csv")
-ANNUAL_CSV  = os.path.join(DATA_DIR, "annual_params.csv")
+# --- Repo root: resolves local first, cluster as fallback -----------------
+_ROOTS = [os.environ.get("SEAICE_ROOT"),
+          os.path.expanduser("~/Research/repos/sea-ice-phase"),
+          "/Users/fridaperez/Research/repos/sea-ice-phase",
+          "/user/geog/falejandraperez/sea-ice-phase"]
+ROOT = next((r for r in _ROOTS if r and os.path.isdir(os.path.join(r, "scripts"))), None)
+if ROOT is None:
+    raise SystemExit("Cannot locate sea-ice-phase repo. Set SEAICE_ROOT.")
+DATA_DIR    = os.path.join(ROOT, "scripts", "R", "Ch3", "data")
+DAILY_CSV   = os.path.join(DATA_DIR, "daily_fitted_B.csv")
+ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params_B.csv")
 OUTPUT_CSV  = os.path.join(DATA_DIR, "monthly_params.csv")
 
 YEAR_MIN = 1979
@@ -93,7 +101,7 @@ for sec in SECTORS:
     sec_daily = daily[(daily["sector"] == sec) &
                       (daily["Year"].between(1979, 2015))]
     # Peak of the invariant curve — same for all years by construction
-    inv_by_doy = sec_daily.groupby("DOY")["fitted_invariant"].mean()
+    inv_by_doy = sec_daily.groupby("DOY")["iac_notrend"].mean()
     clim_peak[sec] = int(inv_by_doy.idxmax())
     print(f"  Climatological peak DOY — {sec}: {clim_peak[sec]}")
 
@@ -143,7 +151,7 @@ for sec in SECTORS:
                 continue
 
             apac    = mo_data["fitted_apac"].values
-            invar   = mo_data["fitted_invariant"].values
+            invar   = mo_data["iac_notrend"].values
             extent  = mo_data["Extent"].values
             doys    = mo_data["DOY"].values
 

@@ -1,0 +1,28 @@
+== §3.3.5 numbers ==
+
+Overall (full record):
+                       sector sd_residual mean_volatility rho_year
+1 SIE_Amundsen_Bellingshausen       0.180          0.0390 -0.02857
+2         SIE_East_Antarctica       0.124          0.0320 -0.01793
+3             SIE_King_Haakon       0.213          0.0436  0.07154
+4                    SIE_Ross       0.243          0.0480 -0.04642
+5                 SIE_Weddell       0.115          0.0223  0.03687
+6             SIE_circumpolar       0.514          0.1012  0.00916
+
+By decade (sd of APAC residual, Mkm^2):
+                       sector 1970s  1980s  1990s 2000s 2010s 2020s
+1 SIE_Amundsen_Bellingshausen 0.546 0.1643 0.1906 0.156 0.170 0.135
+2         SIE_East_Antarctica 0.568 0.1144 0.0956 0.104 0.107 0.104
+3             SIE_King_Haakon 0.891 0.1887 0.1567 0.182 0.203 0.201
+4                    SIE_Ross 1.572 0.1592 0.1508 0.163 0.146 0.129
+5                 SIE_Weddell 0.286 0.0914 0.1147 0.119 0.111 0.105
+6             SIE_circumpolar 3.486 0.3595 0.2438 0.265 0.332 0.288
+
+Last decade vs first decade ratio (residual sd):
+                       sector  ratio
+1 SIE_Amundsen_Bellingshausen 0.2465
+2         SIE_East_Antarctica 0.1830
+3             SIE_King_Haakon 0.2256
+4                    SIE_Ross 0.0821
+5                 SIE_Weddell 0.3651
+6             SIE_circumpolar 0.0827

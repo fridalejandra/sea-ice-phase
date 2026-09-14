@@ -72,10 +72,18 @@ except ImportError:
     print("Warning: arch package not found. Block bootstrap will be skipped.")
     print("Install with: pip install arch")
 
-DATA_DIR   = "/user/geog/falejandraperez/sea-ice-phase/scripts/R/Ch3/data"
-INDEX_DIR  = "/user/geog/falejandraperez/sea-ice-phase/data/indices"
+# --- Repo root: resolves local first, cluster as fallback -----------------
+_ROOTS = [os.environ.get("SEAICE_ROOT"),
+          os.path.expanduser("~/Research/repos/sea-ice-phase"),
+          "/Users/fridaperez/Research/repos/sea-ice-phase",
+          "/user/geog/falejandraperez/sea-ice-phase"]
+ROOT = next((r for r in _ROOTS if r and os.path.isdir(os.path.join(r, "scripts"))), None)
+if ROOT is None:
+    raise SystemExit("Cannot locate sea-ice-phase repo. Set SEAICE_ROOT.")
+DATA_DIR   = os.path.join(ROOT, "scripts", "R", "Ch3", "data")
+INDEX_DIR  = os.path.join(ROOT, "data", "indices")
 
-ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params.csv")
+ANNUAL_CSV = os.path.join(DATA_DIR, "annual_params_B.csv")
 INDEX_CSV  = os.path.join(DATA_DIR, "master_index_detrended.csv")
 
 YEAR_MIN = 1979
@@ -97,18 +105,21 @@ SECTORS = {
 
 # Key pairs for LOO and partial correlation — the physically motivated ones
 KEY_PAIRS = [
-    ("SIE_East_Antarctica",         "amplitude_anom", "SAM"),
-    ("SIE_Ross",                    "amplitude_anom", "ZW3R"),
-    ("SIE_Amundsen_Bellingshausen", "max_doy_anom",   "ASL"),
-    ("SIE_East_Antarctica",         "amplitude_anom", "Nino34"),
+    ("SIE_East_Antarctica",         "amplitude_raw_anom", "SAM"),
+    ("SIE_Ross",                    "amplitude_raw_anom", "ZW3R"),
+    ("SIE_Amundsen_Bellingshausen", "max_doy_raw_anom",   "ASL"),
+    ("SIE_East_Antarctica",         "amplitude_raw_anom", "Nino34"),
 ]
 
 MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun",
                "Jul","Aug","Sep","Oct","Nov","Dec"]
 
 APAC_VARS = {
-    "max_doy_anom"  : "phase",
-    "amplitude_anom": "amplitude",
+    # OBSERVED metrics — see ch3_config.ANALYSIS_VARS for why the fitted
+    # quantities (max_doy_anom / amplitude_anom) are not used here.
+    "max_doy_raw_anom"  : "phase_max",
+    "min_doy_raw_anom"  : "phase_min",
+    "amplitude_raw_anom": "amplitude",
 }
 
 
@@ -118,7 +129,7 @@ print("Loading data...")
 annual = pd.read_csv(ANNUAL_CSV)
 annual = annual[annual["Year"].between(YEAR_MIN, YEAR_MAX)]
 
-for col in ["max_doy_anom", "amplitude_anom"]:
+for col in list(APAC_VARS.keys()):
     annual[col] = pd.to_numeric(annual[col], errors="coerce")
 
 idx = pd.read_csv(INDEX_CSV)
@@ -140,7 +151,7 @@ month_map = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
 # SAM
 sam_raw = pd.read_csv(
     os.path.join(INDEX_DIR, "marshall_sam_monthly.txt"),
-    delim_whitespace=True, header=0,
+    sep=r'\s+', header=0,
     names=["year","Jan","Feb","Mar","Apr","May","Jun",
            "Jul","Aug","Sep","Oct","Nov","Dec"]
 )
