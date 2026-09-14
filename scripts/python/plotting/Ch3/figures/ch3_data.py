@@ -24,11 +24,11 @@ _SUM_TOL = 1e-6
 # ── Loaders ───────────────────────────────────────────────────────────────────
 
 def load_daily(validate=True):
-    """Daily fitted series with decomposition components (Pipeline B)."""
+    """Daily fitted series with decomposition components (Pipeline E)."""
     if not os.path.exists(DAILY_CSV):
         raise SystemExit(
             f"Not found: {DAILY_CSV}\n"
-            "Run APAC_Sector_Pipeline_B.R, or update DAILY_CSV in ch3_config.py."
+            "Run R/ch3/01_fit_apac.R, or update DAILY_CSV in ch3_config.py."
         )
     d = pd.read_csv(DAILY_CSV, parse_dates=["Date"])
 
@@ -39,21 +39,21 @@ def load_daily(validate=True):
         if miss:
             raise SystemExit(
                 f"Missing columns {miss}.\n"
-                "This looks like Pipeline A output. Run APAC_Sector_Pipeline_B.R."
+                "Pre-E output (anomaly_from_iac missing). Run R/ch3/01_fit_apac.R."
             )
         err = decomposition_error(d)
         if err > _SUM_TOL:
             raise SystemExit(
                 f"Decomposition does not sum (mean |error| = {err:.3e}).\n"
-                "Pipeline A output, or a partial fix. Regenerate with Pipeline B."
+                "Regenerate with R/ch3/01_fit_apac.R (E: anomaly_from_iac = trend+amp+phase+residual)."
             )
     return d
 
 
 def load_annual(validate=True):
-    """Annual scalar parameters (Pipeline B)."""
+    """Annual scalar parameters (Pipeline E, 1979-2023)."""
     if not os.path.exists(ANNUAL_CSV):
-        raise SystemExit(f"Not found: {ANNUAL_CSV} — run APAC_Sector_Pipeline_B.R.")
+        raise SystemExit(f"Not found: {ANNUAL_CSV} — run R/ch3/01_fit_apac.R.")
     a = pd.read_csv(ANNUAL_CSV)
 
     if validate:
@@ -62,6 +62,10 @@ def load_annual(validate=True):
         if miss:
             raise SystemExit(f"Missing columns {miss} — run Pipeline B.")
         # Wrap fix present? Pipeline A had min-DOY anomalies of ~+305 days.
+        if a["Year"].min() < 1979:
+            raise SystemExit(
+                "annual_params contains a pre-1979 row (partial 1978 cycle). "
+                "This is not the ch3-pipeline-v1 output; rerun R/ch3/01_fit_apac.R.")
         if a["min_doy_raw_anom"].abs().max() > 150:
             raise SystemExit(
                 "min_doy_raw_anom exceeds 150 days — the DOY wrap fix is not "
@@ -72,7 +76,7 @@ def load_annual(validate=True):
 
 def load_rmse():
     if not os.path.exists(RMSE_CSV):
-        raise SystemExit(f"Not found: {RMSE_CSV} — run APAC_Sector_Pipeline_B.R.")
+        raise SystemExit(f"Not found: {RMSE_CSV} — run R/ch3/01_fit_apac.R.")
     return pd.read_csv(RMSE_CSV)
 
 
@@ -86,7 +90,7 @@ def load_correlations(path, required_cols=None):
     if not os.path.exists(path):
         raise SystemExit(
             f"Not found: {path}\n"
-            "Regenerate the correlation pipeline from annual_params_B.csv first."
+            "Run processing/compute_atmospheric_correlations.py first."
         )
     df = pd.read_csv(path)
     if required_cols:
@@ -146,19 +150,28 @@ def rolling_stat(annual, col, window, func="std", min_frac=0.8):
     return pd.concat(out, ignore_index=True)
 
 
-def rolling_corr(annual, col_a, col_b, window, min_frac=0.8):
-    """Centred rolling Pearson r between two annual metrics, per sector.
+def rolling_corr(annual, col_a, col_b, window, min_frac=0.8,
+                 method="spearman", center=False):
+    """Rolling correlation between two annual metrics, per sector.
 
-    NOTE: with 44 years and a 10-15 year window these wander substantially by
-    sampling variability alone. Any claim of non-stationarity needs a null
-    (shuffle years, recompute) before it is safe.
+    Default is a TRAILING window (value plotted at the window's last year) and
+    Spearman rho — the statistic quoted in the chapter text and written by
+    ch3_stats.py (t33_phase_amp_rolling10.csv). Pass method="pearson" or
+    center=True only for a figure that says so in its caption.
+
+    NOTE: with 45 years and a 10-15 year window these wander substantially by
+    sampling variability alone; consecutive windows share 9 of 10 years. The
+    inference lives in the whole-era split tests, not in the curve.
     """
     out = []
     minp = int(np.ceil(window * min_frac))
     for sec, g in annual.groupby("sector"):
         g = g.sort_values("Year")
-        r = (g[col_a].rolling(window, center=True, min_periods=minp)
-             .corr(g[col_b]))
+        if method == "spearman":
+            ra, rb = g[col_a].rank(), g[col_b].rank()
+        else:
+            ra, rb = g[col_a], g[col_b]
+        r = ra.rolling(window, center=center, min_periods=minp).corr(rb)
         out.append(pd.DataFrame(dict(sector=sec, Year=g["Year"].values,
                                      value=r.values)))
     return pd.concat(out, ignore_index=True)
