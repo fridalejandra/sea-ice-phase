@@ -52,15 +52,20 @@ else:  # standalone use: python ch3_stats.py annual.csv index.csv asl.csv outdir
     YEAR_MIN, YEAR_MAX, BREAK_YEAR, SPLIT_YEAR, ROLL_SHORT = 1979, 2023, 2016, 2001, 10
     SEASONS = ["annual", "DJF", "MAM", "JJA", "SON", "ADV", "RET"]
     PRIMARY_PAIRS = [
-        ("SIE_Weddell", "amplitude_raw_anom", "Nino34_SON", "ENSO dipole"),
+        ("SIE_Amundsen_Bellingshausen", "amplitude_raw_anom", "Nino34_SON", "ENSO dipole"),
         ("SIE_King_Haakon", "amplitude_raw_anom", "Nino34_annual", "ENSO dipole"),
         ("SIE_Ross", "amplitude_raw_anom", "ASL_annual", "ASL-Ross"),
-        ("SIE_Amundsen_Bellingshausen", "amplitude_raw_anom", "SAM_JJA", "SAM-ABS"),
+        ("SIE_Weddell", "amplitude_raw_anom", "SAM_JJA", "SAM-Weddell"),
         ("SIE_East_Antarctica", "max_doy_raw_anom", "SAM_RET", "SAM-EA retreat"),
         ("SIE_King_Haakon", "max_doy_raw_anom", "ZW3R_SON", "ZW3"),
-        ("SIE_Weddell", "amplitude_raw_anom", "ZW3R_annual", "ZW3"),
+        ("SIE_Amundsen_Bellingshausen", "amplitude_raw_anom", "ZW3R_annual", "ZW3"),
     ]
 os.makedirs(TABLES_DIR, exist_ok=True)
+
+# Sector carrying the growth-season-limited amplitude result (H5). Was hard-coded
+# as the Weddell before 2026-09-14; the Weddell/ABS column labels in the sector CSV
+# were exchanged until then (see scripts/python/checks/check_sectors.py).
+GS_SECTOR, GS_LABEL, GS_TAG = "SIE_Amundsen_Bellingshausen", "ABS", "abs"
 
 PH, AMP, EXT = "max_doy_raw_anom", "amplitude_raw_anom", "sie_annual"
 SCRIPT = "ch3_stats.py"
@@ -263,23 +268,23 @@ for sec in SECTORS:
                      r2_post2016=r2 ** 2))
     note("3.3c", f"r(growth-season length, amplitude) pre/post {BREAK_YEAR}", f"{r1:+.2f} -> {r2:+.2f}", lab(sec), n2, psh)
 gl = pd.DataFrame(rows); gl.to_csv(os.path.join(TABLES_DIR, "t33c_growth_length_vs_amplitude.csv"), index=False)
-# Weddell year table for the text
-w = ann[(ann.sector == "SIE_Weddell") & (ann.Year >= BREAK_YEAR)][["Year", "min_doy_raw", "max_doy_raw", GL, "amplitude_raw_yr"]]
-w.to_csv(os.path.join(TABLES_DIR, "t33c_weddell_post2016_years.csv"), index=False)
-# does any index set Weddell growth-season length? (H5 atmospheric test, full record, all index cols)
+# growth-season sector year table for the text
+w = ann[(ann.sector == GS_SECTOR) & (ann.Year >= BREAK_YEAR)][["Year", "min_doy_raw", "max_doy_raw", GL, "amplitude_raw_yr"]]
+w.to_csv(os.path.join(TABLES_DIR, f"t33c_{GS_TAG}_post2016_years.csv"), index=False)
+# does any index set the growth-season length in that sector? (H5 atmospheric test, full record, all index cols)
 rows = []
-a = sec_df(ai, "SIE_Weddell")
+a = sec_df(ai, GS_SECTOR)
 for ic in ICOLS:
     r, p, n = pear(a[ic], a[GL]); rows.append(dict(index=ic, r=r, p=p, n=n))
 gw = pd.DataFrame(rows).sort_values("p"); gw["q_bh"] = bh(gw.p.values)
-gw.to_csv(os.path.join(TABLES_DIR, "t35_H5_weddell_growth_length_vs_indices.csv"), index=False)
-note("3.5/H5", "Weddell growth length ~ indices: best", f"{gw.iloc[0]['index']} r={gw.iloc[0].r:+.2f}", "Weddell", p=gw.iloc[0].p,
+gw.to_csv(os.path.join(TABLES_DIR, f"t35_H5_{GS_TAG}_growth_length_vs_indices.csv"), index=False)
+note("3.5/H5", f"{GS_LABEL} growth length ~ indices: best", f"{gw.iloc[0]['index']} r={gw.iloc[0].r:+.2f}", GS_LABEL, p=gw.iloc[0].p,
      extra=f"BH q={gw.iloc[0].q_bh:.2f}; {int((gw.p < 0.05).sum())}/{len(gw)} at p<0.05")
 
 
 # ── 3.3d  breakpoint sensitivity for the recent-period results ───────────────
 # Where the pre/post boundary is drawn matters for the pooled coupling and not
-# for the Weddell growth-season result; the table makes that visible.
+# for the growth-season result; the table makes that visible.
 rows = []
 for B in range(2013, 2018):
     rs, ns = [], []
@@ -290,16 +295,16 @@ for B in range(2013, 2018):
         a = sec_df(ann, sec, YEAR_MIN, B - 1); r, _, n = pear(a[PH], a[AMP]); rs.append(r); ns.append(n)
     m1 = meta(rs, ns)
     zd = (fz(m1["r_re"]) - fz(m2["r_re"])) / np.sqrt(m1["se_z"] ** 2 + m2["se_z"] ** 2)
-    w_ = sec_df(ann, "SIE_Weddell"); pre, post = w_[w_.Year < B], w_[w_.Year >= B]
+    w_ = sec_df(ann, GS_SECTOR); pre, post = w_[w_.Year < B], w_[w_.Year >= B]
     r1, _, n1 = pear(pre[GL], pre[AMP]); r2, _, n2 = pear(post[GL], post[AMP]); _, pw = zshift(r1, n1, r2, n2)
     ea = sec_df(ann, "SIE_East_Antarctica"); vr = np.nanvar(ea[ea.Year >= B][AMP], ddof=1) / np.nanvar(ea[ea.Year < B][AMP], ddof=1)
     rows.append(dict(breakpoint=B, n_post=YEAR_MAX - B + 1, pooled_r_pre=m1["r_re"], pooled_r_post=m2["r_re"],
                      p_post=m2["p"], p_shift=2 * stats.norm.sf(abs(zd)),
-                     weddell_growth_r_pre=r1, weddell_growth_r_post=r2, weddell_growth_p_shift=pw,
+                     growth_r_pre=r1, growth_r_post=r2, growth_p_shift=pw,
                      east_antarctica_amp_var_ratio=vr))
 bp = pd.DataFrame(rows); bp.to_csv(os.path.join(TABLES_DIR, "t33d_breakpoint_sensitivity.csv"), index=False)
 note("3.3d", "pooled coupling significant only for break =", ", ".join(str(int(b)) for b in bp[bp.p_post < 0.05].breakpoint), "pooled")
-note("3.3d", "Weddell growth-length shift p<0.05 for break in", ", ".join(str(int(b)) for b in bp[bp.weddell_growth_p_shift < 0.05].breakpoint), "Weddell")
+note("3.3d", f"{GS_LABEL} growth-length shift p<0.05 for break in", ", ".join(str(int(b)) for b in bp[bp.growth_p_shift < 0.05].breakpoint), GS_LABEL)
 
 
 # ── 3.4  variance of the components, post/pre-2016 ───────────────────────────
@@ -574,11 +579,11 @@ def _md():
     w("## 3.3c · Growth-season length (day of max − day of min) vs amplitude\n")
     g = T("t33c_growth_length_vs_amplitude.csv").round(2)
     w(_tomd(g[["sector", "mean_len_days", "sd_len_pre", "sd_len_post", "r_pre2016", "r_post2016", "p_shift"]], index=False) + "\n")
-    w("Weddell 2016–2023 by year:\n\n" + _tomd(T("t33c_weddell_post2016_years.csv").round(2), index=False) + "\n")
+    w(f"{GS_LABEL} 2016–2023 by year:\n\n" + _tomd(T(f"t33c_{GS_TAG}_post2016_years.csv").round(2), index=False) + "\n")
 
     w("## 3.3d · Breakpoint sensitivity (2013–2017)\n")
     w(_tomd(T("t33d_breakpoint_sensitivity.csv").round(3), index=False) +
-      "\n\nThe pooled coupling exists for a 2016 break only; the Weddell growth-season result holds for 2014–2016; the East Antarctic amplitude-variance drop for 2014–2017.\n")
+      "\n\nThe pooled coupling exists for a 2016 break only; the ABS growth-season result holds for 2014–2016; the East Antarctic amplitude-variance drop for 2014–2017.\n")
 
     w("## 3.4 · Component variance, post/pre-2016 (F-test, raw anomalies)\n")
     v = T("t34_variance_ratio_2016.csv").query("not detrended").pivot(index="sector", columns="variable", values="var_ratio_post_pre").round(2)
@@ -593,10 +598,10 @@ def _md():
       f"Hits cluster by sector × mode with consistent sign across seasons:\n")
     pp = T("t35_primary_pairs.csv").round(3)
     w(pp[["sector", "target", "index", "r", "p", "p_bonf7", "loo_worst_p", "seasons_p05_same_sign", "basis"]].to_markdown(index=False) + "\n")
-    w("Bonferroni over 7 is post-hoc; the defence is mechanism + LOO + seasonal consistency. Weddell~ZW3R is the weakest (LOO 0.07) → supplement.\n")
+    w("Bonferroni over 7 is post-hoc; the defence is mechanism + LOO + seasonal consistency. ABS~ZW3R is the weakest (LOO 0.07) → supplement.\n")
     pm = T("t35_pooled_meta.csv").round(2)
     w("**Pooled across the five sectors (the circumpolar test) — I² is the result:**\n\n" + _tomd(pm, index=False) +
-      "\n\nHigh I² for ENSO~amplitude = dipole (Weddell +, King Haakon −); nothing pools to a circumpolar effect.\n")
+      "\n\nHigh I² for ENSO~amplitude = dipole (ABS +, King Haakon −); nothing pools to a circumpolar effect.\n")
 
     if os.path.exists(os.path.join(TABLES_DIR, "t34c_volatility_gamlss_post2016.csv")):
         w("## 3.4c · Day-to-day volatility, post/pre-2016 (gamlss; R/ch3/05_volatility_gamlss.R)\n")
@@ -612,8 +617,8 @@ def _md():
       _tomd(T("t35_H3_asl_nino_teleconnection_2001.csv").query("asl == nino or nino.str.startswith('SAM')", engine="python").round(2), index=False) + "\n")
     w("Ross amplitude ~ ASL, with and without Niño3.4 partialled out:\n\n" +
       _tomd(T("t35_H3_ross_asl_partial_nino.csv").round(2), index=False) + "\n")
-    w("**H5 — does any index set Weddell growth-season length? (full record, all 35 index-seasons, BH)**\n\n" +
-      _tomd(T("t35_H5_weddell_growth_length_vs_indices.csv").head(8).round(3), index=False) + "\n")
+    w(f"**H5 — does any index set {GS_LABEL} growth-season length? (full record, all 35 index-seasons, BH)**\n\n" +
+      _tomd(T(f"t35_H5_{GS_TAG}_growth_length_vs_indices.csv").head(8).round(3), index=False) + "\n")
 
     w("## 3.6 · Stationarity, 1979–2000 vs 2001–2023\n")
     st = T("t36_stationarity_2001.csv").round(3)

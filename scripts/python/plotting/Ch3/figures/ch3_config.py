@@ -175,14 +175,19 @@ FITTED_VARS = {
 
 # ── Pre-specified atmosphere pairs (§3.5 / §3.6) ─────────────────────────────
 # (sector, observed variable, index column in master_index_detrended.csv, literature basis)
+# Sector names corrected 2026-09-14: the Weddell and Amundsen-Bellingshausen
+# columns of the sector CSV were exchanged until that date (see
+# scripts/python/checks/check_sectors.py). The ENSO and ZW3 amplitude pairs are
+# in the Amundsen-Bellingshausen sector and the SAM (JJA) amplitude pair in the
+# Weddell; the relationships themselves are unchanged.
 PRIMARY_PAIRS = [
-    ("SIE_Weddell",                 "amplitude_raw_anom", "Nino34_SON",  "ENSO Atlantic dipole (Yuan 2004)"),
-    ("SIE_King_Haakon",             "amplitude_raw_anom", "Nino34_annual", "ENSO Atlantic dipole (Yuan 2004)"),
+    ("SIE_Amundsen_Bellingshausen", "amplitude_raw_anom", "Nino34_SON",  "ENSO, Pacific pole of the Antarctic Dipole via the ASL (Yuan 2004; Stammerjohn et al. 2008)"),
+    ("SIE_King_Haakon",             "amplitude_raw_anom", "Nino34_annual", "ENSO, Atlantic/Indian pole (Yuan 2004)"),
     ("SIE_Ross",                    "amplitude_raw_anom", "ASL_annual",  "ASL–Ross (Raphael et al. 2016; Hosking 2013)"),
-    ("SIE_Amundsen_Bellingshausen", "amplitude_raw_anom", "SAM_JJA",     "SAM–ABS (Lefebvre 2004)"),
+    ("SIE_Weddell",                 "amplitude_raw_anom", "SAM_JJA",     "SAM–Weddell (Lefebvre et al. 2004)"),
     ("SIE_East_Antarctica",         "max_doy_raw_anom",   "SAM_RET",     "SAM–East Antarctic retreat (Stammerjohn 2008)"),
     ("SIE_King_Haakon",             "max_doy_raw_anom",   "ZW3R_SON",    "ZW3 (Raphael 2004)"),
-    ("SIE_Weddell",                 "amplitude_raw_anom", "ZW3R_annual", "ZW3 (Raphael 2004)"),
+    ("SIE_Amundsen_Bellingshausen", "amplitude_raw_anom", "ZW3R_annual", "ZW3 (Raphael 2004)"),
 ]
 
 # Significance threshold for n = 45 (1979-2023), two-tailed p = 0.05

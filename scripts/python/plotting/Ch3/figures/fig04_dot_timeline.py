@@ -29,7 +29,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-from ch3_config import DATA_DIR, OUTPUT_DIR, GDRIVE, DAILY_CSV
+from ch3_config import DATA_DIR, OUTPUT_DIR, GDRIVE, DAILY_CSV, TABLES_DIR
 
 SECTOR_ORDER = [
     ("SIE_Weddell",                 "Weddell",         "#2196F3"),
