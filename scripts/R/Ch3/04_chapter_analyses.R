@@ -1,18 +1,45 @@
 # =============================================================================
-# chapter_analyses_E.R — §3.3.5 residual variability + §3.4 timing/amplitude/
-# beta correlation tables, from the Pipeline-E outputs.
+# 04_chapter_analyses.R — §3.3.5 residual variability + §3.4 timing/amplitude/
+# beta correlation tables.
 #
-# Inputs : daily_fitted_E.csv, annual_params_E.csv
+# FIXED 2026-09-18: previously read daily_fitted_E.csv / annual_params_E.csv,
+# an old "Pipeline-E" data variant that no longer exists on disk (confirmed
+# via `ls data/ch3/*.csv` -- only the canonical, unsuffixed files are there
+# now, so the old version would fail outright with file-not-found). This now
+# reads the canonical daily_fitted.csv / annual_params.csv -- the same files
+# ch3_config.py's DAILY_CSV/ANNUAL_CSV point to -- filtered to period ==
+# "FULL". Both files carry a FULL (1979-2025) and an HR2018 (1979-2018)
+# window that overlap for 2016-2018; every other script in this pipeline
+# filters to FULL for exactly that reason (same bug, same fix, as
+# fig_07_abs_growth_season.py's period-filter fix earlier this chapter).
+# Confirmed via the provenance audit (results/ch3/tables/_provenance_audit.csv)
+# that this script is still the sole writer of both output tables below --
+# nothing else in the pipeline has taken over either one.
+#
+# NOT independently verified in this pass: whether daily_fitted.csv still has
+# residual_apac / volatility columns, and whether annual_params.csv still has
+# beta1 / beta2 / sie_DJF / sie_MAM / sie_JJA / sie_SON under those exact
+# names -- the annual columns were confirmed against a real uploaded copy
+# earlier this chapter, the daily ones were not re-checked this pass. The
+# stopifnot()-style checks below fail loudly and specifically if any are
+# missing, rather than erroring deep inside a dplyr pipeline.
+#
+# Inputs : daily_fitted.csv, annual_params.csv (both filtered to period == "FULL")
 # Optional: a climate-index CSV (see INDEX_FILE below) with columns
 #           Year, <index columns...> (annual or seasonal values). If absent,
 #           the index correlations are skipped and everything else still runs.
+#           This block was already disabled (if (FALSE && ...)) with a
+#           comment reading "index correlations now in ch3_stats.py" -- left
+#           disabled as-is, not re-enabled, since that migration looks real
+#           (nothing in the provenance audit contradicts it).
 #
 # Outputs (to OUT_DIR):
 #   s335_residual_variability.csv   decadal residual/volatility stats
 #   s335_summary.txt                copy-paste numbers for the text
 #   s34_internal_correlations.csv   per sector: seasonal SIE anomalies vs
 #                                   timing / amplitude / beta-asymmetry
-#   s34_index_correlations.csv      (only if INDEX_FILE exists)
+#   s34_index_correlations.csv      (only if INDEX_FILE exists -- currently
+#                                   dead code, see note above)
 # =============================================================================
 
 library(dplyr)
@@ -21,15 +48,33 @@ library(tidyr)
 ROOT    <- path.expand("~/Research/repos/sea-ice-phase")
 DATA_DIR <- file.path(ROOT, "data/ch3")
 OUT_DIR  <- file.path(ROOT, "results/ch3/tables")
-DAILY   <- file.path(DATA_DIR, "daily_fitted_E.csv")
-ANNUAL  <- file.path(DATA_DIR, "annual_params_E.csv")
+DAILY   <- file.path(DATA_DIR, "daily_fitted.csv")
+ANNUAL  <- file.path(DATA_DIR, "annual_params.csv")
 INDEX_FILE <- file.path(DATA_DIR, "climate_indices.csv")  # optional
 
 daily  <- read.csv(DAILY,  stringsAsFactors = FALSE)
 annual <- read.csv(ANNUAL, stringsAsFactors = FALSE)
 daily$Date <- as.Date(daily$Date)
+
+# period-contamination guard -- see header note above.
+if ("period" %in% names(daily))  daily  <- daily  %>% filter(period == "FULL")
+if ("period" %in% names(annual)) annual <- annual %>% filter(period == "FULL")
+
 annual <- annual %>% filter(Year >= 1979)  # first (partial) year excluded per methods 2.1.1
 daily  <- daily  %>% filter(Year >= 1979)
+
+# Fail loudly and specifically if the canonical files don't have the columns
+# this script assumes -- better than a cryptic dplyr error three steps in.
+need_daily  <- c("sector", "Year", "residual_apac", "volatility")
+need_annual <- c("sector", "Year", "sie_annual", "sie_DJF", "sie_MAM", "sie_JJA",
+                 "sie_SON", "max_doy_raw_anom", "min_doy_raw_anom",
+                 "amplitude_raw_anom", "beta1", "beta2")
+miss_daily  <- setdiff(need_daily,  names(daily))
+miss_annual <- setdiff(need_annual, names(annual))
+if (length(miss_daily) > 0)
+  stop("daily_fitted.csv is missing expected column(s): ", paste(miss_daily, collapse = ", "))
+if (length(miss_annual) > 0)
+  stop("annual_params.csv is missing expected column(s): ", paste(miss_annual, collapse = ", "))
 
 # ── §3.3.5 RESIDUAL VARIABILITY ─────────────────────────────────────────────
 d <- daily %>%

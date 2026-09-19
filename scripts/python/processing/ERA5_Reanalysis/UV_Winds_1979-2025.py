@@ -38,8 +38,8 @@ def download_day(date_str):
     print(f"  ✔ Done: {filename}")
 
 # Generate list of all days from Jan 1, 1979 to Dec 31, 2024
-start_date = datetime(1979, 1, 1)
-end_date = datetime(2024, 12, 31)
+start_date = datetime(2025, 1, 1)
+end_date = datetime(2026, 12, 31)
 
 date_list = []
 current_date = start_date

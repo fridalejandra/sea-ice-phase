@@ -5,6 +5,25 @@ Every loader validates its input and fails loudly rather than producing a
 plausible-looking wrong figure. In particular, load_daily() refuses Pipeline A
 output, because in Pipeline A the decomposition components did not sum to the
 anomaly (trend double-counted; phase_component built from the wrong curve).
+
+PERIOD COLUMN (added when 01_fit_apac.R moved to a dual-period fit):
+daily_fitted_E.csv and annual_params_E.csv now contain one full copy of the
+output per entry in R's PERIODS list ("HR2018" = through 2018-12-31, "FULL" =
+through 2023-12-31), so years 1979-2018 appear under BOTH periods as
+independent refits. load_daily()/load_annual() default to period="FULL" —
+every normal figure/table should use that default. Only the H&R-comparison
+validation table should pass period="HR2018" explicitly. Pass period=None to
+get every period's rows back (e.g. to build that comparison table yourself).
+
+rmse_summary_E.csv is NOT filtered by load_rmse() — the whole point of that
+file is to compare both periods side by side, so it always returns every
+period's rows; filter it yourself where you use it.
+
+NOTE: any script that reads DAILY_CSV / ANNUAL_CSV with pd.read_csv() directly
+instead of through these loaders will silently get both periods' rows mixed
+together. compute_atmospheric_correlations.py currently does this (reads
+ANNUAL_CSV directly) and needs its own period filter — grep the repo for
+other direct pd.read_csv(ANNUAL_CSV) / pd.read_csv(DAILY_CSV) call sites.
 """
 
 import os
@@ -19,12 +38,17 @@ from ch3_config import (
 )
 
 _SUM_TOL = 1e-6
+DEFAULT_PERIOD = "FULL"
 
 
 # ── Loaders ───────────────────────────────────────────────────────────────────
 
-def load_daily(validate=True):
-    """Daily fitted series with decomposition components (Pipeline E)."""
+def load_daily(validate=True, period=DEFAULT_PERIOD):
+    """Daily fitted series with decomposition components (Pipeline E).
+
+    period: "FULL" (default), "HR2018", or None for every period's rows
+    unfiltered (both periods stacked; you'll want to filter yourself).
+    """
     if not os.path.exists(DAILY_CSV):
         raise SystemExit(
             f"Not found: {DAILY_CSV}\n"
@@ -47,11 +71,24 @@ def load_daily(validate=True):
                 f"Decomposition does not sum (mean |error| = {err:.3e}).\n"
                 "Regenerate with R/ch3/01_fit_apac.R (E: anomaly_from_iac = trend+amp+phase+residual)."
             )
+
+    if period is not None and "period" in d.columns:
+        d = d[d["period"] == period].reset_index(drop=True)
+        if d.empty:
+            raise SystemExit(
+                f"{os.path.basename(DAILY_CSV)} has a `period` column but no "
+                f"rows with period == {period!r}. Available: "
+                f"{sorted(pd.read_csv(DAILY_CSV, usecols=['period'])['period'].unique())}"
+            )
     return d
 
 
-def load_annual(validate=True):
-    """Annual scalar parameters (Pipeline E, 1979-2023)."""
+def load_annual(validate=True, period=DEFAULT_PERIOD):
+    """Annual scalar parameters (Pipeline E, 1979-2023).
+
+    period: "FULL" (default), "HR2018", or None for every period's rows
+    unfiltered (both periods stacked; you'll want to filter yourself).
+    """
     if not os.path.exists(ANNUAL_CSV):
         raise SystemExit(f"Not found: {ANNUAL_CSV} — run R/ch3/01_fit_apac.R.")
     a = pd.read_csv(ANNUAL_CSV)
@@ -71,10 +108,21 @@ def load_annual(validate=True):
                 "min_doy_raw_anom exceeds 150 days — the DOY wrap fix is not "
                 "applied. This is Pipeline A output."
             )
+
+    if period is not None and "period" in a.columns:
+        a = a[a["period"] == period].reset_index(drop=True)
+        if a.empty:
+            raise SystemExit(
+                f"{os.path.basename(ANNUAL_CSV)} has a `period` column but no "
+                f"rows with period == {period!r}. Available: "
+                f"{sorted(pd.read_csv(ANNUAL_CSV, usecols=['period'])['period'].unique())}"
+            )
     return a
 
 
 def load_rmse():
+    """RMSE/pct-improvement summary, all periods (deliberately NOT filtered —
+    this is the one table meant to compare periods side by side)."""
     if not os.path.exists(RMSE_CSV):
         raise SystemExit(f"Not found: {RMSE_CSV} — run R/ch3/01_fit_apac.R.")
     return pd.read_csv(RMSE_CSV)

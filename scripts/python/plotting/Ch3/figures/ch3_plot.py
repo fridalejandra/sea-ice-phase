@@ -4,20 +4,43 @@ ch3_plot.py — shared plotting helpers.
 Layout and annotation utilities used across figures. Visual style (fonts,
 colours, rcParams) stays in your existing ch3_style.py; this module only
 handles repeated *structure*: sector grids, break-year markers, saving.
+
+FIGURE SIZING (added 2026-09): every figure should target ch3_config.TEXT_WIDTH_IN
+(6.5in, standard 1in-margin Letter — update ch3_config.py if your program's
+margins differ) instead of picking its own figsize. Call figsize(shape) for
+the standard tuple, or pass a FIGSIZE key straight to sector_grid(). save()
+warns if a figure ends up wider than TEXT_WIDTH_IN anyway, so an old script
+that still hardcodes figsize=(14, 10) gets caught at save time rather than
+only when it blows up a page in the PDF.
 """
 
 import os
-import subprocess
+import subprocess 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from ch3_config import (
     SECTORS, SECTOR_LABELS, SECTOR_COLORS,
     OUTPUT_DIR, GDRIVE, BREAK_YEAR, YEAR_START, YEAR_END,
+    TEXT_WIDTH_IN, FIGSIZE,
 )
 
 
-def sector_grid(nrow=2, ncol=3, figsize=(15, 8), sharex=True, sharey=False,
+def figsize(shape="single"):
+    """Standard (width, height) in inches for a named panel layout.
+
+    shape: one of ch3_config.FIGSIZE's keys ("single", "row2", "row3",
+    "stack2", "grid2x2", "grid2x3"). Unknown shapes fall back to "single"
+    with a warning rather than silently returning something oversized.
+    """
+    if shape not in FIGSIZE:
+        print(f"  WARNING: figsize({shape!r}) is not a known shape "
+              f"({sorted(FIGSIZE)}) — falling back to 'single'.")
+        shape = "single"
+    return FIGSIZE[shape]
+
+
+def sector_grid(nrow=2, ncol=3, figsize=FIGSIZE["grid2x3"], sharex=True, sharey=False,
                 sectors=None):
     """Standard one-panel-per-sector grid. Returns (fig, dict[sector -> ax])."""
     sectors = sectors or SECTORS
@@ -71,7 +94,18 @@ def year_axis(ax, start=YEAR_START, end=YEAR_END):
 
 
 def save(fig, name, dpi=300, sync=True, tight=True):
-    """Save to OUTPUT_DIR and optionally rclone to Drive."""
+    """Save to OUTPUT_DIR and optionally rclone to Drive.
+
+    Warns (does not block) if the figure is wider than ch3_config.TEXT_WIDTH_IN
+    — catches a script that still hardcodes an oversized figsize= instead of
+    using ch3_plot.figsize()/sector_grid()'s default.
+    """
+    w_in, h_in = fig.get_size_inches()
+    if w_in > TEXT_WIDTH_IN + 0.1:
+        print(f"  WARNING: {name} is {w_in:.1f}in wide, target is "
+              f"{TEXT_WIDTH_IN}in — it will run past the text margin or get "
+              f"auto-shrunk (and its fonts with it) when placed in the document.")
+
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     path = os.path.join(OUTPUT_DIR, name)
     if tight:

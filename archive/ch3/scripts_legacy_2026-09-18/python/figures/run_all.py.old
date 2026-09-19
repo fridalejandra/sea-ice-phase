@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# reorg_ch3_scripts.sh -- archive the old rolling-window/monthly-lag-correlation
+# era of Ch3 scripts, rename the one live script whose number doesn't match
+# its manuscript figure, and leave a few genuinely uncertain files untouched.
+#
+# FIX (2026-09-18): the previous version hardcoded FIG_DIR as
+# "scripts/python/figures", which was wrong -- the real path, confirmed by
+# actually running it, is scripts/python/plotting/Ch3/figures (the same path
+# build_ch3_figures.py's own docstring names). This version locates itself
+# instead of guessing: it finds its own directory and treats THAT as
+# FIG_DIR, so it works from wherever it actually lives. It also stopped
+# guessing at the processing/ directory's path and searches for it instead,
+# printing what it found before touching anything.
+#
+# Run it FROM the figures directory (where you just ran the old version):
+#   cd /Users/fridaperez/Research/repos/sea-ice-phase/scripts/python/plotting/Ch3/figures
+#   bash reorg_ch3_scripts.sh
+# or from anywhere, by path -- it no longer matters, it locates itself either way.
+#
+# Safe to re-run: every move checks the source exists first and skips (with a
+# message) rather than failing the whole script if something's already moved
+# or was never there. Uses `git mv` so history follows the file; falls back
+# to plain `mv` if the file isn't tracked by git.
+#
+# What this does NOT do, on purpose:
+#   - touch fig01_conflation.py            (you're still checking it -- Fig 1?)
+#   - touch compute_loo_index.py           (LOO is a currently-used method in
+#                                            this chapter -- Ross-ASL LOO,
+#                                            primary-pairs LOO worst-p -- this
+#                                            may well be live, not legacy)
+#   - touch compute_outlier_diagnostic.py  (genuinely unclear either way)
+#   - delete anything. Everything below is a `git mv`, nothing is removed.
+
+set -u  # unset vars are errors; deliberately NOT set -e, see note above
+
+# ---- locate ourselves, rather than guessing a repo-root-relative path ----
+SELF="${BASH_SOURCE[0]}"
+FIG_DIR="$(cd "$(dirname "$SELF")" && pwd)"
+echo "Operating on FIG_DIR = $FIG_DIR"
+
+# sanity check: this should be the directory with ch3_config.py in it
+if [ ! -f "$FIG_DIR/ch3_config.py" ]; then
+  echo "WARNING: no ch3_config.py found in $FIG_DIR -- this may not be the"
+  echo "right directory. Continuing anyway, but double-check the output below."
+fi
+
+# repo root: FIG_DIR is scripts/python/plotting/Ch3/figures, so walk up 5
+ROOT="$(cd "$FIG_DIR/../../../../.." && pwd)"
+echo "Inferred ROOT = $ROOT"
+if [ ! -d "$ROOT/scripts" ] || [ ! -d "$ROOT/data" ]; then
+  echo "WARNING: $ROOT doesn't look like the repo root (no scripts/ or data/"
+  echo "subdirectory). Aborting rather than archiving things to a bad path."
+  exit 1
+fi
+
+# processing/ -- don't guess the nesting depth, search for it instead
+PROC_CANDIDATES=$(find "$ROOT/scripts/python" -maxdepth 3 -type d -iname processing 2>/dev/null)
+PROC_COUNT=$(echo "$PROC_CANDIDATES" | grep -c . || true)
+if [ "$PROC_COUNT" -eq 1 ]; then
+  PROC_DIR="$PROC_CANDIDATES"
+  echo "Found PROC_DIR = $PROC_DIR"
+else
+  echo "Could not uniquely locate the processing/ directory under $ROOT/scripts/python"
+  echo "(found $PROC_COUNT candidates: $PROC_CANDIDATES)"
+  echo "Skipping section 4 (processing/ legacy archiving) -- everything else still runs."
+  PROC_DIR=""
+fi
+
+ARCHIVE="$ROOT/archive/ch3/scripts_legacy_2026-09-18"
+
+moved=0
+skipped=0
+
+do_move () {
+  local src="$1" dst="$2"
+  if [ ! -e "$src" ]; then
+    echo "  SKIP (not found): $src"
+    skipped=$((skipped+1))
+    return
+  fi
+  mkdir -p "$(dirname "$dst")"
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 && \
+     git -C "$ROOT" ls-files --error-unmatch "$src" >/dev/null 2>&1; then
+    git -C "$ROOT" mv "$src" "$dst"
+  else
+    mv "$src" "$dst"
+  fi
+  echo "  moved: $src -> $dst"
+  moved=$((moved+1))
+}
+
+echo
+echo "=== 1. Rename: the one live script whose number doesn't match its manuscript figure ==="
+do_move "$FIG_DIR/fig03_attribution_annual.py" "$FIG_DIR/fig04_attribution_annual.py"
+echo "  NOTE: grep the repo for the old name before trusting this is complete --"
+echo "  this script does not know about any README, LaTeX include, or other"
+echo "  script that might reference 'fig03_attribution_annual' by name:"
+echo "    grep -rn fig03_attribution_annual \"$ROOT\" --include='*.py' --include='*.R' --include='*.md' --include='*.tex'"
+echo
+
+echo "=== 2. Archive: superseded attempts at the Fig. S1 / candidate-Fig.-3 anatomy figure ==="
+echo "    (plot_fig7_sectors.R is confirmed live and stays where it is, in scripts/R/Ch3/)"
+do_move "$FIG_DIR/fig03_anatomy_7a.py" "$ARCHIVE/python/figures/fig03_anatomy_7a.py"
+do_move "$FIG_DIR/fig7a_final_HR.py"   "$ARCHIVE/python/figures/fig7a_final_HR.py"
+echo
+
+echo "=== 3. Archive: the old rolling-window / monthly-lag-correlation chapter structure ==="
+LEGACY_FIGS=(
+  fig03_rolling_phase-amp_corr.py
+  fig04_dot_timeline.py
+  fig04_phase_timeseries.py
+  fig05_amplitude_timeseries.py
+  fig06_rolling_sd.py
+  fig08_correlation_heatmap.py
+  fig09_monthly_lag_corr.py
+  fig09_monthly_lag_correlation.py
+  fig10_rolling_window_top3.py
+  fig11_trend_volatility.py
+  fig12_volatility_seasonal.py
+  figS01_fitted_vs_raw.py
+  figS02_monthly_lagged_heatmap.py
+  figS03_monthly_sie_corr_matrix.py
+  figS04_ea_amplitude_sam.py
+  figS05_decomp_2016_2023.py
+  figS06_case_study_zscores.py
+  compute_rolling_diagnostics.py
+  ch3_doctor.py
+  inspect_ch3_round3.py
+)
+for f in "${LEGACY_FIGS[@]}"; do
+  do_move "$FIG_DIR/$f" "$ARCHIVE/python/figures/$f"
+done
+echo
+
+echo "=== 4. Archive: the matching legacy scripts in processing/ (same old era) ==="
+if [ -z "$PROC_DIR" ]; then
+  echo "  SKIPPED ENTIRELY -- processing/ directory not uniquely located, see warning above."
+else
+  echo "    (compute_atmospheric_correlations.py stays -- confirmed live, core pipeline)"
+  echo "    (compute_loo_index.py and compute_outlier_diagnostic.py stay -- unclear, see header)"
+  LEGACY_PROC=(
+    compute_monthly_corr_both.py
+    compute_monthly_lagged_correlations.py
+    compute_phase_amplitude_monthly.py
+  )
+  for f in "${LEGACY_PROC[@]}"; do
+    do_move "$PROC_DIR/$f" "$ARCHIVE/python/processing/$f"
+  done
+fi
+echo
+
+echo "=== 5. Archive the old run_all.py (its own dependency list is stale and it never called"
+echo "===    the current pipeline at all -- see run_all.py's replacement, delivered alongside)"
+do_move "$FIG_DIR/run_all.py" "$ARCHIVE/python/figures/run_all.py.old"
+echo
+
+echo "=========================================="
+echo "moved: $moved   skipped: $skipped"
+echo "Nothing was deleted. Review with 'git status' / 'git diff --stat' before committing."
+echo "Drop the new run_all.py into $FIG_DIR/ to replace the archived one."

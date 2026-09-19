@@ -367,6 +367,28 @@ for sec, tv, ic, basis in PRIMARY_PAIRS:
     note("3.5", f"{ic} ~ {tv}", round(r, 2), lab(sec), n, p, f"LOO worst p={rows[-1]['loo_worst_p']:.3f}")
 pd.DataFrame(rows).to_csv(os.path.join(TABLES_DIR, "t35_primary_pairs.csv"), index=False)
 
+# ── 3.5b  the same index against the extent anomaly: does the decomposition add anything? ─
+# For each pre-specified pair, correlate the index with the observed amplitude, the
+# max/min dates, and every extent column in annual_params (annual mean and the
+# seasonal means), all detrended, full record. If the extent column of the right
+# season already carries the signal, the decomposition's contribution is to say
+# WHICH component; if no extent column carries it, the decomposition located it.
+EXT_COLS = [c for c in ann.columns if c.startswith("sie_")]
+rows = []
+for sec, tv, ic, basis in PRIMARY_PAIRS:
+    a = sec_df(ai, sec); d = dict(sector=lab(sec), index=ic, component=tv)
+    for name, col in [("amplitude", AMP), ("max_date", PH), ("min_date", MN)] + [(c, c) for c in EXT_COLS]:
+        if col in a.columns:
+            r, pv, _ = pear(a[ic], a[col]); d[f"r_{name}"] = r; d[f"p_{name}"] = pv
+    ext_r = {c: d.get(f"r_{c}", np.nan) for c in EXT_COLS}
+    best = max(ext_r, key=lambda c: abs(ext_r[c])) if ext_r else None
+    d["best_extent_col"] = best; d["r_best_extent"] = ext_r.get(best, np.nan)
+    d["r_component"] = d.get("r_amplitude" if tv == AMP else "r_max_date", np.nan)
+    rows.append(d)
+    note("3.5b", f"{ic}: r with component vs best extent", f"{d['r_component']:+.2f} vs {d['r_best_extent']:+.2f} ({best})", lab(sec),
+         extra=f"annual extent r={d.get('r_sie_annual', np.nan):+.2f}")
+pd.DataFrame(rows).to_csv(os.path.join(TABLES_DIR, "t35b_component_vs_extent.csv"), index=False)
+
 # pooled across sectors (the circumpolar test): report I^2 as the finding
 rows = []
 for base in sorted({ic.rsplit("_", 1)[0] for _, _, ic, _ in PRIMARY_PAIRS}):
@@ -599,6 +621,13 @@ def _md():
     pp = T("t35_primary_pairs.csv").round(3)
     w(pp[["sector", "target", "index", "r", "p", "p_bonf7", "loo_worst_p", "seasons_p05_same_sign", "basis"]].to_markdown(index=False) + "\n")
     w("Bonferroni over 7 is post-hoc; the defence is mechanism + LOO + seasonal consistency. ABS~ZW3R is the weakest (LOO 0.07) → supplement.\n")
+
+    ce = T("t35b_component_vs_extent.csv")
+    keep = ["sector", "index", "component", "r_amplitude", "r_max_date", "r_min_date"] + \
+           [c for c in ce.columns if c.startswith("r_sie_")] + ["best_extent_col"]
+    w("**The same index against the extent anomaly (full record, detrended): component vs extent**\n\n" +
+      _tomd(ce[keep].round(2), index=False) + "\n")
+    w("If the best extent column matches the component's r, extent in the right season already carries the signal and the decomposition says which component; if it does not, the decomposition located a signal extent averages away.\n")
     pm = T("t35_pooled_meta.csv").round(2)
     w("**Pooled across the five sectors (the circumpolar test) — I² is the result:**\n\n" + _tomd(pm, index=False) +
       "\n\nHigh I² for ENSO~amplitude = dipole (ABS +, King Haakon −); nothing pools to a circumpolar effect.\n")

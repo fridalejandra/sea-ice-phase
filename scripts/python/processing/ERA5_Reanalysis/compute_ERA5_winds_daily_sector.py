@@ -36,7 +36,7 @@ OUT_DIR  = "/user/geog/falejandraperez/sea-ice-phase/results/ERA5"
 OUT_FILE = "ERA5_windSpeed_daily_sector.csv"
 
 START_YEAR = 1979
-END_YEAR   = 2024
+END_YEAR   = 2026
 
 SECTORS = {
     1: "Weddell",
