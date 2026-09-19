@@ -12,11 +12,13 @@ def download_day(date_str):
     day = date_str[6:8]
 
     # Define the folder and filename
-    output_dir = os.path.join("/user/geog/falejandraperez/sea-ice-phase/data/Reanalysis_ERA5", year)
+    output_dir = os.path.join("/user/geog/falejandraperez/sea-ice-phase/data/Reanalysis_ERA5/winds", year)
     os.makedirs(output_dir, exist_ok=True)   # Create folder if it doesn't exist
 
     filename = os.path.join(output_dir, f"era5_wind_{date_str}_12UTC.nc")
-
+    if os.path.exists(filename) and os.path.getsize(filename) > 0:
+        print(f"  skip (exists): {filename}")
+        return
     print(f"→ Downloading {filename}")
 
     # Submit request to CDS API
@@ -39,7 +41,7 @@ def download_day(date_str):
 
 # Generate list of all days from Jan 1, 1979 to Dec 31, 2024
 start_date = datetime(2025, 1, 1)
-end_date = datetime(2026, 12, 31)
+end_date = datetime(2025, 12, 31)
 
 date_list = []
 current_date = start_date
