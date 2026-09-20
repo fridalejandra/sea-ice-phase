@@ -118,7 +118,8 @@ for k, sec in enumerate(SECTORS):
     ax.plot(yr, a[BLACK].values, color="k", lw=1.3, marker="o", ms=2.2, zorder=5)
     ax.axhline(0, color="k", lw=0.6)
     ax.axvline(BREAK - 0.5, color="0.35", lw=0.9, ls=(0, (2, 2)), zorder=1)
-    ax.set_title(SECTOR_LABELS[sec], fontsize=10.5, pad=3)
+    ax.set_title(SECTOR_LABELS[sec], pad=3,
+                 fontproperties=ch3_style.bold_font_properties(size=10.5))
     ax.set_xlim(yr.min() - 0.7, yr.max() + 0.7)
     ax.tick_params(labelsize=7.5)
     ax.spines[["top", "right"]].set_visible(False)
@@ -187,7 +188,9 @@ for ax, (metric, title) in zip(axes, [
                             f"{v[i] * 100:.0f}", ha="center", va="center",
                             fontsize=6.5, color="white", fontweight="bold")
             bottom += v
-    ax.set_xticks(xpos); ax.set_xticklabels(labs_s, rotation=20, ha="right", fontsize=8.5)
+    ax.set_xticks(xpos)
+    ax.set_xticklabels(labs_s, rotation=20, ha="right",
+                        fontproperties=ch3_style.bold_font_properties(size=8.5))
     ax.set_ylim(0, 1); ax.set_title(title, fontsize=10)
     ax.spines[["top", "right"]].set_visible(False)
     ax.tick_params(labelsize=8)

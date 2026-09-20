@@ -21,7 +21,7 @@ annual_params.csv (no further pipeline steps needed for this one figure).
 Reads:
     data/ch3/annual_params.csv
 Writes:
-    results/ch3/figures/fig7_abs_growth_season.png
+    results/ch3/figures/fig10_abs_growth_season.png
 """
 import os
 import sys
@@ -87,7 +87,7 @@ ax.set_title("Amundsen-Bellingshausen: amplitude vs. growth-season length\n"
 ax.legend(fontsize=8.5, frameon=False, loc="upper left")
 fig.colorbar(sc, ax=ax, label="Year")
 fig.tight_layout()
-out7 = os.path.join(OUTPUT_DIR, "fig7_abs_growth_season.png")
+out7 = os.path.join(OUTPUT_DIR, "fig10_abs_growth_season.png")
 fig.savefig(out7, dpi=200, bbox_inches="tight")
 plt.close(fig)
 print(f"wrote {out7}")
