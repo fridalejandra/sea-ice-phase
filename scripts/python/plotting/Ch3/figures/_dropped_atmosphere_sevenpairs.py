@@ -15,7 +15,7 @@ t35_primary_pairs.csv.
 Reads:
     results/ch3/tables/t35_primary_pairs.csv
 Writes:
-    results/ch3/figures/fig08_atmosphere_sevenpairs.png
+    results/ch3/figures/dropped_atmosphere_sevenpairs.png
 """
 import os
 import sys
@@ -71,7 +71,7 @@ ax.set_title("Seven pre-specified atmosphere-component relationships\n"
 handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in fam_colors.values()]
 ax.legend(handles, fam_colors.keys(), loc="lower right", frameon=False, fontsize=8.5, ncol=4)
 fig.tight_layout()
-out10 = os.path.join(OUTPUT_DIR, "fig08_atmosphere_sevenpairs.png")
+out10 = os.path.join(OUTPUT_DIR, "dropped_atmosphere_sevenpairs.png")
 fig.savefig(out10, dpi=200, bbox_inches="tight")
 plt.close(fig)
 print(f"wrote {out10}")

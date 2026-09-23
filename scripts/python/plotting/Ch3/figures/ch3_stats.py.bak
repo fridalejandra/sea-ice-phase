@@ -135,22 +135,6 @@ def lab(s): return SECTOR_LABELS.get(s, s)
 
 # ── load ──────────────────────────────────────────────────────────────────────
 ann = pd.read_csv(ANNUAL_CSV)
-# ── one row per (sector, Year), or stop ──────────────────────────────────────
-# annual_params.csv may carry more than one fit per year (a `period` column:
-# FULL plus the separate-period fits). Every correlation below assumes one
-# observation per year; stacked rows double n and make every p far too small.
-import sys  # harmless if already imported
-if "period" in ann.columns:
-    _periods = sorted(ann["period"].astype(str).unique())
-    if "FULL" not in _periods:
-        sys.exit(f"annual_params has a period column but no FULL rows: {_periods}")
-    ann = ann[ann["period"].astype(str) == "FULL"].copy()
-    print(f"annual_params: kept period == FULL (file also had {_periods})")
-_dup = ann.duplicated(["sector", "Year"], keep=False)
-if _dup.any():
-    print(ann.loc[_dup].sort_values(["sector", "Year"]).head(12).to_string())
-    sys.exit(f"annual_params has {int(_dup.sum())} rows sharing a (sector, Year); "
-             "fix the file (or the filter above) before any statistic is trusted")
 ann = ann[ann.Year.between(YEAR_MIN, YEAR_MAX)].copy()
 assert ann.Year.min() == YEAR_MIN, f"annual_params starts {ann.Year.min()}, expected {YEAR_MIN}"
 idx = pd.read_csv(INDEX_CSV)

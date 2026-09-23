@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from ch3_config import TABLES_DIR, OUTPUT_DIR, SECTOR_ORDER_BY_LONGITUDE, SECTOR_LABELS
+from ch3_config import TABLES_DIR, OUTPUT_DIR, SECTOR_LABELS
 import ch3_style  # font + spines; bold_font_properties() for real bold
 
 CSV = os.path.join(TABLES_DIR, "t34c_volatility_seasonal_curves.csv")
@@ -50,9 +50,24 @@ COLOR_POST = "#eb6834"
 BREAK = 2016
 END_LABEL = os.environ.get("END_LABEL", "2023")   # last year of the post period, for the label only
 
-sector_codes = [s for s in SECTOR_ORDER_BY_LONGITUDE if s in SECTOR_LABELS]
-circ = [s for s in cv["sector"].unique() if "circumpolar" in s.lower()]
-sector_codes = [s for s in sector_codes if s in set(cv["sector"])] + circ
+# Panel order = the manuscript's canonical sector order (matches the Fig. S3
+# caption and Table 3): (a) Weddell, (b) ABS, (c) Ross, (d) East Antarctica,
+# (e) King Haakon, (f) circumpolar. NOT longitude order.
+PANEL_ORDER = [
+    "SIE_Weddell",
+    "SIE_Amundsen_Bellingshausen",
+    "SIE_Ross",
+    "SIE_East_Antarctica",
+    "SIE_King_Haakon",
+    "SIE_circumpolar",
+]
+present = set(cv["sector"])
+sector_codes = [s for s in PANEL_ORDER if s in present]
+if "SIE_circumpolar" not in present:   # circumpolar spelled differently in the CSV?
+    sector_codes += [s for s in cv["sector"].unique() if "circumpolar" in str(s).lower()]
+missing = [s for s in PANEL_ORDER if s not in present and s != "SIE_circumpolar"]
+if missing:
+    print(f"  note: not in {os.path.basename(CSV)}: {missing}")
 if not sector_codes:
     sys.exit(f"no known sectors in {CSV}; sector values are {sorted(cv['sector'].unique())}")
 

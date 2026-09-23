@@ -112,7 +112,7 @@ WIND_SECTOR = {   # daily sector label -> wind column suffix
     "Circumpolar": "circumpolar", "circumpolar": "circumpolar",
 }
 
-VERSION = "2026-09-20e"                 # printed at startup, so you can tell
+VERSION = "2026-09-21g"                 # printed at startup, so you can tell
                                         # which copy of this file actually ran
 MAXLAG = 3
 HAC_LAGS = 10                           # Newey-West window for daily autocorrelation
@@ -159,6 +159,35 @@ class Fit:
         with np.errstate(divide="ignore", invalid="ignore"):
             self.tvalues = pd.Series(np.where(se > 0, b / se, np.nan), index=names)
         self._n = n
+        self._V = V
+        self._names = list(names)
+        sst = float(((y - y.mean()) ** 2).sum())
+        self.r2 = 1.0 - float((e ** 2).sum()) / sst if sst > 0 else np.nan
+        self._y, self._X = y, X
+
+    def r2_without(self, keys):
+        """R^2 of the same fit with the named columns dropped: the share of the
+        variance those columns carry once the others are in."""
+        keep = [i for i, k in enumerate(self._names) if k not in keys]
+        Xk = self._X[:, keep]
+        b = np.linalg.pinv(Xk.T @ Xk) @ (Xk.T @ self._y)
+        e = self._y - Xk @ b
+        sst = float(((self._y - self._y.mean()) ** 2).sum())
+        return 1.0 - float((e ** 2).sum()) / sst if sst > 0 else np.nan
+
+    def combo(self, keys):
+        """Estimate and HAC standard error of the SUM of several coefficients.
+        With autocorrelated predictors the individual lag coefficients are
+        poorly identified while their sum -- the cumulative response to a
+        sustained anomaly -- is stable, so this is the number to read."""
+        c = np.zeros(len(self._names))
+        for k in keys:
+            if k in self._names:
+                c[self._names.index(k)] = 1.0
+        est = float(c @ self.params.to_numpy())
+        var = float(c @ self._V @ c)
+        se = np.sqrt(var) if var > 0 else np.nan
+        return est, se, (est / se if se and np.isfinite(se) else np.nan)
 
 
 def fit(d, use_lags=True, use_damping=True, label=""):
@@ -213,6 +242,11 @@ def report(m, extra=""):
     if "raw_lag" in m.params:
         t = tau_from(m)
         bits.append(f"tau {t:.1f} d" if np.isfinite(t) else "tau n/a")
+    bits.append(f"R2 {m.r2:.3f}")
+    wind_keys = [k for k in m._names if k[0] in "uv" and k[1:].isdigit()]
+    if wind_keys:
+        # variance the wind terms carry, with the damping term (if any) kept
+        bits.append(f"wind share {m.r2 - m.r2_without(wind_keys):.3f}")
     print("      " + "   ".join(bits) + extra)
     if "u1" in m.params:
         lag_line = []
@@ -223,6 +257,11 @@ def report(m, extra=""):
         print("        " + " | ".join(lag_line))
         # alternating signs across lags 1-3 mean the timing is still misspecified,
         # not that the ice has multi-day memory
+        cu = m.combo([f"u{L}" for L in range(MAXLAG + 1)])
+        cv = m.combo([f"v{L}" for L in range(MAXLAG + 1)])
+        cang = np.degrees(np.arctan2(cu[0], cv[0]))
+        print("        CUMULATIVE over lags 0-3:  u %+.5f (t %+.1f)   v %+.5f (t %+.1f)"
+              "   deflection %+.0f deg" % (cu[0], cu[2], cv[0], cv[2], cang))
         sg = [np.sign(m.params.get(f"v{L}", 0.0)) for L in (1, 2, 3)]
         tt = [abs(m.tvalues.get(f"v{L}", 0.0)) for L in (1, 2, 3)]
         if len(set(sg)) > 1 and sg[0] != sg[1] and sg[1] != sg[2] and min(tt) > 2:
@@ -416,9 +455,14 @@ def main():
             report(ms)
             if ms is not None:
                 a, _ = deflection(ms)
+                cu = ms.combo([f"u{L}" for L in range(MAXLAG + 1)])
+                cv = ms.combo([f"v{L}" for L in range(MAXLAG + 1)])
                 rows.append({"sector": suf, "season": sname, "n": ms._n,
                              "beta_u": ms.params.get("u0"), "beta_v": ms.params.get("v0"),
-                             "deflection_deg": a, "tau_d": tau_from(ms)})
+                             "deflection_deg": a, "tau_d": tau_from(ms),
+                             "cum_u": cu[0], "cum_u_t": cu[2],
+                             "cum_v": cv[0], "cum_v_t": cv[2],
+                             "cum_deflection_deg": np.degrees(np.arctan2(cu[0], cv[0]))})
 
         # ── optional: Eabry preconditioning, wind gain vs pack state ─────────
         if owa is not None and f"owa_{suf}" in owa.columns:
@@ -452,6 +496,11 @@ def main():
         print("ice edge is zonal; a large departure points at edge geometry):")
         print(out.pivot_table(index="sector", columns="season",
                               values="deflection_deg").round(0).to_string())
+        print("\nCUMULATIVE response to a sustained wind anomaly (sum over lags 0-3).")
+        print("This is the number to quote: individual lag coefficients are poorly")
+        print("identified when the predictor is autocorrelated, but their sum is not.")
+        print(out.pivot_table(index="sector", columns="season",
+                              values="cum_v").round(5).to_string())
 
 
 if __name__ == "__main__":

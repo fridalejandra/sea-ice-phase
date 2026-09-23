@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fig_06_raw_anomaly_persistence.py -- Sect. 3.4 (restructured 2026-09-19
+fig_09_raw_anomaly_persistence.py -- Fig. 9, Sect. 3.5 (restructured 2026-09-19
 around the raw anomaly rather than volatility).
 
 The raw APAC anomaly -- observed SIE minus the fitted trend-, amplitude- and
@@ -44,8 +44,13 @@ import matplotlib.pyplot as plt
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ch3_data as D
-from ch3_config import TABLES_DIR, OUTPUT_DIR, SECTOR_ORDER_BY_LONGITUDE, SECTOR_LABELS
+from ch3_config import TABLES_DIR, OUTPUT_DIR, SECTORS, SECTOR_LABELS
 import ch3_style
+
+# panel titles: chapter order (Figs 3-8) and full names, no abbreviations
+TITLE_LABEL = {"SIE_Amundsen_Bellingshausen": "Amundsen-Bellingshausen",
+               "SIE_circumpolar": "Circumpolar total"}
+FIG_NAME = os.environ.get("FIG_NAME", "fig09_raw_anomaly_persistence.png")
 
 START_YEAR = 1988
 END_YEAR = int(os.environ.get("END_YEAR", "2023"))       # 2025 to include the suspect years
@@ -67,16 +72,16 @@ except Exception:
     def welch_p(a, b):
         return float("nan")
 
-print(f"fig06 -- raw anomaly persistence, {START_YEAR}-{END_YEAR}")
+print(f"fig09 -- raw anomaly persistence, {START_YEAR}-{END_YEAR}")
 d = D.load_daily(period="FULL")
 d = d[(d["Year"] >= START_YEAR) & (d["Year"] <= END_YEAR)].copy()
 d["Date"] = pd.to_datetime(d["Date"])
 d = d.sort_values(["sector", "Date"]).reset_index(drop=True)
 d["ra"] = d["residual_apac"] - d.groupby(["sector", "DOY"])["residual_apac"].transform("mean")
 
-sector_codes = [s for s in SECTOR_ORDER_BY_LONGITUDE if s in SECTOR_LABELS and s in set(d["sector"])]
-circ = [s for s in d["sector"].unique() if "circumpolar" in s.lower()]
-all_codes = sector_codes + circ
+present = set(d["sector"])
+all_codes = [s for s in SECTORS if s in present]                    # chapter order, circumpolar last
+sector_codes = [s for s in all_codes if "circumpolar" not in s.lower()]
 lab = lambda s: SECTOR_LABELS.get(s, s)
 
 
@@ -212,9 +217,9 @@ for k, sec in enumerate(all_codes):
         ef = tab[(tab.sector == lab(sec)) & (tab.period == pname)]["efold_days"].iloc[0]
         if np.isfinite(ef):
             ax.plot([ef, ef], [-0.1, 1 / np.e], color=col, lw=1.0, ls=":", zorder=2)
-    ax.set_title(lab(sec), pad=4, fontproperties=bold)
-    ax.text(0.02, 0.06, f"({chr(97 + k)})", transform=ax.transAxes, va="bottom", color=INK,
-            fontproperties=ch3_style.bold_font_properties(size=9))
+    # "(a)  Weddell": bold, black, left-aligned, as in Figs 3-8
+    ax.set_title(f"({chr(97 + k)})  {TITLE_LABEL.get(sec, lab(sec))}", loc="left", pad=6,
+                 fontproperties=ch3_style.bold_font_properties(size=11), color="0.1")
     ax.set_xlim(0, MAX_LAG); ax.set_ylim(-0.1, 1)
     ax.set_xticks([0, 20, 40, 60]); ax.set_yticks([0, 0.5, 1])
     ax.tick_params(labelsize=8, colors=INK, length=3)
@@ -230,12 +235,12 @@ for k, sec in enumerate(all_codes):
             ax.text(0.98, y, pname, transform=ax.transAxes, ha="right", va="center",
                     color=col, fontproperties=ch3_style.bold_font_properties(size=9))
         ax.text(MAX_LAG - 1, 1 / np.e + 0.03, "1/e", ha="right", va="bottom", color="0.55", fontsize=8)
-        ax.text(0.98, 0.52, "dotted: e-folding time", transform=ax.transAxes, ha="right",
+        ax.text(0.98, 0.58, "dotted: e-folding time", transform=ax.transAxes, ha="right",
                 va="center", color=INK, fontsize=8)
 for k in range(len(all_codes), len(axes)):
     axes[k].set_visible(False)
 fig.tight_layout()
-out = os.path.join(OUTPUT_DIR, "fig06_raw_anomaly_persistence.png")
+out = os.path.join(OUTPUT_DIR, FIG_NAME)
 fig.savefig(out, dpi=200)
 plt.close(fig)
 print(f"\nwrote {out}\nwrote t34h_raw_anomaly_persistence.csv")

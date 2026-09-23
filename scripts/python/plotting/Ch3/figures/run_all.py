@@ -3,7 +3,7 @@
 run_all.py -- regenerate the Chapter 3 tables and figures in manuscript order.
 
     python run_all.py            everything, in dependency order
-    python run_all.py fig_07     one step (substring of the script name)
+    python run_all.py fig_05     one step (substring of the script name)
     python run_all.py --list     show the steps and what each produces
     python run_all.py --figures  figures only (skip the R fits and stats)
 
@@ -37,17 +37,17 @@ STEPS = [
     (os.path.join(HERE, "table_02_03_rmse.py"),            "py", "Tables 2-3 (RMSE)"),
     (os.path.join(HERE, "compute_t32_share_trends.py"),    "py", "Sect. 3.2 share-trend tests"),
     (os.path.join(HERE, "compute_t33_variance_ratios.py"), "py", "Sect. 3.3 variance ratios"),
-    (os.path.join(HERE, "compute_fig07_component_comparison.py"), "py", "t37, t37b, t37c; daily wind lags (Table 8)"),
+    (os.path.join(HERE, "compute_fig05_component_comparison.py"), "py", "t37, t37b, t37c; same-day wind coupling (Sect. 3.2.2)"),
     # -- main figures -----------------------------------------------------------
     (os.path.join(HERE, "fig_01_conflation.py"),                  "py", "Fig. 1 concept"),
     (os.path.join(HERE, "fig_02_sector_map.py"),                  "py", "Fig. 2 sector map"),
-    (os.path.join(HERE, "fig_03-04_attribution_annual.py"),       "py", "Figs. 3-4 attribution, era shares"),
-    (os.path.join(HERE, "fig_05_rolling_phase_amp.py"),           "py", "Fig. 5 timing-amplitude correlation"),
-    (os.path.join(HERE, "fig_06_raw_anomaly_persistence.py"),     "py", "Fig. 6 raw-anomaly autocorrelation; Table 4"),
-    (os.path.join(HERE, "fig_07_component_comparison_heatmap.py"), "py", "Fig. 7 index/wind vs components"),
-    (os.path.join(HERE, "fig_08_atmosphere_sevenpairs.py"),       "py", "Fig. 8 seven relationships"),
-    (os.path.join(HERE, "fig_09_ross_asl_nonstationarity.py"),    "py", "Fig. 9 Ross-ASL"),
-    (os.path.join(HERE, "fig_10_abs_growth_season.py"),           "py", "Fig. 10 ABS growth season"),
+    (os.path.join(HERE, "fig_04_component_comparison_heatmap.py"), "py", "Figs. 3-4 attribution, era shares"),
+    (os.path.join(HERE, "fig_07_rolling_phase_amp.py"),           "py", "Fig. 7 timing-amplitude correlation"),
+    (os.path.join(HERE, "fig_09_raw_anomaly_persistence.py"),     "py", "Fig. 9 raw-anomaly autocorrelation; Table 4"),
+    (os.path.join(HERE, "fig_05_component_comparison_heatmap.py"), "py", "Fig. 5 index/wind vs components"),
+    (os.path.join(HERE, "_dropped_atmosphere_sevenpairs.py"),       "py", "(dropped from the manuscript)"),
+    (os.path.join(HERE, "fig_06_ross_asl_nonstationarity.py"),    "py", "Fig. 6 Ross-ASL"),
+    (os.path.join(HERE, "fig_08_abs_growth_season.py"),           "py", "Fig. 8 ABS growth season"),
     # -- supplement -------------------------------------------------------------
     (os.path.join(HERE, "fig_s01_fitted_vs_observed.py"),         "py", "Fig. S1"),
     (os.path.join(HERE, "fig_s02_annual_min_max_trend.py"),       "py", "Fig. S2"),

@@ -67,6 +67,7 @@ C_INV   = "#2C2C2A"
 C_PHASE = "#D4537E"
 C_AMP   = "#1D9E75"
 C_ANNOT = "#5F5E5A"
+INK     = "0.35"  # for panel titles, consistent with other figures
 
 SECTOR      = "SIE_circumpolar"   # representative curve for the schematic
 PERIOD      = "FULL"
@@ -162,8 +163,8 @@ for ax, label, title in zip(axes, panel_labels, titles):
     ax.set_yticks(yticks)
     ax.set_yticklabels([f"{int(y)}" for y in yticks], fontsize=10)
     ax.text(0.02, 0.97, label, transform=ax.transAxes,
-            fontsize=12, fontweight="bold", va="top")
-    ax.set_title(title, fontsize=10, pad=8, loc="left", color=C_ANNOT)
+            fontsize=12, fontweight="bold", va="top", color=INK)
+    ax.set_title(title, fontsize=11, pad=8, loc="left", color=INK, fontweight="bold")
 
 # Y axis labels on left column only
 axes[0].set_ylabel("SIE (million km²)", fontsize=11)
@@ -178,7 +179,7 @@ for ax in [axes[2], axes[3]]:
 # --- Panel A: Invariant cycle ---
 ax = axes[0]
 ax.plot(days, vals_c, color=C_INV, lw=2.5, zorder=4)
-ax.fill_between(days, vals_c, YMIN, color=C_INV, alpha=0.07)
+ax.fill_between(days, vals_c, YMIN, color=C_INV, alpha=0.12)
 
 # --- Panel B: Phase shift ---
 ax = axes[1]

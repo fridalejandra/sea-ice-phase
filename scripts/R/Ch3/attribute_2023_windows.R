@@ -169,10 +169,9 @@ LAB <- c(invariant = "Invariant annual cycle", trend = "Trend component",
 YLAB <- "Anomaly for sea ice extent"
 FILL_COL <- adjustcolor("grey30", alpha.f = 0.22)
 
-draw_panel <- function(cc, title, ylim, show_iac, xlab = "Day of the cycle", show_est = TRUE,
-                       ylab = YLAB) {
+draw_panel <- function(cc, title, ylim, show_iac, xlab = "Day of the cycle", show_est = TRUE) {
   plot(NA, NA, xlim = c(0, 365), ylim = ylim, xaxt = "n", bty = "l", las = 1,
-       xlab = xlab, ylab = ylab, main = "")
+       xlab = xlab, ylab = YLAB, main = "")
   axis(1, at = c(0, 100, 200, 300))
   abline(h = 0, lty = 2, col = "grey40")
   if (show_iac) lines(cc$cycle_day, cc$invariant_km2, col = COL["invariant"], lwd = LWD["invariant"])
@@ -301,45 +300,31 @@ run_year <- function(YEAR) {
 res <- lapply(YEARS, run_year); names(res) <- YEARS
 all <- do.call(rbind, lapply(res, `[[`, "summ"))
 
-# ── combined figure: one ROW per sector, one COLUMN per year ────────────────
-# Each sector's years sit side by side on the SAME y-axis, so the two cycles
-# can be compared directly; the axis differs between rows (sectors), as in the
-# per-year grids. Year headers over the columns, sector name + letter on each
-# panel, y-label on the left column only, x-label on the bottom row only, one
-# legend row at the bottom. Letters run across rows: (a) Weddell 2016,
-# (b) Weddell 2023, (c) A-B 2016, ...
+# ── combined figure: the years in COMBINED stacked, sectors across ──────────
+# 4 rows x 3 cols for two years (two rows per year), one legend row at the
+# bottom. Full-page figure. Each panel keeps its own y-axis.
 if (length(COMBINED) > 0 && all(as.character(COMBINED) %in% names(res))) {
   nyr  <- length(COMBINED)
-  nsec <- length(SECTORS)
+  npan <- nyr * length(SECTORS)
   fC <- file.path(FIG_DIR, sprintf("fig10_anatomy_%s.png", paste(COMBINED, collapse = "_")))
-  png(fC, width = 5.4 * nyr + 0.6, height = 2.7 * nsec + 1.2, units = "in", res = 300)
-  # rows: header, nsec panel rows, legend
-  lay <- rbind(seq_len(nyr),                                              # year headers
-               matrix(nyr + seq_len(nsec * nyr), nrow = nsec, byrow = TRUE),
-               rep(nyr + nsec * nyr + 1, nyr))                            # legend
-  layout(lay, heights = c(0.22, rep(1, nsec), 0.28))
-  par(family = "sans")
-  for (yr in COMBINED) {                                                   # headers
-    par(mar = c(0, 4.6, 0, 1)); plot.new()
-    text(0.5, 0.35, yr, font = 2, cex = 1.8)
-  }
-  par(mar = c(3.6, 4.6, 2.4, 1))
+  png(fC, width = 13, height = 4.2 * nyr * 2 + 0.6, units = "in", res = 300)
+  layout(matrix(c(1:npan, rep(npan + 1, 3)), nrow = nyr * 2 + 1, byrow = TRUE),
+         heights = c(rep(1, nyr * 2), 0.12))
+  par(mar = c(4.2, 4.6, 2.8, 1), family = "sans")
   k <- 0
-  for (i in seq_along(SECTORS)) {
-    s <- SECTORS[i]
-    # shared y for this sector across the years
-    yl <- range(unlist(lapply(COMBINED, function(yr) panel_ylim(res[[as.character(yr)]]$cc_all[[s]]))))
-    for (j in seq_along(COMBINED)) {
+  for (yr in COMBINED) {
+    cc_all <- res[[as.character(yr)]]$cc_all
+    for (i in seq_along(SECTORS)) {
       k <- k + 1
-      x <- res[[as.character(COMBINED[j])]]$cc_all[[s]]
-      draw_panel(x$df, sprintf("(%s)  %s", letters[k], LABELS[s]),
-                 ylim = yl, show_iac = GRID_IAC, show_est = GRID_EST,
-                 xlab = if (i == nsec) "Day of the cycle" else "",
-                 ylab = if (j == 1) "% of amplitude" else "")
+      x <- cc_all[[SECTORS[i]]]
+      last_row <- (yr == tail(COMBINED, 1)) && i > 3
+      draw_panel(x$df, sprintf("(%s)  %s, %d", letters[k], LABELS[SECTORS[i]], yr),
+                 ylim = panel_ylim(x), show_iac = GRID_IAC, show_est = GRID_EST,
+                 xlab = if (last_row) "Day of the cycle" else "")
     }
   }
   par(mar = c(0, 0, 0, 0)); plot.new()
-  add_legend(grid_keys, cex = 1.05, where = "center", ncol = 3)
+  add_legend(grid_keys, cex = 1.0, where = "center", ncol = 3)
   dev.off()
   message("Wrote ", fC)
 }
