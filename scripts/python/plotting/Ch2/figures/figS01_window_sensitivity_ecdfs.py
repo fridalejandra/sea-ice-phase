@@ -154,8 +154,8 @@ def main():
     sns.ecdfplot(x=ms_7v5, ax=ax, label="MS 7 vs 5 days")
 
     ax.set_xlim(0, CLIP)
-    ax.set_xlabel("|Δ date| (days)")
-    ax.set_ylabel("Cumulative fraction of pixels")
+    ax.set_xlabel("|Δ date| (days)", fontweight="bold", color="0.35")
+    ax.set_ylabel("Cumulative fraction of pixels", fontweight="bold", color="0.35")
     ax.grid(True, alpha=0.3)
     ax.legend(
         loc="center right",
@@ -171,7 +171,7 @@ def main():
     out_path = get_fig_path(
         PROJECT_ROOT_CLUSTER,
         subfolder="",
-        fig_name="FigS01_FS_MS_window_sensitivity_static_ecdf_allcurves.png",
+        fig_name="FigS02_window_sensitivity_ecdf_allcurves.png",
     )
     save_and_upload(
         fig, out_path,

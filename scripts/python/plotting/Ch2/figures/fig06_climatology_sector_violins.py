@@ -330,10 +330,13 @@ def build_and_plot_violins(variant: str) -> None:
     palette = {"Static": "#2166ac", "Dynamic": "#d97a00"}
     sector_order = sector_ids
 
-    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, dpi=300)
+    fig, axes = plt.subplots(2, 1, figsize=(6.9, 5.0), sharex=True, dpi=300)
 
-    titles = {"FS": "(a) FS", "MS": "(b) MS"}
+    titles = {"FS": "Freeze Start", "MS": "Melt Start"}
 
+    for _ax, _lab in zip(axes, ["a","b"]):
+        _ax.text(-0.09, 1.02, f"({_lab})", transform=_ax.transAxes,
+                 ha="left", va="bottom", fontsize=12, fontweight="bold")
     for ax, phase_name in zip(axes, ["FS", "MS"]):
         sub = df[df["phase"] == phase_name]
 
@@ -358,10 +361,10 @@ def build_and_plot_violins(variant: str) -> None:
         ax.set_title(titles[phase_name], fontweight="bold", pad=8)
 
         if phase_name == "FS":
-            ax.set_ylabel("Freeze start (day of year)")
+            ax.set_ylabel("Freeze start (DOY)", fontsize=8, fontweight="bold", color="0.35")
             ax.set_ylim(46, 273)
         else:
-            ax.set_ylabel("Melt start (days since Aug 15)")
+            ax.set_ylabel("Melt start (DSA)", fontsize=8, fontweight="bold", color="0.35")
             ax.set_ylim(0, 210)
 
         ax.tick_params(axis="x", rotation=0)
@@ -377,8 +380,13 @@ def build_and_plot_violins(variant: str) -> None:
         frameon=True,
     )
     axes[1].get_legend().remove()
-    axes[1].set_xlabel("Sector")
+    axes[1].set_xlabel("Sector", fontsize=8, fontweight="bold", color="0.35")
 
+    for _a in axes:
+        _a.tick_params(axis="x", labelsize=7)
+        _a.tick_params(axis="y", labelsize=7)
+    for _t in axes[-1].get_xticklabels():
+        _t.set_rotation(20); _t.set_ha("right")
     fig.subplots_adjust(right=0.82)
 
     # ---------------------------------------------------------------------

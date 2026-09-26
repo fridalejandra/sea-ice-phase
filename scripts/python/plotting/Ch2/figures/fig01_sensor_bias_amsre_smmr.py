@@ -15,7 +15,7 @@ Inputs:
   data/AMSRE_phase/static/thr15_k5/MS/MS_YYYY.nc — variable: MS
 
 Output:
-  results/Ch2_Figures/Fig01_sensor_advance_retreat_bias_hist_AMSREminusSSMIS_2012-2024.png
+  results/Ch2_Figures/FigS01_sensor_comparison_AMSR2_Bootstrap_2012-2024.png
 """
 
 import sys
@@ -130,6 +130,21 @@ def compute_bias(phase: str) -> tuple[xr.DataArray, np.ndarray]:
     return bias_clim, all_bias
 
 
+
+def add_sector_lines(ax, label=False):
+    """Radial sector boundaries (Raphael and Hobbs 2014) and optional labels."""
+    bounds = [250, 290, 346, 71, 162]
+    for lon in bounds:
+        ax.plot([lon, lon], [-72, -55], transform=ccrs.PlateCarree(),
+                color="0.3", linewidth=0.4, linestyle="-", alpha=0.7, zorder=6)
+    if label:
+        centres = {"A-B": 270, "WED": 318, "KHV": 28, "EA": 116, "RA": 206}
+        for name, lon in centres.items():
+            ax.text(lon, -53.5, name, transform=ccrs.PlateCarree(),
+                    ha="center", va="center", fontsize=5.5,
+                    color="0.35", zorder=7)
+
+
 def plot_bias_map(ax, bias_da, vlim=20):
     proj = ccrs.SouthPolarStereo()
     im   = ax.pcolormesh(
@@ -178,9 +193,9 @@ def main():
     print_distribution_stats("MS (Retreat)", all_bias_ms)
     print_distribution_stats("FS (Advance)", all_bias_fs)
 
-    fig  = plt.figure(figsize=(14, 5))
+    fig  = plt.figure(figsize=(7.5, 2.7))
     proj = ccrs.SouthPolarStereo()
-    gs   = fig.add_gridspec(1, 3, width_ratios=[1.05, 1.05, 1.2], wspace=0.3)
+    gs   = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 1.25], wspace=0.45)
 
     ax_ms   = fig.add_subplot(gs[0, 0], projection=proj)
     ax_fs   = fig.add_subplot(gs[0, 1], projection=proj)
@@ -191,17 +206,20 @@ def main():
                 ha="left", va="top", fontsize=12, fontweight="bold")
 
     title_years = f"{YEARS.start}–{YEARS.stop - 1}"
-    ax_ms.set_title(f"Melt Start ({title_years})", fontsize=9, fontweight="bold")
-    ax_fs.set_title(f"Freeze Start ({title_years})", fontsize=9, fontweight="bold")
+    ax_ms.set_title("Melt Start", fontsize=9, fontweight="bold")
+    ax_fs.set_title("Freeze Start", fontsize=9, fontweight="bold")
+    ax_hist.set_title("Bias distribution", fontsize=9, fontweight="bold")
 
     im_ms = plot_bias_map(ax_ms, bias_clim_ms)
+    add_sector_lines(ax_ms, label=True)
     im_fs = plot_bias_map(ax_fs, bias_clim_fs)
+    add_sector_lines(ax_fs, label=True)
 
     cbar = fig.colorbar(
         im_ms, ax=[ax_ms, ax_fs],
         orientation="horizontal", pad=0.08, shrink=0.9,
     )
-    cbar.set_label("Bias (AMSRE − SSMIS, days)")
+    cbar.set_label("Bias (AMSR2 − SSMIS, days)", fontsize=8, fontweight="bold", color="0.35")
 
     # histogram
     bias_all  = np.concatenate([all_bias_fs, all_bias_ms])
@@ -213,18 +231,41 @@ def main():
         bins=np.arange(-40, 42, 2), stat="density", common_norm=True,
         edgecolor=".3", linewidth=0.5, ax=ax_hist,
     )
-    ax_hist.set_ylim(0, 0.08)
+    ax_hist.set_ylim(0, 0.038)
     ax_hist.axvline(0, color="k", linewidth=0.8)
-    ax_hist.set_xlabel("Bias (AMSRE − SSMIS, days)")
-    ax_hist.set_ylabel("Probability density")
+    # median and IQR annotation (Marilyn, Aug 23)
+    for _vals, _c, _nm, _y, _dx, _ha in [(all_bias_fs, "#4c72b0", "Advance", 0.034, 2.5, "left"),
+                                        (all_bias_ms, "#dd8452", "Retreat", 0.027, -5.0, "right")]:
+        _q1, _md, _q3 = np.nanpercentile(_vals, [25, 50, 75])
+        ax_hist.axvline(_md, color=_c, linewidth=1.4, zorder=5)
+        ax_hist.hlines(_y, _q1, _q3, color=_c, linewidth=2.5, alpha=0.8, zorder=5)
+        ax_hist.plot([_q1, _q3], [_y, _y], "|", color=_c, markersize=5, zorder=6)
+        ax_hist.text(_md + _dx, _y + 0.0012, f"{_md:+.1f}", color=_c, fontsize=6,
+                     ha=_ha, va="bottom", fontweight="bold", zorder=6)
+    ax_hist.set_xlabel("Bias (AMSR2 − SSMIS, days)", fontsize=8, fontweight="bold", color="0.35")
+    ax_hist.set_ylabel("Probability density", fontsize=8, fontweight="bold", color="0.35")
     ax_hist.set_xlim(-40, 40)
     ax_hist.set_xticks([-40, -20, 0, 20, 40])
     leg = ax_hist.get_legend()
     if leg:
-        leg.set_title("")
+        _h = list(leg.legend_handles) if hasattr(leg, "legend_handles") else list(leg.legendHandles)
+        _l = [t.get_text() for t in leg.get_texts()]
+        leg.remove()
+        ax_hist.legend(_h, _l, loc="center left", bbox_to_anchor=(0.02, 0.62),
+                       frameon=False, fontsize=6, handlelength=1.2,
+                       handletextpad=0.4, borderpad=0.2, labelspacing=0.4)
+        leg.set_frame_on(False)
+        leg.handletextpad = 0.4
+        leg.handlelength = 1.2
+        leg.borderpad = 0.2
+        leg.set_bbox_to_anchor((0.02, 0.62))
+        leg._loc = 2
+        for _t in leg.get_texts(): _t.set_fontsize(6)
+        for _h in leg.legend_handles: _h.set_height(4); _h.set_width(10)
     sns.despine(fig=fig, ax=ax_hist)
 
-    fig.tight_layout()
+    _pos = ax_hist.get_position()
+    ax_hist.set_position([_pos.x0 + 0.05, _pos.y0, _pos.width - 0.02, _pos.height])
 
     fig_name = format_fig_name(
         num=1,

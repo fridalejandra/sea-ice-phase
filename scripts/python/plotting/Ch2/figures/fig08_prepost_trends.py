@@ -141,28 +141,28 @@ def add_latlon_labels(ax):
 proj = ccrs.SouthPolarStereo()
 pc   = ccrs.PlateCarree()
 
-fig, axes = plt.subplots(3, 2, figsize=(10, 13),
+fig, axes = plt.subplots(3, 2, figsize=(6.9, 9.0),
                           subplot_kw={"projection": proj})
-fig.suptitle("Linear trend in phase timing — Dynamic method (days/year)\n"
-             "Left: 1979–2015 (pre-2016)    Right: 2016–2024 (post-2016)\n"
-             "White contour = p < 0.01",
-             fontsize=10, y=0.99)
-
+# fig.suptitle("Linear trend in phase timing — Dynamic method (days/year)\n"
+#             "Left: 1979–2015 (pre-2016)    Right: 2016–2024 (post-2016)\n"
+#             "White contour = p < 0.01",
+#             fontsize=10, y=0.99)
+#
 row_specs = [
     ("FS",  4, "Freeze Start (days/year)", "Later",  "Earlier"),
     ("MS",  4, "Melt Start (days/year)",   "Later",  "Earlier"),
-    ("DUR", 4, "Duration (days/year)",     "Longer", "Shorter"),
+    ("DUR", 4, "Ice duration (days/year)",     "Longer", "Shorter"),
 ]
 
 col_titles = ["(pre-2016) 1979–2015", "(post-2016) 2016–2024"]
 
 panels = [
-    (axes[0,0], "FS_pre_sl",  "FS_pre_pv",  "(a) FS pre-2016"),
-    (axes[0,1], "FS_post_sl", "FS_post_pv", "(b) FS post-2016"),
-    (axes[1,0], "MS_pre_sl",  "MS_pre_pv",  "(c) MS pre-2016"),
-    (axes[1,1], "MS_post_sl", "MS_post_pv", "(d) MS post-2016"),
-    (axes[2,0], "DUR_pre_sl", "DUR_pre_pv", "(e) Duration pre-2016"),
-    (axes[2,1], "DUR_post_sl","DUR_post_pv","(f) Duration post-2016"),
+    (axes[0,0], "FS_pre_sl",  "FS_pre_pv",  "FS pre-2016"),
+    (axes[0,1], "FS_post_sl", "FS_post_pv", "FS post-2016"),
+    (axes[1,0], "MS_pre_sl",  "MS_pre_pv",  "MS pre-2016"),
+    (axes[1,1], "MS_post_sl", "MS_post_pv", "MS post-2016"),
+    (axes[2,0], "DUR_pre_sl", "DUR_pre_pv", "Ice duration pre-2016"),
+    (axes[2,1], "DUR_post_sl","DUR_post_pv","Ice duration post-2016"),
 ]
 
 ims = [None, None, None]
@@ -202,24 +202,33 @@ for idx, (ax, sl_key, pv_key, title) in enumerate(panels):
     ax.set_title(title, fontsize=9, fontweight="bold")
 
 # ── Colorbars ─────────────────────────────────────────────────────────────────
-fig.subplots_adjust(left=0.02, right=0.85, top=0.94,
+for _ax, _lab in zip(axes.ravel(), [chr(97+i) for i in range(6)]):
+    _ax.text(0.02, 0.98, f"({_lab})", transform=_ax.transAxes, ha="left", va="top", fontsize=12, fontweight="bold")
+fig.subplots_adjust(left=0.02, right=0.84, top=0.92,
                     bottom=0.03, wspace=0.08, hspace=0.12)
 
 for row, (phase, vlim, cb_label, top_label, bot_label) in enumerate(row_specs):
     ax_r = axes[row, 1]
     pos  = ax_r.get_position()
-    cbar_ax = fig.add_axes([0.87, pos.y0, 0.018, pos.height])
+    cbar_ax = fig.add_axes([0.855, pos.y0 + 0.03*pos.height, 0.008, 0.94*pos.height])
     ticks = np.arange(-vlim, vlim + 1, 1).astype(int)
     cb = fig.colorbar(ims[row], cax=cbar_ax, orientation="vertical",
                       ticks=ticks)
     cb.ax.set_yticklabels([str(int(t)) for t in ticks], fontsize=7)
-    cb.ax.set_ylabel(cb_label, fontsize=8, labelpad=8)
+    cb.ax.set_ylabel(cb_label, fontsize=8, labelpad=8, fontweight="bold", color="0.35")
     # Later/Earlier labels as rotated text to right of colorbar
-    x_right = 0.87 + 0.018 + 0.03
+    x_right = 0.855 + 0.008 + 0.022
     fig.text(x_right, pos.y1, top_label, fontsize=7,
              ha="left", va="top", color="0.4", rotation=270)
     fig.text(x_right, pos.y0, bot_label, fontsize=7,
              ha="left", va="bottom", color="0.4", rotation=270)
 
+import matplotlib.lines as _mlines
+_sig = _mlines.Line2D([], [], color="w", linewidth=1.2, label="p < 0.01")
+fig.legend(handles=[_sig], loc="lower center", bbox_to_anchor=(0.45, 0.005),
+           frameon=True, framealpha=0.9, facecolor="0.6", edgecolor="none",
+           fontsize=7, handlelength=2.0)
 fig.savefig(OUT, dpi=150, bbox_inches="tight")
 print(f"saved → {OUT}")
+import os as _os
+_os.system(f"rclone copy {OUT} gdrive:sea-ice-phase/results/Ch2_Figures")

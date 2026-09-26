@@ -1,9 +1,9 @@
 """
 fig_results_grid.py
 
-Poster figure: 6-panel results grid. Sector × season, coloured by
+Poster figure: results grid. Sector × season, coloured by
 interaction coefficient, starred where significant after FDR.
-Clean version — no main title, no significance counts in subtitles.
+1x3: Net / Divergence / Convergence, pre/post-2016 only.
 """
 
 import os
@@ -72,14 +72,11 @@ for idx, (ax, (csv, title)) in enumerate(zip(axes, avail)):
                         fontsize=16, fontweight="bold")
 
     ax.set_xticks(range(len(SEASONS)))
-    ax.set_xticklabels(SEASONS, fontsize=11)  # always show -- single row
+    ax.set_xticklabels(SEASONS, fontsize=11)
     ax.set_yticks(range(len(SECTORS)))
     ax.set_yticklabels([SHORT[s] for s in SECTORS] if idx == 0 else [],
                        fontsize=11)
-
-    ax.set_title(title, fontsize=14, fontweight="bold")  # always -- single row
-
-# single row now -- axes is 1D, no row label needed (panels are self-explanatory)
+    ax.set_title(title, fontsize=14, fontweight="bold")
 
 fig.subplots_adjust(hspace=0.15, wspace=0.08)
 

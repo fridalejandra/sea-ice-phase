@@ -262,9 +262,6 @@ def run_efold_tests(df):
             "significant_uncorrected": False, "n_bootstrap_used": 0,
         }
 
-        # Only attempt the bootstrap if the REAL data produced finite
-        # e-folding values in both periods - if the real series can't
-        # even produce a number, the bootstrap won't either.
         if not (np.isnan(pre["efold"]) or np.isnan(post["efold"])):
             boot = block_bootstrap_efold_shift(sub, seed=42)
             if boot is None:

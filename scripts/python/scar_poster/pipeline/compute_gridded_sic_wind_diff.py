@@ -48,7 +48,7 @@ OUT_NC = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_results/
 REGIME_SHIFT_YEAR = 2016
 START_YEAR = 1979
 END_YEAR = 2024
-ACCUM_SECONDS = 86400
+ACCUM_SECONDS = 3600
 
 
 def load_and_combine_sic(merged_file):

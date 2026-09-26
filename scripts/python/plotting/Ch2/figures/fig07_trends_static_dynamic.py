@@ -475,21 +475,30 @@ def main():
     fig = plt.figure(figsize=(12, 8))
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], width_ratios=[1.25, 1.0, 1.25])
 
-    fig.suptitle("Post-2016 timing shift (2016–2024 minus 1979–2015)", y=0.985, fontsize=11)
+    # fig.suptitle("Post-2016 timing shift (2016–2024 minus 1979–2015)", y=0.985, fontsize=11)
 
     # Short panel titles (no bleeding)
-    t_a = "(a) FS sign (post−pre)"
-    t_b = "(b) FS sector Δ"
-    t_c = "(c) FS trend sign (1979-2024)"
-    t_d = "(d) MS sign (post−pre)"
-    t_e = "(e) MS sector Δ"
-    t_f = "(f) MS trend sign (1979-2024)"
+    t_a = "FS sign (post−pre)"
+    t_b = "FS sector Δ"
+    t_c = "FS trend sign (1979-2024)"
+    t_d = "MS sign (post−pre)"
+    t_e = "MS sector Δ"
+    t_f = "MS trend sign (1979-2024)"
 
+    def _panel(ax, lab, outside=False):
+        if outside:
+            ax.text(-0.16, 1.04, f"({lab})", transform=ax.transAxes,
+                    ha="left", va="bottom", fontsize=12, fontweight="bold", zorder=10)
+        else:
+            ax.text(0.02, 0.98, f"({lab})", transform=ax.transAxes,
+                    ha="left", va="top", fontsize=12, fontweight="bold", zorder=10)
     # ----- Row 1: FS -----
     ax_a = make_polar_ax(fig, gs, 0, 0)
+    _panel(ax_a, "a")
     im_class = plot_sign_class_map(ax_a, fs_class, t_a)
 
     ax_b = fig.add_subplot(gs[0, 1])
+    _panel(ax_b, "b", outside=True)
     df_fs = df_sector[df_sector["phase"] == "FS"].copy()
 
     methods = ["Static", "Dynamic"]
@@ -504,18 +513,21 @@ def main():
     ax_b.axhline(0, color="0.4", linewidth=0.8)
     ax_b.set_xticks(x)
     ax_b.set_xticklabels([sector_labels[s] for s in sector_ids])
-    ax_b.set_ylabel("ΔFS (days)")
+    ax_b.set_ylabel("ΔFS (days)", fontsize=8, fontweight="bold", color="0.35")
     ax_b.set_title(t_b, fontsize=9, fontweight="bold")
     ax_b.legend(frameon=True, fontsize=8)
 
     ax_c = make_polar_ax(fig, gs, 0, 2)
+    _panel(ax_c, "c")
     _ = plot_sign_class_map(ax_c, fs_trend_class, t_c)
 
     # ----- Row 2: MS -----
     ax_d = make_polar_ax(fig, gs, 1, 0)
+    _panel(ax_d, "d")
     _ = plot_sign_class_map(ax_d, ms_class, t_d)
 
     ax_e = fig.add_subplot(gs[1, 1])
+    _panel(ax_e, "e", outside=True)
     df_ms = df_sector[df_sector["phase"] == "MS"].copy()
 
     for i, method in enumerate(methods):
@@ -525,16 +537,17 @@ def main():
     ax_e.axhline(0, color="0.4", linewidth=0.8)
     ax_e.set_xticks(x)
     ax_e.set_xticklabels([sector_labels[s] for s in sector_ids])
-    ax_e.set_ylabel("ΔMS (days since Aug 15)")
+    ax_e.set_ylabel("ΔMS (days since Aug 15)", fontsize=8, fontweight="bold", color="0.35")
     ax_e.set_title(t_e, fontsize=9, fontweight="bold")
 
     ax_f = make_polar_ax(fig, gs, 1, 2)
+    _panel(ax_f, "f")
     _ = plot_sign_class_map(ax_f, ms_trend_class, t_f)
 
     # ---------- Colorbar (compact; no land/mask label) ----------
-    cax1 = fig.add_axes([0.075, 0.055, 0.26, 0.012])  # [left, bottom, width, height]
+    cax1 = fig.add_axes([0.15, 0.055, 0.70, 0.014])  # [left, bottom, width, height]
     cb1 = fig.colorbar(im_class, cax=cax1, orientation="horizontal", ticks=[1, 2, 3, 4])
-    cb1.set_label("Sign agreement class", fontsize=9)
+    cb1.set_label("Sign agreement class", fontsize=9, fontweight="bold", color="0.35")
     cb1.ax.set_xticklabels(["both −", "dyn − only", "stat − only", "both +"], fontsize=7)
     cb1.outline.set_visible(False)
 

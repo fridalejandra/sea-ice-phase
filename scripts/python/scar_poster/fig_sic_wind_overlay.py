@@ -29,11 +29,11 @@ SEASONS = {
     "MAM": [3, 4, 5],
 }
 
-QUIVER_SKIP = 12
-QUIVER_SCALE = 0.025
+QUIVER_SKIP = 16
+QUIVER_SCALE = 0.8
 QUIVER_WIDTH = 0.0025
-QUIVER_COLOR = "0.2"
-QUIVER_ALPHA = 0.65
+QUIVER_COLOR = "black"
+QUIVER_ALPHA = 0.8
 
 EASE_CRS = ccrs.LambertAzimuthalEqualArea(
     central_latitude=-90.0, central_longitude=0.0
@@ -78,7 +78,7 @@ def main():
     all_diffs = []
     for season, months in SEASONS.items():
         pre, post = seasonal_prepost_field(sic_ds, SIC_VAR, months)
-        all_diffs.append(post - pre)
+        all_diffs.append((post - pre) * 625.0)
     vmax_sic = np.nanpercentile(np.abs(np.concatenate(
         [d.ravel() for d in all_diffs])), 98)
 
@@ -88,7 +88,7 @@ def main():
     for ax, (season, months) in zip(axes, SEASONS.items()):
         # SIC difference
         sic_pre, sic_post = seasonal_prepost_field(sic_ds, SIC_VAR, months)
-        sic_diff = sic_post - sic_pre
+        sic_diff = (sic_post - sic_pre) * 625.0  # km^2 per 25-km EASE cell
 
         im = ax.pcolormesh(x_sic, y_sic, sic_diff, transform=EASE_CRS,
                            cmap="RdBu_r", vmin=-vmax_sic, vmax=vmax_sic,
@@ -125,11 +125,11 @@ def main():
         ax.set_extent([-180, 180, -90, -50], crs=PLATE)
         ax.set_title(season, fontsize=15, fontweight="bold")
 
-    axes[1].quiverkey(q, 0.85, 0.02, 0.002, "0.002 Pa",
+    axes[1].quiverkey(q, 0.85, 0.02, 0.02, "0.02 Pa",
                       labelpos="E", fontproperties={"size": 10})
 
     fig.colorbar(im, ax=axes, orientation="vertical", fraction=0.025,
-                 pad=0.02, label="ΔSIC (fraction, post − pre)")
+                 pad=0.02, label="ΔSIA per grid cell (km², post − pre)")
 
     fig.savefig(OUT, dpi=200, bbox_inches="tight")
     print(f"-> {OUT}")

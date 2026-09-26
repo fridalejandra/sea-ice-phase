@@ -50,8 +50,8 @@ EXCLUDE_YEARS = [1978, 1987, 1991, 1995]
 
 # deaccumulation: ERA5 accumulated stress needs differencing
 # set to True if the data is accumulated (GRIB_stepType = "accum")
-DEACCUMULATE = True
-ACCUM_SECONDS = 86400.0       # 24h accumulation period for daily data
+DEACCUMULATE = False
+ACCUM_SECONDS = 3600.0       # 24h accumulation period for daily data
 
 REGRID_METHOD = "bilinear"
 WEIGHTS_PATH = "regrid_weights_era5wind_to_ease.nc"
@@ -82,6 +82,11 @@ def load_year(year):
         # difference consecutive timesteps to get instantaneous stress
         tau_x = tau_x.diff(dim=TIME_COORD) / ACCUM_SECONDS
         tau_y = tau_y.diff(dim=TIME_COORD) / ACCUM_SECONDS
+    else:
+        # values are per-hour accumulations delivered as daily means:
+        # divide by 3600 s to get stress in Pa
+        tau_x = tau_x / ACCUM_SECONDS
+        tau_y = tau_y / ACCUM_SECONDS
 
     # align time coordinates
     common_times = np.intersect1d(tau_x[TIME_COORD].values, tau_y[TIME_COORD].values)

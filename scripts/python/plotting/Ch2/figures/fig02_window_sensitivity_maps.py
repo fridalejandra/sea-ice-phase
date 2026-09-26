@@ -18,14 +18,14 @@ Input (existing static products):
     and similarly for MS.
 
 Output:
-    results/Ch2_Figures/sensitivity/window/Fig02_window_FS_MS_static_SMMR_thr15.png
+    results/Ch2_Figures/sensitivity/window/FigS03_window_FS_MS_static_SMMR_thr15.png
     (also mirrored to gdrive:sea-ice-phase/results/Ch2_Figures/sensitivity/window/)
 """
 
 import sys
 from pathlib import Path
 
- import numpy as np
+import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -38,7 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[5]  # -> sea-ice-phase
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.ch2_fig_utils import (  # noqa: E402
+from scripts.python.plotting.Ch2.utils.ch2_fig_utils import (  # noqa: E402
     set_mpl_defaults,
     format_fig_name,
     get_fig_path,
@@ -230,7 +230,7 @@ def plot_window_diff_maps():
     y = example["y"]
 
     proj = ccrs.SouthPolarStereo()
-    fig = plt.figure(figsize=(8.0, 6.0))
+    fig = plt.figure(figsize=(6.9, 5.2))
 
     panels = [
         ("FS 3–5", fs_3v5_abs, 221),
@@ -262,7 +262,7 @@ def plot_window_diff_maps():
     # Shared colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
     cb = fig.colorbar(im_last, cax=cax, orientation="horizontal")
-    cb.set_label("|Δ date| relative to 5-day window (days)", fontsize=9)
+    cb.set_label("|Δ date| relative to 5-day window (days)", fontsize=9, fontweight="bold", color="0.35")
     cb.ax.tick_params(labelsize=8)
     cb.outline.set_visible(False)
 

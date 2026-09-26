@@ -171,6 +171,16 @@ def main():
     ms_low_vals  = clip_0_30(np.abs(ms_low_da.values).ravel())
     ms_high_vals = clip_0_30(np.abs(ms_high_da.values).ravel())
 
+    print("Threshold sensitivity stats:")
+    for _nm, _v in [(f"FS {THR_LOW} vs {THR_REF}%", fs_low_vals),
+                    (f"FS {THR_HIGH} vs {THR_REF}%", fs_high_vals),
+                    (f"MS {THR_LOW} vs {THR_REF}%", ms_low_vals),
+                    (f"MS {THR_HIGH} vs {THR_REF}%", ms_high_vals)]:
+        _v = _v[np.isfinite(_v)]
+        print(f"  {_nm}: n={_v.size}, frac_zero={100*np.mean(_v==0):.1f}%, "
+              f"median={np.median(_v):.1f}, p90={np.percentile(_v,90):.1f}, "
+              f"p95={np.percentile(_v,95):.1f}")
+
     clip = 30.0
     fig, ax = plt.subplots(figsize=(4.2, 3.2), dpi=300)
 
@@ -183,8 +193,8 @@ def main():
     sns.ecdfplot(x=ms_high_vals, ax=ax, label=f"MS {THR_HIGH} vs {THR_REF}%")
 
     ax.set_xlim(0, clip)
-    ax.set_xlabel("|Δ date| (days)")
-    ax.set_ylabel("Cumulative fraction of pixels")
+    ax.set_xlabel("|Δ date| (days)", fontweight="bold", color="0.35")
+    ax.set_ylabel("Cumulative fraction of pixels", fontweight="bold", color="0.35")
     ax.grid(True, alpha=0.3)
 
     ax.legend(
@@ -201,7 +211,7 @@ def main():
     out_path = get_fig_path(
         PROJECT_ROOT_CLUSTER,
         subfolder="",
-        fig_name="Fig03_FS_MS_threshold_sensitivity_static_ecdf_allcurves.png",
+        fig_name="FigS05_FS_MS_threshold_sensitivity_static_ecdf_allcurves.png",
     )
 
     save_and_upload(

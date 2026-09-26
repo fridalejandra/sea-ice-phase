@@ -168,7 +168,7 @@ def make_single_year_maps(year: int, fields: dict) -> None:
     # Colorbar
     cax = fig.add_axes([0.15, 0.08, 0.7, 0.03])
     cb = fig.colorbar(ims[-1], cax=cax, orientation="horizontal")
-    cb.set_label("Anomaly (days)", fontsize=9)
+    cb.set_label("Anomaly (days)", fontsize=9, fontweight="bold", color="0.35")
     cb.ax.tick_params(labelsize=8)
     cb.outline.set_visible(False)
 

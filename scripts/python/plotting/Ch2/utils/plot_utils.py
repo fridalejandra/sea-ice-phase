@@ -34,11 +34,11 @@ import seaborn as sns
 
 DPI = 300
 
-FIGSIZE_SINGLE = (5, 5)
-FIGSIZE_DOUBLE = (8, 4)
-FIGSIZE_TRIPLE = (10.5, 4)
-FIGSIZE_WIDE   = (11, 4)
-FIGSIZE_TALL   = (5, 7)
+FIGSIZE_SINGLE = (4.7, 4.7)
+FIGSIZE_DOUBLE = (6.9, 3.5)
+FIGSIZE_TRIPLE = (6.9, 2.7)
+FIGSIZE_WIDE   = (6.9, 2.6)
+FIGSIZE_TALL   = (4.7, 6.5)
 
 
 def set_mpl_defaults() -> None:
@@ -384,7 +384,7 @@ def plot_phase_comparison_map(
     fig, axes = plt.subplots(
         1,
         3,
-        figsize=(12, 4.5),
+        figsize=(6.9, 2.6),
         subplot_kw=dict(projection=proj),
         constrained_layout=True,
     )
@@ -434,9 +434,9 @@ def plot_phase_comparison_map(
             shrink=0.8,
         )
         if name == "Difference":
-            cbar.set_label(f"{label} (dynamic − static)", fontsize=9)
+            cbar.set_label("Difference (dynamic − static, days)", fontsize=6, fontweight="bold", color="0.35")
         else:
-            cbar.set_label(label, fontsize=9)
+            cbar.set_label(label, fontsize=6, fontweight="bold", color="0.35")
         cbar.ax.tick_params(labelsize=8)
         cbar.outline.set_visible(False)
 
@@ -473,13 +473,13 @@ def plot_phase_cdf_comparison(
     vals_s = flatten_field(static_field, mask=mask)
     vals_d = flatten_field(dynamic_field, mask=mask)
 
-    fig, ax = plt.subplots(figsize=(4, 3), dpi=DPI)
+    fig, ax = plt.subplots(figsize=(3.4, 2.6), dpi=DPI)
     sns.ecdfplot(x=vals_s, ax=ax, label=label_static)
     sns.ecdfplot(x=vals_d, ax=ax, label=label_dynamic)
 
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel("Cumulative probability")
-    ax.set_title(title)
+    ax.set_xlabel(xlabel, fontweight="bold", color="0.35")
+    ax.set_ylabel("Cumulative probability", fontweight="bold", color="0.35")
+    ax.set_title(title, fontweight="bold")
     ax.legend()
 
     return fig, ax
@@ -502,7 +502,7 @@ def plot_phase_cdf_by_sector(
     fig, axes = plt.subplots(
         nrows,
         ncols,
-        figsize=(10, 3 * nrows),
+        figsize=(6.9, 2.1 * nrows),
         sharex=True,
         sharey=True,
         dpi=DPI,
@@ -524,12 +524,12 @@ def plot_phase_cdf_by_sector(
 
         sns.ecdfplot(x=vals_s, ax=ax, label="Static")
         sns.ecdfplot(x=vals_d, ax=ax, label="Dynamic")
-        ax.set_title(sector_labels.get(sec, f"Sector {sec}"))
+        ax.set_title(sector_labels.get(sec, f"Sector {sec}"), fontweight="bold")
         ax.grid(True, alpha=0.3)
 
     for ax in axes[:nsec]:
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel("Cumulative probability")
+        ax.set_xlabel(xlabel, fontweight="bold", color="0.35")
+        ax.set_ylabel("Cumulative probability", fontweight="bold", color="0.35")
 
     for ax in axes[nsec:]:
         ax.set_visible(False)
@@ -538,7 +538,7 @@ def plot_phase_cdf_by_sector(
     if handles:
         fig.legend(handles, labels, loc="lower center", ncol=2)
 
-    fig.suptitle(f"{phase_name} date CDFs by sector (static vs dynamic)", y=0.98)
+    # fig.suptitle(f"{phase_name} date CDFs by sector (static vs dynamic)", y=0.98)
     fig.tight_layout(rect=[0, 0.05, 1, 0.96])
 
     return fig, axes
@@ -628,8 +628,8 @@ def plot_window_sensitivity_ecdf(
     sns.ecdfplot(x=adv_3v5_vals, ax=ax, label="3 vs 5 days")
     sns.ecdfplot(x=adv_5v7_vals, ax=ax, label="5 vs 7 days")
 
-    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_advance.lower()))
-    ax.set_ylabel("Cumulative probability")
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_advance.lower()), fontweight="bold", color="0.35")
+    ax.set_ylabel("Cumulative probability", fontweight="bold", color="0.35")
     ax.set_xlim(0, max_x)
     #ax.set_title(phase_label_advance)
 
@@ -638,7 +638,7 @@ def plot_window_sensitivity_ecdf(
     sns.ecdfplot(x=ret_3v5_vals, ax=ax, label="3 vs 5 days")
     sns.ecdfplot(x=ret_5v7_vals, ax=ax, label="5 vs 7 days")
 
-    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_retreat.lower()))
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_retreat.lower()), fontweight="bold", color="0.35")
     ax.set_xlim(0, max_x)
     #ax.set_title(phase_label_retreat)
 
@@ -743,19 +743,19 @@ def plot_window_sensitivity_ecdf(
     sns.ecdfplot(x=adv_3v5_vals, ax=ax, label="3 vs 5 days")
     sns.ecdfplot(x=adv_5v7_vals, ax=ax, label="5 vs 7 days")
 
-    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_advance.lower()))
-    ax.set_ylabel("Cumulative probability")
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_advance.lower()), fontweight="bold", color="0.35")
+    ax.set_ylabel("Cumulative probability", fontweight="bold", color="0.35")
     ax.set_xlim(0, max_x)
-    ax.set_title(phase_label_advance)
+    ax.set_title(phase_label_advance, fontweight="bold")
 
     # --- Retreat panel ---
     ax = axes[1]
     sns.ecdfplot(x=ret_3v5_vals, ax=ax, label="3 vs 5 days")
     sns.ecdfplot(x=ret_5v7_vals, ax=ax, label="5 vs 7 days")
 
-    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_retreat.lower()))
+    ax.set_xlabel(r"|Δ {} date| (days)".format(phase_label_retreat.lower()), fontweight="bold", color="0.35")
     ax.set_xlim(0, max_x)
-    ax.set_title(phase_label_retreat)
+    ax.set_title(phase_label_retreat, fontweight="bold")
 
     # Shared legend (only once)
     handles, labels = axes[0].get_legend_handles_labels()
@@ -799,7 +799,7 @@ def plot_sector_time_series(
     fig, axes = plt.subplots(
         nrows,
         ncols,
-        figsize=(10, 3 * nrows),
+        figsize=(6.9, 2.1 * nrows),
         sharex=True,
         sharey=True,
         dpi=DPI,
@@ -825,11 +825,11 @@ def plot_sector_time_series(
         ax.plot(time, sv, label="Static", linewidth=1)
         ax.plot(time, dv, label="Dynamic", linewidth=1)
         ax.axhline(0.0, color="0.5", linewidth=0.5)
-        ax.set_title(sector_labels.get(sec, f"Sector {sec}"))
+        ax.set_title(sector_labels.get(sec, f"Sector {sec}"), fontweight="bold")
 
     for ax in axes[:nsec]:
-        ax.set_xlabel("Year")
-        ax.set_ylabel(ylabel)
+        ax.set_xlabel("Year", fontweight="bold", color="0.35")
+        ax.set_ylabel(ylabel, fontweight="bold", color="0.35")
 
     for ax in axes[nsec:]:
         ax.set_visible(False)
@@ -838,7 +838,7 @@ def plot_sector_time_series(
     if handles:
         fig.legend(handles, labels, loc="lower center", ncol=2)
 
-    fig.suptitle(f"{phase_name} anomalies by sector: static vs dynamic", y=0.98)
+    # fig.suptitle(f"{phase_name} anomalies by sector: static vs dynamic", y=0.98)
     fig.tight_layout(rect=[0, 0.05, 1, 0.96])
 
     return fig, axes

@@ -36,7 +36,7 @@ from statsmodels.stats.multitest import multipletests
 
 IN_CSV = (
     "/user/geog/falejandraperez/sea-ice-phase/data/merged/"
-    "analysis_table_daily_anomaly.csv"
+    "analysis_table_daily_anomaly_periodclim.csv"
 )
 OUT_DIR = "/user/geog/falejandraperez/sea-ice-phase/data/merged/analysis_results/"
 
