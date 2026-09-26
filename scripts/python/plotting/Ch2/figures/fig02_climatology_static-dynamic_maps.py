@@ -64,7 +64,7 @@ DIFF_VLIM = 20                  # days; values beyond shown by extend arrows
 SHOW_ACTIVE80_OUTLINE = True
 USE_NSIDC_CRS = True
 
-SECTORS = {1: "A–B", 2: "WED", 3: "KHV", 4: "EA", 5: "RA"}
+SECTORS = {1: "ABS", 2: "WS", 3: "KHV", 4: "EA", 5: "RS"}
 SECTOR_LABEL_LAT = -53.0        # labels sit in the open-ocean ring
 
 TAGS = {
