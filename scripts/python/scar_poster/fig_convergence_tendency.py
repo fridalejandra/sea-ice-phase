@@ -15,11 +15,11 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from scipy import stats
 
-PATH = "ice_divergence_daily_sh.nc"
+PATH = "/user/geog/falejandraperez/sea-ice-phase/results/ch4/derived_nc/ice_divergence_daily_sh.nc"
 VAR = "divergence"
 
 SPLIT_YEAR = 2016
-EXCLUDE_YEARS = [1978, 1987, 1991, 1995]
+EXCLUDE_YEARS = [1978]
 
 SEASONS = {
     "DJF": [12, 1, 2],
@@ -33,7 +33,7 @@ EASE_CRS = ccrs.LambertAzimuthalEqualArea(
 )
 PLATE = ccrs.PlateCarree()
 
-OUT = "fig_convergence_seasonal.png"
+OUT = "/user/geog/falejandraperez/sea-ice-phase/results/ch4/figures/fig_convergence_seasonal.png"
 RCLONE_REMOTE = "gdrive:scar_poster/"
 
 
@@ -52,8 +52,13 @@ def main():
     all_diffs = []
     for season, months in SEASONS.items():
         sub = da.sel(time=da["time"].dt.month.isin(months))
-        ym = sub.groupby(sub["time"].dt.year).mean(dim="time").load()
-        years = ym["year"].values
+        # DJF spans a year boundary: Dec belongs to the FOLLOWING year's
+        # season (Dec 2015 + Jan/Feb 2016 = "DJF 2016"). Bump December's
+        # year label forward by one before grouping, else Dec splits into
+        # a different group than Jan/Feb and DJF is silently wrong.
+        seas_year = sub["time"].dt.year + (sub["time"].dt.month == 12).astype(int)
+        ym = sub.groupby(seas_year.rename("season_year")).mean(dim="time").load()
+        years = ym["season_year"].values
         pre = np.nanmean(ym.values[years < SPLIT_YEAR], axis=0)
         post = np.nanmean(ym.values[years >= SPLIT_YEAR], axis=0)
         all_diffs.append(post - pre)
@@ -61,8 +66,9 @@ def main():
 
     for ax, (season, months) in zip(axes, SEASONS.items()):
         sub = da.sel(time=da["time"].dt.month.isin(months))
-        ym = sub.groupby(sub["time"].dt.year).mean(dim="time").load()
-        years = ym["year"].values
+        seas_year = sub["time"].dt.year + (sub["time"].dt.month == 12).astype(int)
+        ym = sub.groupby(seas_year.rename("season_year")).mean(dim="time").load()
+        years = ym["season_year"].values
         pre = ym.values[years < SPLIT_YEAR]
         post = ym.values[years >= SPLIT_YEAR]
         diff = np.nanmean(post, axis=0) - np.nanmean(pre, axis=0)

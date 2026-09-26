@@ -22,9 +22,9 @@ import numpy as np
 import xarray as xr
 
 # ---------------- CONFIG ----------------
-EASE_PATH = ("/user/geog/falejandraperez/sea-ice-phase/scripts/python/"
-             "scar_poster/ice_divergence_daily_sh.nc")
-OUT_PATH = "ease_divergence_with_latlon.nc"
+EASE_PATH = ("/user/geog/falejandraperez/sea-ice-phase/results/ch4/derived_nc/"
+             "ice_divergence_daily_sh.nc")
+OUT_PATH = "/user/geog/falejandraperez/sea-ice-phase/results/ch4/derived_nc/ease_divergence_with_latlon.nc"
 
 X_COORD = "x"
 Y_COORD = "y"

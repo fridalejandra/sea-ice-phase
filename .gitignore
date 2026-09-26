@@ -44,3 +44,5 @@ scripts/R/Ch3/data/
 scripts/R/chapter3/data/
 scripts/R/observations/
 venv/
+*.bak
+*.bak2

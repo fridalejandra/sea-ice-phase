@@ -82,8 +82,8 @@ SECTORS = {
     "ABS": (230.0, 300.0),
 }
 
-OUTPUT_GRIDDED = "ice_divergence_daily_sh.nc"
-OUTPUT_SECTOR_TABLE = "ice_divergence_by_sector_season.csv"
+OUTPUT_GRIDDED = "results/ch4/derived_nc/ice_divergence_daily_sh.nc"
+OUTPUT_SECTOR_TABLE = "results/ch4/tables/ice_divergence_by_sector_season.csv"
 WRITE_GRIDDED = True          # set False if disk/memory is tight
 # -----------------------------------------
 
@@ -311,7 +311,11 @@ def run():
         sec = sector_mask_from(ds)
 
         if WRITE_GRIDDED:
-            gridded_parts.append(div)
+            div_pos = div.where(div > 0)
+            div_neg = div.where(div < 0)
+            gridded_parts.append(
+                xr.Dataset({"divergence": div, "div_positive": div_pos,
+                           "div_negative": div_neg}))
         sector_parts.append(aggregate_by_sector(div, sec))
         ds.close()
 
@@ -322,9 +326,8 @@ def run():
 
     if WRITE_GRIDDED:
         gridded = xr.concat(gridded_parts, dim=TIME_COORD).sortby(TIME_COORD)
-        gridded.name = "divergence"
         gridded.to_netcdf(OUTPUT_GRIDDED)
-        print(f"Wrote gridded divergence -> {OUTPUT_GRIDDED}")
+        print(f"Wrote gridded divergence/div_positive/div_negative -> {OUTPUT_GRIDDED}")
 
     table = pd.concat(sector_parts, ignore_index=True).sort_values(
         ["sector", "date"])

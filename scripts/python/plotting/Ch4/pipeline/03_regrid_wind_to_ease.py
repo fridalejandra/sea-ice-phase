@@ -43,10 +43,10 @@ TIME_COORD = "valid_time"
 LAT_COORD = "latitude"
 LON_COORD = "longitude"
 
-EASE_REF_PATH = "ease_divergence_with_latlon.nc"
+EASE_REF_PATH = "/user/geog/falejandraperez/sea-ice-phase/results/ch4/derived_nc/ease_divergence_with_latlon.nc"
 
-YEARS = range(1979, 2024)
-EXCLUDE_YEARS = [1978, 1987, 1991, 1995]
+YEARS = range(1979, 2025)
+EXCLUDE_YEARS = []
 
 # deaccumulation: ERA5 accumulated stress needs differencing
 # set to True if the data is accumulated (GRIB_stepType = "accum")
@@ -56,8 +56,8 @@ ACCUM_SECONDS = 86400.0       # 24h accumulation period for daily data
 REGRID_METHOD = "bilinear"
 WEIGHTS_PATH = "regrid_weights_era5wind_to_ease.nc"
 
-OUT_REGRIDDED = "wind_stress_on_ease_sh.nc"
-OUT_CURL = "wind_stress_curl_on_ease_sh.nc"
+OUT_REGRIDDED = "results/ch4/derived_nc/wind_stress_on_ease_sh.nc"
+OUT_CURL = "results/ch4/derived_nc/wind_stress_curl_on_ease_sh.nc"
 # -----------------------------------------
 
 
@@ -79,9 +79,9 @@ def load_year(year):
     tau_y = ty[TAU_Y_VAR]
 
     if DEACCUMULATE:
-        # difference consecutive timesteps to get instantaneous stress
-        tau_x = tau_x.diff(dim=TIME_COORD) / ACCUM_SECONDS
-        tau_y = tau_y.diff(dim=TIME_COORD) / ACCUM_SECONDS
+        # daily-accumulated stress (Pa*s) -> mean daily stress (Pa): divide by 86400 s (ECMWF). NOT differenced: each daily file already holds that day standalone accumulation.
+        tau_x = tau_x / ACCUM_SECONDS
+        tau_y = tau_y / ACCUM_SECONDS
 
     # align time coordinates
     common_times = np.intersect1d(tau_x[TIME_COORD].values, tau_y[TIME_COORD].values)
