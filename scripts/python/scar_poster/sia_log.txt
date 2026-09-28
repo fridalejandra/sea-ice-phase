@@ -1,0 +1,39 @@
+nohup: ignoring input
+Loading files...
+Grid alignment OK.
+NaN count in masked SIC array: 342786521 (should be > 0 - if this is 0 across the whole record, investigate before trusting results)
+Amundsen-Bellingshausen: 9082 ocean pixels, mean SIA=665,139 km^2, days below 50% coverage=0
+Weddell: 19167 ocean pixels, mean SIA=2,619,229 km^2, days below 50% coverage=0
+King Haakon VII: 26977 ocean pixels, mean SIA=2,369,772 km^2, days below 50% coverage=0
+East Antarctica: 25207 ocean pixels, mean SIA=1,470,837 km^2, days below 50% coverage=0
+Ross-Amundsen: 24479 ocean pixels, mean SIA=2,856,544 km^2, days below 50% coverage=0
+
+0 / 15589 days flagged as low-coverage (recommend excluding these from forcing-response regression)
+
+Year distribution of flagged low-coverage days:
+Series([], Name: count, dtype: int64)
+
+Saved full daily per-sector SIA + coverage flags to:
+  /user/geog/falejandraperez/sea-ice-phase/data/merged/sia_by_sector_daily.csv
+
+Preview:
+            Amundsen-Bellingshausen  ...  any_sector_low_coverage
+date                                 ...                         
+1978-11-01             1.260725e+06  ...                    False
+1978-11-03             1.200865e+06  ...                    False
+1978-11-05             1.136713e+06  ...                    False
+1978-11-07             1.108864e+06  ...                    False
+1978-11-09             1.083830e+06  ...                    False
+
+[5 rows x 11 columns]
+       Amundsen-Bellingshausen  ...  Ross-Amundsen_coverage
+count             1.558900e+04  ...            1.558900e+04
+mean              6.651392e+05  ...            8.779362e-01
+std               3.608940e+05  ...            3.124268e-13
+min               4.702288e+03  ...            8.779362e-01
+25%               3.529145e+05  ...            8.779362e-01
+50%               6.554832e+05  ...            8.779362e-01
+75%               9.613754e+05  ...            8.779362e-01
+max               1.589266e+06  ...            8.779362e-01
+
+[8 rows x 10 columns]
