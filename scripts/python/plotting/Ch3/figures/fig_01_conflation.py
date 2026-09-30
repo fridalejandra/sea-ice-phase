@@ -30,6 +30,18 @@ font-family style choices -- the larger font.size/labelsize/titlesize for
 this more illustrative/schematic figure, legend and dpi/savefig settings --
 are kept as a local rcParams.update placed AFTER the ch3_style import, since
 those aren't part of what ch3_style standardizes.
+
+DEPENDENCIES (added 2026-09-30, part of the per-figure cblind/dual-export pass)
+--------------------------------------------------------------------------
+Data:   data/ch3/daily_fitted.csv (ch3_config.DAILY_CSV) -- column
+        `iac_notrend`, filtered to sector="SIE_circumpolar", period="FULL"
+        via ch3_data.load_daily(). Written by R/ch3/01_fit_apac.R.
+Tables: none. This is a schematic (synthetic PHASE_SHIFT/AMP_SCALE applied to
+        the real invariant cycle, not a results figure) -- it reads no
+        results/ch3/tables/*.csv and writes none.
+Output: results/ch3/figures/fig01_concept_manuscript.png   (white bg, manuscript)
+        results/ch3/figures/fig01_concept_presentation.png (transparent bg, slides)
+Colors: ch3_config.CBLIND_COLORS (Okabe-Ito colorblind-safe set).
 """
 
 import os
@@ -41,6 +53,7 @@ from scipy.ndimage import gaussian_filter1d
 import ch3_data as D
 from ch3_plot import figsize, save
 import ch3_style  # sets font (Helvetica/Tacoma) + spines for every figure
+from ch3_config import CBLIND_COLORS
 
 # =============================================================================
 # STYLE (non-font-family settings only -- font.family/font.sans-serif and
@@ -63,10 +76,15 @@ plt.rcParams.update({
     "savefig.facecolor": "white",
 })
 
-C_INV   = "#2C2C2A"
-C_PHASE = "#D4537E"
-C_AMP   = "#1D9E75"
-C_ANNOT = "#5F5E5A"
+# Colorblind-safe (Okabe-Ito): black for the neutral/invariant curve,
+# vermillion for the phase-shift curve, blue for the amplitude-change curve --
+# distinct under deuteranopia/protanopia/tritanopia, unlike the old near-black/
+# pink/green trio (green vs. magenta-pink is a classic red-green-colorblind
+# collision).
+C_INV   = CBLIND_COLORS["black"]
+C_PHASE = CBLIND_COLORS["vermillion"]
+C_AMP   = CBLIND_COLORS["blue"]
+C_ANNOT = "#5F5E5A"   # annotation ink only, not data-encoding -- left as is
 INK     = "0.35"  # for panel titles, consistent with other figures
 
 SECTOR      = "SIE_circumpolar"   # representative curve for the schematic
@@ -274,5 +292,5 @@ ax.legend(fontsize=9, frameon=False, loc="upper left",
 fig.tight_layout()
 fig.subplots_adjust(hspace=0.38, wspace=0.18)
 
-save(fig, "fig01_concept_manuscript.png", sync=True)
+save(fig, "fig01_concept_manuscript.png", sync=True, presentation=True)
 print("Done.")

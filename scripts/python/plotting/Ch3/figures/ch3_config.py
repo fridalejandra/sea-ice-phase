@@ -170,6 +170,25 @@ COMPONENT_COLORS = {
     "Residual":  "#BDBDBD",
 }
 
+# ── Colorblind-safe palette (Okabe & Ito 2008 / the "Wong" qualitative set) ──
+# Added 2026-09-30 for the figure-by-figure cblind/dual-export pass (manuscript
+# = white bg, presentation = transparent bg -- see ch3_plot.save()). Distinct
+# under deuteranopia, protanopia, and tritanopia. Not a retrofit of
+# SECTOR_COLORS/COMPONENT_COLORS yet -- those get their own pass later, in
+# turn, as their figures come up in the one-by-one rotation. This is the
+# shared source new figure-local color constants should draw from as each
+# figure is redone.
+CBLIND_COLORS = {
+    "black":          "#000000",
+    "orange":         "#E69F00",
+    "sky_blue":       "#56B4E9",
+    "bluish_green":   "#009E73",
+    "yellow":         "#F0E442",
+    "blue":           "#0072B2",
+    "vermillion":     "#D55E00",
+    "reddish_purple": "#CC79A7",
+}
+
 # ── Analysis constants ────────────────────────────────────────────────────────
 YEAR_MIN   = 1979          # first full year in the fit; all annual statistics start here
 # YEAR_MAX / YEAR_END FIXED 2026-09-18: both were hardcoded to 2023, but the

@@ -93,12 +93,33 @@ def year_axis(ax, start=YEAR_START, end=YEAR_END):
     ax.set_xlabel("Year", fontsize=10)
 
 
-def save(fig, name, dpi=300, sync=True, tight=True):
+def _presentation_name(name):
+    """fig01_concept_manuscript.png -> fig01_concept_presentation.png.
+
+    Strips a trailing "_manuscript" before the extension if present, then
+    appends "_presentation"; otherwise just appends "_presentation" before
+    the extension. This is the naming convention save() uses for the
+    transparent, no-background export (slides/talks).
+    """
+    root, ext = os.path.splitext(name)
+    if root.endswith("_manuscript"):
+        root = root[: -len("_manuscript")]
+    return f"{root}_presentation{ext}"
+
+
+def save(fig, name, dpi=300, sync=True, tight=True, presentation=False):
     """Save to OUTPUT_DIR and optionally rclone to Drive.
 
     Warns (does not block) if the figure is wider than ch3_config.TEXT_WIDTH_IN
     — catches a script that still hardcodes an oversized figsize= instead of
     using ch3_plot.figsize()/sector_grid()'s default.
+
+    presentation: also save a second, transparent-background copy alongside
+    the normal white-background one, named by _presentation_name(name), for
+    use in slides/talks. Default False, so every OTHER figure script's
+    existing save(fig, name, ...) call keeps producing exactly the one
+    white-background PNG it always has — opt in per figure as each one gets
+    its cblind/dual-export pass.
     """
     w_in, h_in = fig.get_size_inches()
     if w_in > TEXT_WIDTH_IN + 0.1:
@@ -107,20 +128,41 @@ def save(fig, name, dpi=300, sync=True, tight=True):
               f"auto-shrunk (and its fonts with it) when placed in the document.")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    paths = []
+
+    # Manuscript export (white background) — unchanged from before.
     path = os.path.join(OUTPUT_DIR, name)
     if tight:
         fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
     else:
         fig.savefig(path, dpi=dpi, facecolor="white")
-    plt.close(fig)
     print(f"Saved → {path}")
+    paths.append(path)
+
+    # Presentation export (transparent background) — opt-in, saved before the
+    # figure is closed so it's the same figure object, same layout, no re-plot.
+    if presentation:
+        pres_name = _presentation_name(name)
+        pres_path = os.path.join(OUTPUT_DIR, pres_name)
+        # transparent=True makes matplotlib set the figure's and axes' patches
+        # to "none" itself, overriding any facecolor= passed alongside it —
+        # so facecolor is deliberately left off this call.
+        if tight:
+            fig.savefig(pres_path, dpi=dpi, bbox_inches="tight", transparent=True)
+        else:
+            fig.savefig(pres_path, dpi=dpi, transparent=True)
+        print(f"Saved → {pres_path}  (presentation, transparent background)")
+        paths.append(pres_path)
+
+    plt.close(fig)
 
     if sync:
-        try:
-            r = subprocess.run(["rclone", "copy", path, GDRIVE],
-                               capture_output=True, text=True)
-            print(f"Synced → {GDRIVE}" if r.returncode == 0
-                  else f"rclone failed: {r.stderr.strip()}")
-        except FileNotFoundError:
-            print("rclone not found — skipping sync.")
+        for p in paths:
+            try:
+                r = subprocess.run(["rclone", "copy", p, GDRIVE],
+                                   capture_output=True, text=True)
+                print(f"Synced → {GDRIVE}" if r.returncode == 0
+                      else f"rclone failed: {r.stderr.strip()}")
+            except FileNotFoundError:
+                print("rclone not found — skipping sync.")
     return path
