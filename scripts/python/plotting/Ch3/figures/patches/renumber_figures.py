@@ -137,7 +137,7 @@ def main():
         figdir = sys.argv[sys.argv.index("--figdir") + 1]
     else:
         try:
-            sys.path.insert(0, HERE)
+            sys.path.insert(0, os.path.dirname(HERE))
             import ch3_config
             figdir = getattr(ch3_config, "FIGURES_DIR", None) or getattr(ch3_config, "OUTPUT_DIR", None)
         except Exception:

@@ -54,7 +54,7 @@ if _dup.any():
 '''
 
 for name, (var, anchor) in TARGETS.items():
-    path = os.path.join(HERE, name)
+    path = os.path.join(os.path.dirname(HERE), name)
     print(f"\n== {name}")
     if not os.path.exists(path):
         print("   not present, skipped")

@@ -30,7 +30,7 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TARGET = os.path.join(HERE, "ch3_stats.py")
+TARGET = os.path.join(os.path.dirname(HERE), "ch3_stats.py")
 APPLY = "--apply" in sys.argv
 
 ANCHOR = "ann = pd.read_csv(ANNUAL_CSV)\n"
