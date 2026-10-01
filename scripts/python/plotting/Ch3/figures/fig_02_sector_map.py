@@ -73,18 +73,52 @@ circular_boundary(). LAT_MAP_EDGE was also tightened (-38 -> -42) and the
 two label rings (sector-boundary degree tags, ocean-basin names) given more
 radial separation, as a second line of defense either way.
 
-Run from scripts/python/plotting/Ch3/figures/ :  python fig_sector_map.py
-Output: results/ch3/figures/fig02_sector_map.png
+DEPENDENCIES (added 2026-09-30, part of the per-figure cblind/dual-export pass)
+--------------------------------------------------------------------------
+Data:   sector/ocean boundaries are hardcoded constants in ch3_config.py
+        (SECTOR_BOUNDS_DEG, OCEAN_BOUNDS_DEG), not derived from any CSV.
+        Coastline/land geometry comes from cartopy's Natural Earth
+        shapefiles (downloaded via pooch on first use; needs internet --
+        see the DEPENDENCY / WHERE TO RUN THIS note above).
+        Added 2026-10-01: the mean ice-edge contour reads
+        ch3_config.MEAN_ICE_CONC_NC (data/ch3/mean_ice_concentration_
+        climatology.nc), a small cached climatology built once by
+        compute/compute_mean_ice_edge_climatology.py from
+        ch3_config.MERGED_ICECON_NC (Bootstrap SH concentration, ~13GB --
+        never read directly by this script). Re-run that compute script
+        only if the source concentration file is updated.
+Tables: none -- reads no results/ch3/tables/*.csv and writes none.
+Colors: ch3_config.SECTOR_COLORS -- updated 2026-09-30 to a colorblind-safe
+        (Okabe-Ito) 6-color set as part of this figure's cblind pass. This
+        is the SHARED sector palette: every other sector-colored figure in
+        the chapter (fig03, fig06-09, ch3_plot.sector_grid()) inherits this
+        change the next time each is rerun, even before its own turn in the
+        one-by-one rotation.
+
+NOTE (2026-09-30): this docstring's header (top of file) still names this
+script "fig_sector_map.py" -- a stale name from before the 2026-09-18
+renumbering pass, the same pattern already found and left as-is in
+fig_01_conflation.py's header. The real filename is fig_02_sector_map.py;
+the run command below has been corrected to match.
+
+Run from scripts/python/plotting/Ch3/figures/ :  python fig_02_sector_map.py
+Output: results/ch3/figures/fig02_sector_map.png              (white bg, manuscript)
+        results/ch3/figures/fig02_sector_map_presentation.png (transparent bg, slides)
 """
 import os
 import sys
 import numpy as np
+import xarray as xr
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
+import matplotlib.lines as mlines
 
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-from ch3_config import SECTOR_LABELS, SECTOR_COLORS, SECTOR_BOUNDS_DEG, SECTOR_ORDER_BY_LONGITUDE
+from ch3_config import (
+    SECTOR_LABELS, SECTOR_COLORS, SECTOR_BOUNDS_DEG, SECTOR_ORDER_BY_LONGITUDE,
+    MEAN_ICE_CONC_NC, NSIDC_SH_PS_PROJ, ICE_EDGE_CONCENTRATION, CBLIND_COLORS,
+)
 from ch3_plot import figsize, save
 import ch3_style  # sets font (Helvetica/Tacoma) + spines for every figure
 
@@ -97,6 +131,46 @@ except ImportError:
         "conda install -c conda-forge cartopy). See the DEPENDENCY note at "
         "the top of this file if you're on an offline cluster node."
     )
+
+# -- mean ice-edge contour (added 2026-10-01) ------------------------------------
+# Climatological (1978-11-01 to 2025-12-31) mean sea-ice concentration, on its
+# native NSIDC polar-stereographic grid -- built once by
+# compute/compute_mean_ice_edge_climatology.py from the 13GB source, so this
+# figure only ever reads the small (~1MB) cached result below. The 0.15
+# contour is the standard "ice edge" definition. NSIDC_CRS lets cartopy
+# reproject this straight onto either panel's own projection (SouthPolarStereo
+# / PlateCarree) without computing lat/lon per cell by hand.
+if not os.path.exists(MEAN_ICE_CONC_NC):
+    raise SystemExit(
+        f"Not found: {MEAN_ICE_CONC_NC}\n"
+        "Run compute/compute_mean_ice_edge_climatology.py first (one-off, "
+        "reads the 13GB merged concentration file and caches a small result)."
+    )
+_ice_ds = xr.open_dataset(MEAN_ICE_CONC_NC)
+ICE_X = _ice_ds["x"].values
+ICE_Y = _ice_ds["y"].values
+ICE_MEAN_CONC = _ice_ds["mean_concentration"].values
+_ice_ds.close()
+ICE_X2D, ICE_Y2D = np.meshgrid(ICE_X, ICE_Y)
+
+NSIDC_CRS = ccrs.Stereographic(
+    central_latitude=NSIDC_SH_PS_PROJ["central_latitude"],
+    central_longitude=NSIDC_SH_PS_PROJ["central_longitude"],
+    true_scale_latitude=NSIDC_SH_PS_PROJ["true_scale_latitude"],
+    globe=ccrs.Globe(semimajor_axis=NSIDC_SH_PS_PROJ["semimajor_axis"],
+                      semiminor_axis=NSIDC_SH_PS_PROJ["semiminor_axis"]),
+)
+ICE_EDGE_COLOR = CBLIND_COLORS["blue"]
+
+
+def draw_ice_edge(ax, zorder=4.5):
+    """Climatological mean ice-edge contour (0.15 concentration), reprojected
+    from its native NSIDC grid onto ax's own projection. zorder=4.5 sits just
+    above coastlines (4) so it reads clearly, below the sector-boundary
+    dashed meridians (6) and their labels (7) so those stay legible on top."""
+    ax.contour(ICE_X2D, ICE_Y2D, ICE_MEAN_CONC, levels=[ICE_EDGE_CONCENTRATION],
+               transform=NSIDC_CRS, colors=[ICE_EDGE_COLOR], linewidths=1.3,
+               linestyles="-", zorder=zorder)
 
 # -- panel (a): polar -----------------------------------------------------------
 LAT_OUTER = -50          # circumpolar edge of the map / wedges (deg)
@@ -201,6 +275,7 @@ def draw_polar_panel(ax):
 
     ax.add_feature(cfeature.LAND.with_scale("50m"), facecolor="#e8e4d8", zorder=3)
     ax.coastlines(resolution="50m", linewidth=0.8, color="#3a3a3a", zorder=4)
+    draw_ice_edge(ax)
 
     for w, lab in boundary_meridians().items():
         ax.plot([w, w], [LAT_INNER, LAT_OUTER], transform=ccrs.PlateCarree(),
@@ -248,6 +323,7 @@ def draw_rect_panel(ax):
 
     ax.add_feature(cfeature.LAND.with_scale("50m"), facecolor="#e8e4d8", zorder=3)
     ax.coastlines(resolution="50m", linewidth=0.7, color="#3a3a3a", zorder=4)
+    draw_ice_edge(ax)
 
     for w, lab in boundary_meridians().items():
         ax.plot([w, w], [RECT_LAT_MIN, RECT_LAT_MAX], transform=ccrs.PlateCarree(),
@@ -296,13 +372,15 @@ def main():
     handles = [mpatches.Patch(facecolor=SECTOR_COLORS[s], edgecolor=SECTOR_COLORS[s],
                                alpha=0.7, label=SECTOR_LABELS[s])
                for s in SECTOR_ORDER_BY_LONGITUDE]
-    fig.legend(handles=handles, ncol=5, loc="lower center", bbox_to_anchor=(0.5, 0.02),
+    handles.append(mlines.Line2D([], [], color=ICE_EDGE_COLOR, lw=1.3,
+                                  label="Mean ice edge (1979–2025)"))
+    fig.legend(handles=handles, ncol=6, loc="lower center", bbox_to_anchor=(0.5, 0.02),
                frameon=False, fontsize=10)
 
     # dpi bumped 220 -> 300 to meet the Graduate Division's >=300dpi requirement
     # (this script predates that check; save() also re-warns if width creeps
     # past TEXT_WIDTH_IN again in the future).
-    out = save(fig, "fig02_sector_map.png", dpi=300, sync=False)
+    out = save(fig, "fig02_sector_map.png", dpi=300, sync=False, presentation=True)
     print("wrote", out)
     print("\nSector boundaries plotted (deg, local / display form):")
     for sec in SECTOR_ORDER_BY_LONGITUDE:
