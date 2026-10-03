@@ -54,6 +54,8 @@ STEPS = [
     (os.path.join(HERE, "fig_level_leak.py"),         "py", "Sect. 3.1: level leak, Weddell / Nino3.4"),
     (os.path.join(HERE, "fig_ross_asl_break.py"),     "py", "Sect. 3.3: Ross-ASL break by season and break year"),
     (os.path.join(HERE, "fig_ross_asl_composite.py"), "py", "Sect. 3.3: Ross composite cycles, high vs low ASL"),
+    (os.path.join(HERE, "fig_level_vs_amplitude.py"), "py", "Sect. 3.4: level vs amplitude, sector levels"),
+    (os.path.join(HERE, "checks", "check_raw_anomaly_persistence.py"), "py", "Sect. 3.4: raw-anomaly persistence"),
     # -- candidates, not placed yet ------------------------------------------------
     (os.path.join(HERE, "draft_sector_map.py"),         "py", "sector map (commented out in Data)"),
     (os.path.join(HERE, "draft_components_by_cycle.py"), "py", "attribution by component, per cycle"),

@@ -42,7 +42,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 import ch3_data as D
 from ch3_config import TABLES_DIR, OUTPUT_DIR, SECTORS, SECTOR_LABELS
 import ch3_style

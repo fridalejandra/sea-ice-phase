@@ -38,7 +38,7 @@ sys.path.insert(0, HERE)
 import ch3_style
 
 BLUE, OR, GREEN, GREY = ch3_style.BLUE, ch3_style.ORANGE, ch3_style.GREEN, ch3_style.GREY
-OUT = os.path.join(HERE, "figures")
+from ch3_config import OUTPUT_DIR as OUT
 os.makedirs(OUT, exist_ok=True)
 
 LO, HI = 0.15, 1.0      # invariant cycle's minimum and maximum (arbitrary units)
