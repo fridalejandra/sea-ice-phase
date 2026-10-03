@@ -77,7 +77,7 @@ WIND_SECTOR = {   # scan / daily sector label -> wind column suffix
 }
 
 SCAN_PATH = os.path.join(TABLES_DIR, "t35_index_scan_raw.csv")
-YEAR_LO, YEAR_HI = 1979, 2023   # index period
+YEAR_LO, YEAR_HI = 1979, 2025   # index period (extended 2026-10-01; indices ending 2023/24 drop via isfinite mask)
 
 SEASON_MONTHS = {
     "DJF": [12, 1, 2], "MAM": [3, 4, 5], "JJA": [6, 7, 8], "SON": [9, 10, 11],
@@ -209,9 +209,9 @@ def one_cell(sector_label, index_col, predictor=None):
         a = annual_scalars(sector_label).merge(src, on="Year")
         r_amp, p_amp, _ = corr(a[index_col], a["amplitude_raw_anom"])
         r_max, p_max, _ = corr(a[index_col], a["max_doy_raw_anom"])
-    r_sie, p_sie, n = corr(sm[index_col], detrend(sm["sie_anom"]))
-    r_raw, p_raw, _ = corr(sm[index_col], detrend(sm["raw_anom"]))
-    r_sd, p_sd, _ = corr(sm[index_col], detrend(sm["resid_sd"]))
+    r_sie, p_sie, n = corr(detrend(sm[index_col]), detrend(sm["sie_anom"]))
+    r_raw, p_raw, _ = corr(detrend(sm[index_col]), detrend(sm["raw_anom"]))
+    r_sd, p_sd, _ = corr(detrend(sm[index_col]), detrend(sm["resid_sd"]))
     return dict(sector=sector_label, index=index_col, index_base=base, season=season, n=n,
                 r_sie_anom=r_sie, p_sie_anom=p_sie,
                 r_amplitude=r_amp, p_amplitude=p_amp,

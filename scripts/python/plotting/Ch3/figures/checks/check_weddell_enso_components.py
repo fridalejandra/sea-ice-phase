@@ -24,7 +24,7 @@ import pandas as pd
 from scipy import stats
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from ch3_config import DAILY_CSV, INDEX_CSV
 
 SECTOR = sys.argv[1] if len(sys.argv) > 1 else "SIE_Weddell"

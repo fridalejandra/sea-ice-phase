@@ -339,6 +339,71 @@ else:
     print("\nNo row in Fig. 4 has the same index significant on two measures at once "
           "(nothing to partial out).")
 
+# ---- structural-risk check: proactively test amplitude/phase rows against -
+# departure in sectors where the two are entangled in general, even when
+# departure didn't independently clear ALPHA in THIS row's own season.
+# Added 2026-10-03, after check_observed_measure_correlation.py showed
+# departure~amplitude is flagged (|r|>0.3) in ABS, Ross, and East Antarctica
+# -- the double-hit block above only catches a conflation when departure
+# ALSO happens to be significant in that exact row; a real confound can sit
+# just under that threshold without disappearing (n~45-47 isn't a lot of
+# power), so this checks every amplitude/phase row in a structurally-
+# flagged sector regardless, and skips rows the double-hit block already
+# covered so nothing prints twice.
+obs_corr_path = os.path.join(TABLES_DIR, "t_observed_measure_correlation_matrix.csv")
+if not os.path.exists(obs_corr_path):
+    print(f"\n({obs_corr_path} not found -- run check_observed_measure_correlation.py first "
+          f"for the structural-risk check.)")
+else:
+    OC = pd.read_csv(obs_corr_path)
+    STRUCT_FLAG = {}
+    for d in OC.itertuples():
+        if d.pair == "departure~amplitude" and abs(d.r) > 0.3:
+            STRUCT_FLAG[(d.sector, "amplitude")] = d.r
+        elif d.pair == "departure~phase" and abs(d.r) > 0.3:
+            STRUCT_FLAG[(d.sector, "phase")] = d.r
+
+    struct_rows = []
+    for _, row in R.iterrows():
+        if row.measure not in ("amplitude", "phase"):
+            continue
+        key = (row.sector, row.measure)
+        if key not in STRUCT_FLAG:
+            continue
+        m_code = {"amplitude": "amplitude", "phase": "max_doy"}[row.measure]
+        if row[f"p_{m_code}"] < ALPHA and row["p_sie_anom"] < ALPHA:
+            continue  # already covered by the double-hit block above
+        yrs1, x1, y1 = series(row.sector, row.index_base, row.season, m_code)
+        yrs2, x2, y2 = series(row.sector, row.index_base, row.season, "sie_anom")
+        common = np.intersect1d(yrs1, yrs2)
+        if len(common) < 8:
+            continue
+        i1, i2 = np.isin(yrs1, common), np.isin(yrs2, common)
+        x, y_m, y_dep = x1[i1], y1[i1], y2[i2]
+        r_xm = stats.pearsonr(x, y_m)[0]
+        r_xd = stats.pearsonr(x, y_dep)[0]
+        r_md = stats.pearsonr(y_m, y_dep)[0]
+        struct_rows.append(dict(
+            sector=SHORT[row.sector], driver=INDEX_NAME[row.index_base], season=SEASON_NAME[row.season],
+            measure=row.measure, sector_structural_r_departure_measure=STRUCT_FLAG[key],
+            r_index_measure=r_xm, r_index_departure=r_xd, r_measure_departure=r_md,
+            partial_r_index_measure_given_departure=partial_r(r_xm, r_xd, r_md),
+            departure_independently_significant=bool(row["p_sie_anom"] < ALPHA)))
+
+    if struct_rows:
+        SR = pd.DataFrame(struct_rows)
+        SR.to_csv(os.path.join(TABLES_DIR, "t_fig04_structural_risk_partials.csv"), index=False)
+        print(f"\nwrote {os.path.join(TABLES_DIR, 't_fig04_structural_risk_partials.csv')} ({len(SR)} rows)")
+        print("Rows in a structurally-entangled sector, checked proactively even though departure")
+        print("wasn't independently significant in this row's own season:")
+        for d in SR.itertuples():
+            print(f"   {d.sector:12s} {d.driver:10s} {d.season:6s} {d.measure:10s}"
+                  f"  r(index,{d.measure})={d.r_index_measure:+.2f}"
+                  f"  partial r(index,{d.measure}|departure)={d.partial_r_index_measure_given_departure:+.2f}"
+                  f"  [sector's departure~{d.measure} r={d.sector_structural_r_departure_measure:+.2f}]")
+    else:
+        print("\nNo additional rows to check structurally beyond the double-hit block above.")
+
 im = ax.imshow(M, cmap=HEATMAP_CMAP, vmin=-VMAX, vmax=VMAX, aspect="auto")
 for i in range(M.shape[0]):
     for j in range(M.shape[1]):

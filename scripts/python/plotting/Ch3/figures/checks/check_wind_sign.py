@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 try:
     from ch3_config import RAW_DATA_DIR
 except Exception:

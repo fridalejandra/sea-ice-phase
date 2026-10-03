@@ -346,12 +346,12 @@ rows = []
 for sec in SECTORS:
     a = sec_df(ai, sec)
     for tv in (PH, AMP):
-        y = detrend(a[tv].values)
+        y_raw = a[tv].values
         for ic in ICOLS:
-            x = a[ic].values.astype(float); ok = np.isfinite(x) & np.isfinite(y)
-            if ok.sum() < 10: continue
-            r, p = stats.pearsonr(x[ok], y[ok])
-            rows.append(dict(sector=lab(sec), target=tv, index=ic, n=int(ok.sum()), r=r, p=p))
+            x_raw = a[ic].values.astype(float)
+            r, p, n = pear(x_raw, y_raw)  # detrends BOTH sides (dt=True) -- matches Raphael & Hobbs (2014)
+            if n < 10: continue
+            rows.append(dict(sector=lab(sec), target=tv, index=ic, n=n, r=r, p=p))
 scan = pd.DataFrame(rows); scan["q_bh"] = bh(scan.p.values)
 scan.sort_values("p").to_csv(os.path.join(TABLES_DIR, "t35_index_scan_raw.csv"), index=False)
 note("3.5", "exploratory scan: tests", len(scan)); note("3.5", "exploratory scan: expected p<0.05 by chance", round(0.05 * len(scan)))

@@ -22,11 +22,15 @@ import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from ch3_config import TABLES_DIR, OUTPUT_DIR
+from ch3_config import TABLES_DIR, OUTPUT_DIR, TEXT_WIDTH_IN
+from ch3_plot import save
 import ch3_style  # font + spines; bold_font_properties() for real bold
 
 PRE, POST = "1979–2000", "2001–2025"
-COLOR_PRE, COLOR_POST = "#2a78d6", "#eb6834"     # same pair as Fig. S3
+# Colorblind-safe (Okabe-Ito via ch3_style, 2026-10-03), replacing the old
+# ad hoc hex -- same blue/orange pairing as before, now from the shared
+# palette so it stays consistent with every other figure that uses it.
+COLOR_PRE, COLOR_POST = ch3_style.BLUE, ch3_style.ORANGE
 INK = "0.35"
 SEASONS = ["annual", "DJF", "MAM", "JJA", "SON", "ADV", "RET"]
 SEASON_LABEL = {"annual": "annual", "DJF": "DJF", "MAM": "MAM", "JJA": "JJA",
@@ -59,7 +63,9 @@ loo = detail.loc[detail["test"] == "loo_shift", "p_shift"]
 loo_p = float(loo.iloc[0]) if len(loo) else np.nan
 
 title_font = ch3_style.bold_font_properties(size=11)
-fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(10.5, 4.2))
+# Stacked at the manuscript text width (was 1x2 at 10.5 in, which LaTeX shrank to ~60%, fonts
+# included). Seven season bars side by side don't fit in half of 6.5 in, so (a) over (b).
+fig, (ax_a, ax_b) = plt.subplots(2, 1, figsize=(TEXT_WIDTH_IN, 6.0))
 
 # ── (a) by season ────────────────────────────────────────────────────────────
 x = np.arange(len(SEASONS)); w = 0.38
@@ -108,11 +114,31 @@ for ax in (ax_a, ax_b):
     for s in ("left", "bottom"):
         ax.spines[s].set_color(INK)
     ax.spines[["top", "right"]].set_visible(False)
+ax_a.set_ylim(top=hi + 0.45)   # headroom so the 'annual: ... change p' note clears the Oct-Jan bar
 
-fig.tight_layout(w_pad=2.5)
-out = os.path.join(OUTPUT_DIR, "fig06_ross_asl_nonstationarity.png")
-fig.savefig(out, dpi=200, bbox_inches="tight")
-plt.close(fig)
+fig.tight_layout(h_pad=2.0)
+# save() writes both the white-background manuscript PNG and, by default,
+# a transparent-background "_presentation" copy for slides (ch3_plot.py).
+# Fixed 2026-10-03: pass presentation=True explicitly instead of relying on
+# ch3_plot.save()'s default. That default was only added 2026-09-30 -- if
+# your local ch3_plot.py predates it (same drift already hit twice with
+# ch3_style.py in this chapter), save() doesn't raise anything, it just
+# doesn't know to write the second file, so "presentation copy missing, no
+# error" is exactly what you'd see. The try/except below also covers the
+# case where your local save() doesn't accept presentation= as a keyword at
+# all (a TypeError, raised before the figure is touched) by writing the
+# transparent copy directly and then falling back to the old call shape.
+try:
+    out = save(fig, "fig06_ross_asl_nonstationarity.png", dpi=200, sync=False, presentation=True)
+except TypeError as e:
+    print(f"  [fig_06] ch3_plot.save() doesn't accept presentation= yet ({e}) -- "
+          f"your local ch3_plot.py is behind the synced copy. Writing the "
+          f"presentation PNG directly instead, then saving the manuscript "
+          f"copy as before.")
+    stem = os.path.join(OUTPUT_DIR, "fig06_ross_asl_nonstationarity")
+    fig.savefig(f"{stem}_presentation.png", dpi=200, bbox_inches="tight", transparent=True)
+    print(f"  Saved → {stem}_presentation.png  (transparent bg, presentation)")
+    out = save(fig, "fig06_ross_asl_nonstationarity.png", dpi=200, sync=False)
 print(f"wrote {out}")
 print(f"  annual: r_pre={season_rows.loc['annual', 'r_pre']:+.3f}  r_post={season_rows.loc['annual', 'r_post']:+.3f}  "
       f"shift {fmt_p(p_ann)}")

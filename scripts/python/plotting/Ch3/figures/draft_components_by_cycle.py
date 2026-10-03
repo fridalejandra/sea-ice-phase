@@ -54,7 +54,7 @@ import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from ch3_config import SECTORS, TABLES_DIR, OUTPUT_DIR, BREAK_YEAR, CBLIND_COLORS
+from ch3_config import SECTORS, TABLES_DIR, OUTPUT_DIR, BREAK_YEAR
 from ch3_plot import save
 import ch3_style
 
@@ -78,7 +78,11 @@ LABEL = {"SIE_Weddell": "Weddell", "SIE_Amundsen_Bellingshausen": "Amundsen-\nBe
          "SIE_Ross": "Ross", "SIE_East_Antarctica": "East\nAntarctica",
          "SIE_King_Haakon": "King Haakon", "SIE_circumpolar": "Circumpolar\ntotal"}
 # Colorblind-safe (Okabe-Ito), replacing local hardcoded hex (2026-10-01).
-POS, NEG, INK = CBLIND_COLORS["vermillion"], CBLIND_COLORS["blue"], "0.35"
+# Fixed 2026-10-03: CBLIND_COLORS isn't exported from ch3_config (it's a
+# plain list defined in ch3_style.py, not a dict there either) -- this would
+# have raised ImportError on the next run. ch3_style.VERMILLION/BLUE are the
+# actual named, colorblind-safe constants other scripts already use.
+POS, NEG, INK = ch3_style.VERMILLION, ch3_style.BLUE, "0.35"
 
 # Landscape width (2026-10-01, confirmed OK with the Graduate Division): this
 # figure is placed as a landscape page in the thesis -- the 20-panel grid

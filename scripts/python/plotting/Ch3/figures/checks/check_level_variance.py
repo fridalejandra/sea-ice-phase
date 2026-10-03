@@ -27,7 +27,7 @@ import pandas as pd
 from scipy import stats
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from ch3_config import DAILY_CSV, SECTORS
 
 Y1 = int(sys.argv[1]) if len(sys.argv) > 1 else 2025

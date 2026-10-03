@@ -28,9 +28,18 @@ Every candidate that fails a rule is printed with the reason.
 Table S2: every combination (sector x index x season) with r and p for all four
 measures, and whether it appears in Table 3 or Fig. 4.
 
+NOTE (flagged 2026-10-02, not yet addressed): every correlation here is
+contemporaneous -- the index and the ice measure are matched to the same
+season in the same year. No lag/lead structure is tested (e.g. does last
+winter's ASL predict this year's Ross amplitude better than the same-year
+ASL does). If a real relationship operates with a lag, this scan and Fig. 4
+would under- or mis-state it. Worth a dedicated lagged-correlation pass
+before treating an absence here as a genuine null.
+
 Reads  results/ch3/tables/t37b_component_comparison_scan.csv (compute_fig05_component_comparison.py)
        DAILY_CSV, ANNUAL_CSV, INDEX_CSV (for rule 4, same as the compute script)
 Writes results/ch3/figures/fig04_relationships.png
+       results/ch3/figures/fig04_relationships_presentation.png (transparent bg, slides)
        results/ch3/tables/tS2_all_combinations.csv
        results/ch3/tables/t_fig04_rows.csv
 """
@@ -45,6 +54,34 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from ch3_config import TABLES_DIR, OUTPUT_DIR, DAILY_CSV, ANNUAL_CSV, INDEX_CSV, SECTORS_COMPUTE
 import ch3_style
+
+# ---- diverging colormap for the heatmap, via the cblind package -----------
+# cblind (https://pypi.org/project/cblind/) -- install with `pip install
+# cblind`. Not installable in the Claude sandbox this edit was made in (no
+# network access to that index), so this falls back to matplotlib's RdBu_r
+# here; on Frida's own machine, once cblind is installed, this picks up
+# cb.rbscale, cblind's colorblind-safe red-blue diverging scale -- the direct
+# replacement for RdBu_r, same semantics (negative = blue, positive = red).
+#
+# cb.cbmap() itself is now deprecated in favour of matplotlib's own
+# get_cmap (confirmed from the DeprecationWarning text, 2026-10: "Please use
+# matplotlib.colormaps.get_cmap instead, or matplotlib.pyplot.get_cmap if
+# you need to specify nbin"). We try that path first and only fall back to
+# the deprecated cbmap() call if the name isn't registered with matplotlib
+# under this cblind version -- so this works either way and stops warning.
+try:
+    import cblind as cb  # noqa: F401  (importing it registers its colormaps with matplotlib)
+    try:
+        HEATMAP_CMAP = plt.get_cmap("cb.rbscale", 9)
+        _CMAP_SOURCE = "cblind (cb.rbscale, via matplotlib.pyplot.get_cmap)"
+    except (ValueError, KeyError):
+        HEATMAP_CMAP = cb.cbmap("cb.rbscale", nbin=9)
+        _CMAP_SOURCE = "cblind (cb.rbscale, via deprecated cb.cbmap -- update cblind to drop this)"
+except ImportError:
+    HEATMAP_CMAP = "RdBu_r"
+    _CMAP_SOURCE = "matplotlib RdBu_r (cblind not installed in this environment)"
+print(f"  [fig_04_relationships] heatmap colormap source: {_CMAP_SOURCE}")
+
 # ---- definitions -----------------------------------------------------------
 TABLE3 = [("Nino34", "SON", "ABS", "amplitude"),
           ("Nino34", "annual", "King Haakon", "amplitude"),
@@ -235,7 +272,67 @@ bold = ch3_style.bold_font_properties(size=9)
 fig, ax = plt.subplots(figsize=(6.8, 0.46 * len(R) + 1.2))
 M = R[[f"r_{m}" for m in MEAS]].values.astype(float)
 P = R[[f"p_{m}" for m in MEAS]].values.astype(float)
-im = ax.imshow(M, cmap="RdBu_r", vmin=-VMAX, vmax=VMAX, aspect="auto")
+
+# ---- diagnostic: rows where this index hits >=2 components at once --------
+# Added 2026-10-03, re Frida's question about what it means when one index
+# is significant on two measures (e.g. amplitude AND phase) in the same row.
+# trend/amplitude/phase/raw-anomaly sum to the total by construction, but
+# that doesn't make them statistically independent of each other across
+# years in practice. For every such row: compute how correlated the two
+# measures' yearly series are with each other, and the partial correlation
+# of the index with each measure controlling for the other -- if both
+# partial correlations survive, it's a genuine joint effect; if one
+# collapses toward zero, that one was riding along with the other and
+# isn't really a separate finding.
+import itertools
+
+
+def partial_r(r_xy, r_xz, r_yz):
+    """Partial correlation of x,y controlling for z, from the three pairwise r's."""
+    den = np.sqrt((1 - r_xz ** 2) * (1 - r_yz ** 2))
+    return (r_xy - r_xz * r_yz) / den if den > 1e-12 else np.nan
+
+
+double_hits = []
+for _, row in R.iterrows():
+    sig_m = [m for m in MEAS if row[f"p_{m}"] < ALPHA]
+    if len(sig_m) < 2:
+        continue
+    for m1, m2 in itertools.combinations(sig_m, 2):
+        yrs1, x1, y1 = series(row.sector, row.index_base, row.season, m1)
+        yrs2, x2, y2 = series(row.sector, row.index_base, row.season, m2)
+        common = np.intersect1d(yrs1, yrs2)
+        if len(common) < 8:
+            continue
+        i1, i2 = np.isin(yrs1, common), np.isin(yrs2, common)
+        x, y_m1, y_m2 = x1[i1], y1[i1], y2[i2]     # same index series either way, same years
+        r_xy1 = stats.pearsonr(x, y_m1)[0]
+        r_xy2 = stats.pearsonr(x, y_m2)[0]
+        r_y1y2 = stats.pearsonr(y_m1, y_m2)[0]
+        double_hits.append(dict(
+            sector=SHORT[row.sector], index=INDEX_NAME[row.index_base], season=SEASON_NAME[row.season],
+            measure_1=MNAME[m1], measure_2=MNAME[m2],
+            r_index_m1=r_xy1, r_index_m2=r_xy2, r_m1_m2=r_y1y2,
+            partial_r_index_m1_given_m2=partial_r(r_xy1, r_xy2, r_y1y2),
+            partial_r_index_m2_given_m1=partial_r(r_xy2, r_xy1, r_y1y2),
+            n=len(x)))
+
+if double_hits:
+    DH = pd.DataFrame(double_hits)
+    DH.to_csv(os.path.join(TABLES_DIR, "t_fig04_double_hits.csv"), index=False)
+    print(f"\nwrote {os.path.join(TABLES_DIR, 't_fig04_double_hits.csv')} ({len(DH)} double-hit pairs)")
+    print("Rows where one index is significant on >=2 measures at once -- partial correlations:")
+    for _, d in DH.iterrows():
+        print(f"   {d.sector:12s} {d.index:10s} {d.season:6s}  {d.measure_1} vs {d.measure_2}:"
+              f"  r(index,{d.measure_1})={d.r_index_m1:+.2f}  r(index,{d.measure_2})={d.r_index_m2:+.2f}"
+              f"  r({d.measure_1},{d.measure_2})={d.r_m1_m2:+.2f}"
+              f"  | partial r(index,{d.measure_1}|{d.measure_2})={d.partial_r_index_m1_given_m2:+.2f}"
+              f"  partial r(index,{d.measure_2}|{d.measure_1})={d.partial_r_index_m2_given_m1:+.2f}")
+else:
+    print("\nNo row in Fig. 4 has the same index significant on two measures at once "
+          "(nothing to partial out).")
+
+im = ax.imshow(M, cmap=HEATMAP_CMAP, vmin=-VMAX, vmax=VMAX, aspect="auto")
 for i in range(M.shape[0]):
     for j in range(M.shape[1]):
         r, p = M[i, j], P[i, j]
@@ -261,8 +358,20 @@ cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.04)
 cbar.set_label("correlation", color=INK, fontsize=9)
 cbar.ax.tick_params(labelsize=8, colors=INK, length=3)
 cbar.outline.set_visible(False)
-out = os.path.join(OUTPUT_DIR, "fig04_relationships.png")
-fig.savefig(out, dpi=220, bbox_inches="tight")
+fig04_stem = os.path.join(OUTPUT_DIR, "fig04_relationships")
+if hasattr(ch3_style, "savefig_pair"):
+    out, out_presentation = ch3_style.savefig_pair(fig, fig04_stem, dpi=220)
+else:
+    # Local ch3_style.py here predates savefig_pair (added to the version
+    # in Frida's cloud copy on 2026-09-30) -- fall back to writing both
+    # files directly so this script doesn't hard-depend on that helper.
+    print("  [fig_04_relationships] ch3_style.savefig_pair not found -- "
+          "your local ch3_style.py may be behind the synced copy; "
+          "writing both PNGs directly instead.")
+    out = f"{fig04_stem}.png"
+    out_presentation = f"{fig04_stem}_presentation.png"
+    fig.savefig(out, dpi=220, bbox_inches="tight", facecolor="white", transparent=False)
+    fig.savefig(out_presentation, dpi=220, bbox_inches="tight", transparent=True)
 plt.close(fig)
 
 # ---- Table S2 --------------------------------------------------------------
@@ -282,6 +391,7 @@ S2.to_csv(os.path.join(TABLES_DIR, "tS2_all_combinations.csv"), index=False)
 
 # ---- report ----------------------------------------------------------------
 print(f"\nwrote {out}")
+print(f"wrote {out_presentation}")
 print(f"wrote {os.path.join(TABLES_DIR, 'tS2_all_combinations.csv')} ({len(S2)} rows)")
 print("\nFound in the search and kept:")
 for f in found:

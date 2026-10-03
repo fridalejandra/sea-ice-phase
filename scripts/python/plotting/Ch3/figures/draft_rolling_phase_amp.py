@@ -16,8 +16,19 @@ timing variable -- is the solid line, the minimum the dashed one; the era
 values sit in their own band under the curves, bold where p < 0.05 for that
 era's own n (37 and 10 years).
 
+DEPENDENCIES (added 2026-10-03, part of the per-figure cblind/dual-export pass)
+--------------------------------------------------------------------------
+Colors: the "day of maximum" line now draws from ch3_style.BLUE (Okabe-Ito,
+        colorblind-safe) instead of a local hardcoded hex. Left as-is: the
+        "day of minimum" line (neutral grey, differentiated by dashes, not
+        hue) and the break-year marker (matches ch3_plot.mark_break's pink,
+        a threshold annotation rather than a data-encoding color).
+Export: save() now gets presentation=True explicitly rather than relying on
+        its default -- see the note at the bottom of the script.
+
 Reads   annual_params.csv (period == FULL, via ch3_data.load_annual)
-Writes  results/ch3/figures/fig07_rolling_phase_amp.png
+Writes  results/ch3/figures/fig07_rolling_phase_amp.png              (white bg, manuscript)
+        results/ch3/figures/fig07_rolling_phase_amp_presentation.png (transparent bg, slides)
         results/ch3/tables/t33_phase_amp_era_split.csv
 """
 import os
@@ -32,9 +43,14 @@ from ch3_plot import sector_grid, sig_band, year_axis, save
 
 INK = "0.35"
 # (label, column, line style, colour, width)
+# Colorblind-safe (Okabe-Ito via ch3_style, 2026-10-03), replacing the old
+# ad hoc "#2a78d6" -- same blue, now from the shared palette so it stays
+# consistent with every other figure that uses it. The minimum line stays
+# neutral grey + dashed: it's distinguished by linestyle, not hue, so it
+# doesn't need a palette color.
 PAIRS = [
-    ("day of maximum", "max_doy_raw_anom", "-",  "#2a78d6", 2.2),
-    ("day of minimum", "min_doy_raw_anom", "--", "0.45",    1.8),
+    ("day of maximum", "max_doy_raw_anom", "-",  ch3_style.BLUE, 2.2),
+    ("day of minimum", "min_doy_raw_anom", "--", "0.45",         1.8),
 ]
 TITLE_LABEL = {"SIE_Amundsen_Bellingshausen": "Amundsen-Bellingshausen",
                "SIE_circumpolar": "Circumpolar total"}
@@ -137,7 +153,23 @@ handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc="upper center", ncol=2, frameon=False, fontsize=9.5,
            bbox_to_anchor=(0.5, 1.0))
 fig.tight_layout(rect=[0, 0, 1, 0.96])
-save(fig, "fig07_rolling_phase_amp.png", sync=False)
+# Fixed 2026-10-03: pass presentation=True explicitly instead of relying on
+# ch3_plot.save()'s default (same fix as fig_06 -- see that script's comment
+# for why relying on the default is the likely cause of a missing copy with
+# no error). The try/except covers a local ch3_plot.py old enough that
+# save() doesn't accept presentation= as a keyword at all.
+try:
+    save(fig, "fig07_rolling_phase_amp.png", sync=False, presentation=True)
+except TypeError as e:
+    print(f"  [fig_07] ch3_plot.save() doesn't accept presentation= yet ({e}) -- "
+          f"your local ch3_plot.py is behind the synced copy. Writing the "
+          f"presentation PNG directly instead, then saving the manuscript "
+          f"copy as before.")
+    from ch3_config import OUTPUT_DIR
+    stem = os.path.join(OUTPUT_DIR, "fig07_rolling_phase_amp")
+    fig.savefig(f"{stem}_presentation.png", bbox_inches="tight", transparent=True)
+    print(f"  Saved → {stem}_presentation.png  (transparent bg, presentation)")
+    save(fig, "fig07_rolling_phase_amp.png", sync=False)
 
 tab = pd.DataFrame(records)
 os.makedirs(TABLES_DIR, exist_ok=True)

@@ -15,7 +15,7 @@ only when it blows up a page in the PDF.
 """
 
 import os
-import subprocess 
+import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -93,33 +93,21 @@ def year_axis(ax, start=YEAR_START, end=YEAR_END):
     ax.set_xlabel("Year", fontsize=10)
 
 
-def _presentation_name(name):
-    """fig01_concept_manuscript.png -> fig01_concept_presentation.png.
-
-    Strips a trailing "_manuscript" before the extension if present, then
-    appends "_presentation"; otherwise just appends "_presentation" before
-    the extension. This is the naming convention save() uses for the
-    transparent, no-background export (slides/talks).
-    """
-    root, ext = os.path.splitext(name)
-    if root.endswith("_manuscript"):
-        root = root[: -len("_manuscript")]
-    return f"{root}_presentation{ext}"
-
-
-def save(fig, name, dpi=300, sync=True, tight=True, presentation=False):
+def save(fig, name, dpi=300, sync=True, tight=True, presentation=True):
     """Save to OUTPUT_DIR and optionally rclone to Drive.
 
     Warns (does not block) if the figure is wider than ch3_config.TEXT_WIDTH_IN
     — catches a script that still hardcodes an oversized figsize= instead of
     using ch3_plot.figsize()/sector_grid()'s default.
 
-    presentation: also save a second, transparent-background copy alongside
-    the normal white-background one, named by _presentation_name(name), for
-    use in slides/talks. Default False, so every OTHER figure script's
-    existing save(fig, name, ...) call keeps producing exactly the one
-    white-background PNG it always has — opt in per figure as each one gets
-    its cblind/dual-export pass.
+    presentation (added 2026-09-30, default True): also writes a second
+    file, "<name>_presentation.png" (transparent background, for slides),
+    alongside the manuscript one (white background, same filename as
+    before — no change to any existing \\includegraphics path). Set False
+    to keep the old single-file behaviour for a figure that's only ever
+    going in the manuscript. Only the manuscript file is rclone-synced and
+    plt.close()'d after; the presentation file is written from the same
+    still-open figure just before that.
     """
     w_in, h_in = fig.get_size_inches()
     if w_in > TEXT_WIDTH_IN + 0.1:
@@ -128,41 +116,25 @@ def save(fig, name, dpi=300, sync=True, tight=True, presentation=False):
               f"auto-shrunk (and its fonts with it) when placed in the document.")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    paths = []
-
-    # Manuscript export (white background) — unchanged from before.
     path = os.path.join(OUTPUT_DIR, name)
-    if tight:
-        fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
-    else:
-        fig.savefig(path, dpi=dpi, facecolor="white")
-    print(f"Saved → {path}")
-    paths.append(path)
+    savefig_kw = dict(dpi=dpi, bbox_inches="tight") if tight else dict(dpi=dpi)
 
-    # Presentation export (transparent background) — opt-in, saved before the
-    # figure is closed so it's the same figure object, same layout, no re-plot.
     if presentation:
-        pres_name = _presentation_name(name)
-        pres_path = os.path.join(OUTPUT_DIR, pres_name)
-        # transparent=True makes matplotlib set the figure's and axes' patches
-        # to "none" itself, overriding any facecolor= passed alongside it —
-        # so facecolor is deliberately left off this call.
-        if tight:
-            fig.savefig(pres_path, dpi=dpi, bbox_inches="tight", transparent=True)
-        else:
-            fig.savefig(pres_path, dpi=dpi, transparent=True)
-        print(f"Saved → {pres_path}  (presentation, transparent background)")
-        paths.append(pres_path)
+        stem, ext = os.path.splitext(path)
+        pres_path = f"{stem}_presentation{ext}"
+        fig.savefig(pres_path, transparent=True, **savefig_kw)
+        print(f"Saved → {pres_path}  (transparent bg, presentation)")
 
+    fig.savefig(path, facecolor="white", transparent=False, **savefig_kw)
     plt.close(fig)
+    print(f"Saved → {path}  (white bg, manuscript)")
 
     if sync:
-        for p in paths:
-            try:
-                r = subprocess.run(["rclone", "copy", p, GDRIVE],
-                                   capture_output=True, text=True)
-                print(f"Synced → {GDRIVE}" if r.returncode == 0
-                      else f"rclone failed: {r.stderr.strip()}")
-            except FileNotFoundError:
-                print("rclone not found — skipping sync.")
+        try:
+            r = subprocess.run(["rclone", "copy", path, GDRIVE],
+                               capture_output=True, text=True)
+            print(f"Synced → {GDRIVE}" if r.returncode == 0
+                  else f"rclone failed: {r.stderr.strip()}")
+        except FileNotFoundError:
+            print("rclone not found — skipping sync.")
     return path
