@@ -142,8 +142,8 @@ for ax, (label, y0, y1) in zip(axes, ERAS):
     for s in ("left", "bottom"):
         ax.spines[s].set_color(INK)
     ax.spines[["top", "right"]].set_visible(False)
-    box = (f"range: {rng['low']:.2f} → {rng['high']:.2f} ({rng_pct:+.0f}%)\n"
-           f"level: {meanv['low']:.2f} → {meanv['high']:.2f} ({lvl_pct:+.0f}%)\n"
+    box = (f"range: {rng['low']:.2f}  to  {rng['high']:.2f} ({rng_pct:+.0f}%)\n"
+           f"level: {meanv['low']:.2f}  to  {meanv['high']:.2f} ({lvl_pct:+.0f}%)\n"
            f"dominant: {dominant}")
     ax.text(0.97, 0.03, box, transform=ax.transAxes, ha="right", va="bottom", fontsize=8.5,
             color="0.15", bbox=dict(boxstyle="round", facecolor="white", edgecolor="0.7"))

@@ -88,8 +88,7 @@ TABLE3 = [("Nino34", "SON", "ABS", "amplitude"),
           ("SAM", "RET", "East Antarctica", "max_doy"),
           ("SAM", "JJA", "Weddell", "amplitude"),
           ("ASL", "annual", "Ross", "amplitude"),
-          ("ZW3R", "SON", "King Haakon", "max_doy"),
-          ("ZW3R", "annual", "ABS", "amplitude")]
+          ("ZW3R", "SON", "King Haakon", "max_doy")]
 T3_PAIRS = {(b, k) for b, _, k, _ in TABLE3}
 MEAS = ["sie_anom", "amplitude", "max_doy", "raw_anom"]
 COL_LAB = ["Extent anomaly", "Amplitude", "Phase\n(day of max.)", "Raw anomaly"]
