@@ -36,6 +36,11 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from matplotlib.colors import LinearSegmentedColormap
+# Paul Tol "sunset" diverging colour map (colour-blind safe)
+TOL_SUNSET = LinearSegmentedColormap.from_list("tol_sunset", [
+    "#364B9A", "#4A7BB7", "#6EA6CD", "#98CAE1", "#C2E4EF", "#EAECCC",
+    "#FEDA8B", "#FDB366", "#F67E4B", "#DD3D2D", "#A50026"])
 
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
@@ -141,7 +146,7 @@ def draw_sectors(ax, x, y, sector_id, valid_ocean, label_lons=None):
     if label_lons:
         for s, lon in label_lons.items():
             ax.text(lon, SECTOR_LABEL_LAT, SECTORS[s], transform=ccrs.PlateCarree(),
-                    ha="center", va="center", fontsize=7, zorder=6,
+                    ha="center", va="center", fontsize=7, fontweight="bold", zorder=6,
                     bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.8))
 
 
@@ -209,7 +214,7 @@ def main():
         for c, (name, data, is_diff) in enumerate(panels):
             ax = axes[r, c]
             if is_diff:
-                cmap, vmin, vmax, extend = "RdBu_r", -DIFF_VLIM, DIFF_VLIM, "both"
+                cmap, vmin, vmax, extend = TOL_SUNSET, -DIFF_VLIM, DIFF_VLIM, "both"
             else:
                 cmap, vmin, vmax, extend = "viridis", cfg["vmin"], cfg["vmax"], "neither"
 

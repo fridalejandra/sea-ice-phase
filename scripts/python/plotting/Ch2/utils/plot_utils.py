@@ -267,8 +267,15 @@ def save_and_upload(
     fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
     print(f"Saved: {out_path}")
 
+    # transparent copy for slides (no white figure/axes background)
+    ppt_path = out_path.parent / "ppt" / out_path.name
+    ppt_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(ppt_path, dpi=DPI, bbox_inches="tight", transparent=True)
+    print(f"Saved (transparent): {ppt_path}")
+
     if remote_root is not None:
         upload_with_rclone(out_path, remote_root, subdir=remote_subdir)
+        upload_with_rclone(ppt_path, remote_root, subdir="ppt")
 
     if close:
         plt.close(fig)

@@ -181,36 +181,22 @@ def compute_pre_post(
     return pre_mean, post_mean, diff
 
 
-def make_sign_class_map(
-    diff_dyn: xr.DataArray,
-    diff_sta: xr.DataArray,
-    valid_ocean: xr.DataArray,
-    thresh: float = 0.0,
-) -> xr.DataArray:
-    """
-    Categorical agreement map for step change (post−pre):
-
-      NaN = non-ocean
-        1 = both earlier   (dyn < -thresh AND sta < -thresh)
-        2 = dyn earlier only
-        3 = stat earlier only
-        4 = both later     (dyn > +thresh AND sta > +thresh)
-    """
-    dyn = diff_dyn.where(valid_ocean)
-    sta = diff_sta.where(valid_ocean)
-
-    cls = xr.full_like(dyn, fill_value=np.nan, dtype=float)
-
-    both_earlier = (dyn < -thresh) & (sta < -thresh)
-    dyn_only = (dyn < -thresh) & ~(sta < -thresh)
-    sta_only = (sta < -thresh) & ~(dyn < -thresh)
-    both_later = (dyn > +thresh) & (sta > +thresh)
-
-    cls = xr.where(both_earlier, 1, cls)
-    cls = xr.where(dyn_only, 2, cls)
-    cls = xr.where(sta_only, 3, cls)
-    cls = xr.where(both_later, 4, cls)
-
+def make_sign_class_map(dyn, sta, valid_ocean, thresh=0.0):
+    """Sign agreement of two change fields (days, or days/yr for trends).
+    1 both earlier, 2 dynamic earlier only, 3 static earlier only, 4 both later,
+    5 dynamic later only, 6 static later only, 7 opposite directions,
+    0 neither beyond thresh. NaN outside the valid/active footprint."""
+    d_e, d_l = dyn < -thresh, dyn > thresh
+    s_e, s_l = sta < -thresh, sta > thresh
+    cls = xr.zeros_like(dyn, dtype=float)
+    cls = xr.where(d_e & s_e, 1, cls)
+    cls = xr.where(d_e & ~s_e & ~s_l, 2, cls)
+    cls = xr.where(s_e & ~d_e & ~d_l, 3, cls)
+    cls = xr.where(d_l & s_l, 4, cls)
+    cls = xr.where(d_l & ~s_e & ~s_l, 5, cls)
+    cls = xr.where(s_l & ~d_e & ~d_l, 6, cls)
+    cls = xr.where((d_e & s_l) | (d_l & s_e), 7, cls)
+    cls = cls.where(np.isfinite(dyn) & np.isfinite(sta) & valid_ocean)
     cls.name = "step_sign_agreement"
     return cls
 
@@ -419,6 +405,12 @@ def main():
           frac_step_both_earlier_active(fs_class, fs_active))
     print(f"[INFO] Step-change BOTH EARLIER fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
           frac_step_both_earlier_active(ms_class, ms_active))
+    for _nm, _c, _a in [("FS", fs_class, fs_active), ("MS", ms_class, ms_active)]:
+        _v = np.asarray(_c.values, dtype=float)[np.asarray(_a.values, dtype=bool)]
+        _u, _n = np.unique(_v[np.isfinite(_v)], return_counts=True)
+        print(f"[INFO] {_nm} step classes over active pixels (class: %):",
+              {int(k): round(100 * n / _v.size, 1) for k, n in zip(_u, _n)},
+              "| NaN %:", round(100 * np.isnan(_v).mean(), 1))
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (FS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",
           frac_trend_agree_active(fs_trend_class, fs_active))
     print(f"[INFO] Trend BOTH NEG SLOPE fraction (MS) [denom=ACTIVE @ {MIN_FRAC_ACTIVE:.2f}]:",

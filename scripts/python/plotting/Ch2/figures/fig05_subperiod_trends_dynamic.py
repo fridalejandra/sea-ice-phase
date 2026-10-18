@@ -3,6 +3,10 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.colors as mcolors
+from matplotlib.colors import LinearSegmentedColormap as _LSC
+_TOL_SUNSET = _LSC.from_list("tol_sunset", [
+    "#364B9A", "#4A7BB7", "#6EA6CD", "#98CAE1", "#C2E4EF", "#EAECCC",
+    "#FEDA8B", "#FDB366", "#F67E4B", "#DD3D2D", "#A50026"])
 from scipy.ndimage import uniform_filter
 from scipy.interpolate import NearestNDInterpolator
 from scipy import stats
@@ -13,7 +17,7 @@ from pathlib import Path
 DATA_ROOT   = Path("/user/geog/falejandraperez/sea-ice-phase/data")
 ANOM_DIR    = DATA_ROOT / "anomalies" / "SMMR"
 SECTOR_FILE = DATA_ROOT / "canonical_sectors.nc"
-OUT = Path("/user/geog/falejandraperez/sea-ice-phase/results/Ch2_Figures/Fig08_prepost_trends_STATIC.png")
+OUT = Path("/user/geog/falejandraperez/sea-ice-phase/results/Ch2_Figures/Fig05_subperiod_trends_dynamic.png")
 SMOOTH      = 9
 PVAL_THRESH = 0.01
 AUG15_DOY   = 227
@@ -64,11 +68,11 @@ def load_anom(fname, varname):
     return da
 
 print("Loading data...")
-fs_anom = load_anom("FS_static_thr15_k5_anomalies.nc", "FS_static_thr15_k5_anom")
-ms_anom = load_anom("MS_static_thr15_k5_anomalies.nc", "MS_static_thr15_k5_anom_dsa")
+fs_anom = load_anom("FS_dynamic_k5_q70_anomalies.nc", "FS_dynamic_k5_q70_anom")
+ms_anom = load_anom("MS_dynamic_k5_q70_anomalies.nc", "MS_dynamic_k5_q70_anom_dsa")
 dur_anom = build_duration(
-    DATA_ROOT/"SMMR_phase/static/thr15_k5/FS",
-    DATA_ROOT/"SMMR_phase/static/thr15_k5/MS"
+    DATA_ROOT/"SMMR_phase/dynamic/k5_q70/FS",
+    DATA_ROOT/"SMMR_phase/dynamic/k5_q70/MS"
 )
 
 # ── Active mask ───────────────────────────────────────────────────────────────
@@ -117,7 +121,7 @@ for key in [k for k in results if k.endswith("_sl")]:
 def make_cmap(vlim, step=0.25):
     bounds = np.arange(-vlim, vlim + step, step)
     n = len(bounds) - 1
-    colors = [plt.cm.RdYlBu_r(i/(n-1)) for i in range(n)]
+    colors = [_TOL_SUNSET(i/(n-1)) for i in range(n)]
     cmap = mcolors.ListedColormap(colors)
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
     return cmap, norm, bounds
@@ -143,7 +147,7 @@ pc   = ccrs.PlateCarree()
 
 fig, axes = plt.subplots(3, 2, figsize=(6.9, 9.0),
                           subplot_kw={"projection": proj})
-# fig.suptitle("Linear trend in phase timing — Static method (days/year)\n"
+# fig.suptitle("Linear trend in phase timing — Dynamic method (days/year)\n"
 #             "Left: 1979–2015 (pre-2016)    Right: 2016–2024 (post-2016)\n"
 #             "White contour = p < 0.01",
 #             fontsize=10, y=0.99)
@@ -191,7 +195,7 @@ for idx, (ax, sl_key, pv_key, title) in enumerate(panels):
     try:
         ax.contour(pv["x"], pv["y"], pv.values,
                    levels=[PVAL_THRESH], transform=proj,
-                   colors="white", linewidths=0.8, zorder=5)
+                   colors="0.1", linewidths=0.6, zorder=5)
     except Exception:
         pass
 

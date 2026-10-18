@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""
+ch2_zone_map_slide.py -- Ch2 slide map: where the pack changed after 2016.
+
+One polar map on the 25 km Bootstrap grid, in grid coordinates (no cartopy needed):
+  outer fringe   (short-season zone)                 amber
+  coastal band   (long-season, within 100 km of land) vermillion
+  interior       (long-season, > 100 km from land)    grey
+  mid-season pack                                     light grey (context)
+  summer-survival switch (survived most summers 1979-2015, melts out most after) hatched / dark
+  land                                                dark grey
+
+Inputs (defaults are the project's results/ files):
+  --zones   results/ch2_zone_masks.npz   written by ch2_zone_checks.py after adding the save line:
+              if ub == UB_MAIN:
+                  np.savez(OUT / "ch2_zone_masks.npz", short=Z["short"], mid=Z["mid"], long=Z["long"], dur=dur, foot=foot)
+  --survival results/ch2_summer_survival.nc  (year, y, x) from ch2_summer_survival.py
+  --landmask data/landmask_sic.nc (written by ch2_coastal_buffer.py); the coastal band is long-season
+            pixels within --coast-km (default 100) of land, as in that script.
+  --switch-rule which definition of the summer-survival switch to draw (the script prints all three).
+
+Usage (from the processing/ directory, seaice env):
+  python ch2_zone_map_slide.py --out ch2_zone_map.png
+"""
+import argparse
+from pathlib import Path
+import numpy as np
+import xarray as xr
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from scipy.ndimage import distance_transform_edt
+
+ROOT = Path("/user/geog/falejandraperez/sea-ice-phase")
+AMBER, VERM, GREY, LIGHT, INK, INK2, LAND = "#E69F00", "#D55E00", "#9A9DA3", "#D5D7DB", "#222222", "#555555", "#4A4A4A"
+SWITCH, PERENNIAL = "#0072B2", "#B9D7EC"
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--zones", default=str(ROOT / "results/ch2_zone_masks.npz"))
+    p.add_argument("--survival", default=str(ROOT / "results/ch2_summer_survival.nc"))
+    p.add_argument("--landmask", default=str(ROOT / "data/landmask_sic.nc"))
+    p.add_argument("--sectors", default=str(ROOT / "data/canonical_sectors.nc"))
+    p.add_argument("--switch-rule", default="drop", choices=["drop", "half", "strict", "quarter", "threeq"],
+                   help="drop: survival frequency fell by >= --drop (matches Fig. S3c's loss field); half: pre>=0.5 & post<0.5; "
+                        "strict: pre>0.5 & post<0.5; quarter: pre>=0.5 & post<=0.25; threeq: pre>=0.75 & post<0.5")
+    p.add_argument("--drop", type=float, default=0.3, help="survival-frequency drop for the 'drop' rule")
+    p.add_argument("--coastal", default=None)
+    p.add_argument("--coast-km", type=float, default=100.0)
+    p.add_argument("--pre", nargs=2, type=int, default=[1979, 2015]); p.add_argument("--post", nargs=2, type=int, default=[2016, 2023])
+    p.add_argument("--out", default="ch2_zone_map.png")
+    p.add_argument("--no-legend", action="store_true", help="omit the legend (build it on the slide instead)")
+    a = p.parse_args()
+
+    z = np.load(a.zones)
+    short, mid, long_ = z["short"].astype(bool), z["mid"].astype(bool), z["long"].astype(bool)
+    ny, nx = short.shape
+
+    land = xr.open_dataset(a.landmask)["land"].values.astype(bool)
+    if land.shape != short.shape:
+        raise SystemExit(f"grid mismatch: zones {short.shape} vs landmask {land.shape}")
+    foot = z["foot"].astype(bool)
+
+    if a.coastal:
+        coastal = np.load(a.coastal).astype(bool) & long_
+    else:
+        dist_km = distance_transform_edt(~land) * 25.0
+        coastal = long_ & (dist_km <= a.coast_km)
+    interior = long_ & ~coastal
+
+    # survival switch
+    sv = xr.open_dataset(a.survival)["survival"]
+    yrs = sv["year"].values
+    pre = sv.sel(year=(yrs >= a.pre[0]) & (yrs <= a.pre[1])).mean("year").values
+    post = sv.sel(year=(yrs >= a.post[0]) & (yrs <= a.post[1])).mean("year").values
+    rules = {"drop": (pre - post) >= a.drop,
+             "half": (pre >= 0.5) & (post < 0.5),
+             "strict": (pre > 0.5) & (post < 0.5),
+             "quarter": (pre >= 0.5) & (post <= 0.25),
+             "threeq": (pre >= 0.75) & (post < 0.5)}
+    print("survival years in file:", yrs.min(), "-", yrs.max())
+    try:
+        sds = xr.open_dataset(a.sectors); sec = sds["sector_id"].values
+        labels = {int(i): str(sds[f"sector_{i}_name"].values)[:8] for i in range(1, 6)}
+    except Exception as e:
+        sec, labels = None, {}
+        print("sector file not read:", e)
+    gains = {"drop": (post - pre) >= a.drop, "half": (pre < 0.5) & (post >= 0.5), "strict": (pre < 0.5) & (post > 0.5),
+             "quarter": (pre <= 0.25) & (post >= 0.5), "threeq": (pre < 0.5) & (post >= 0.75)}
+    for k, m in rules.items():
+        g = gains[k]
+        line = f"switch area [{k:7s}]: loss {m.sum() * 625 / 1e6:.2f}  gain {g.sum() * 625 / 1e6:.2f}  net {(m.sum() - g.sum()) * 625 / 1e6:.2f}"
+        if sec is not None:
+            line += "   " + "  ".join(f"{lab} {(m & (sec == v)).sum() * 625 / 1e6:.2f}" for v, lab in labels.items())
+        print(line + "   (chapter: 0.29, almost all Ross)")
+    switch = rules[a.switch_rule]
+    for name, m in [("fringe", short), ("mid-season", mid), ("coastal band", coastal), ("interior", interior)]:
+        print(f"{name:13s} {m.sum():6d} pixels  {m.sum() * 625 / 1e6:.2f} million km^2")
+
+    # paint
+    rgba = np.zeros((ny, nx, 4))
+    def paint(mask, hexcol, alpha=1.0):
+        c = matplotlib.colors.to_rgb(hexcol); rgba[mask] = (*c, alpha)
+    perennial = (pre >= 0.5) & ~land
+    paint(mid, LIGHT); paint(short, AMBER); paint(interior, GREY); paint(coastal, VERM)
+    paint(perennial, PERENNIAL); paint(switch, SWITCH); paint(land, LAND)
+
+    # crop to the ice footprint
+    crop = short | mid | long_ | land | perennial
+    ys, xs = np.where(crop)
+    y0, y1 = max(0, ys.min() - 5), min(ny, ys.max() + 6); x0, x1 = max(0, xs.min() - 5), min(nx, xs.max() + 6)
+
+    plt.rcParams.update({"font.size": 12.5})
+    fig, ax = plt.subplots(figsize=(7.2, 7.2), dpi=200); fig.patch.set_alpha(0); ax.set_facecolor("none")
+    ax.imshow(rgba[y0:y1, x0:x1], origin="upper", interpolation="nearest")
+    ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values(): s.set_visible(False)
+    if not a.no_legend:
+        handles = [Patch(color=AMBER, label="outer fringe"), Patch(color=VERM, label="coastal band"),
+                   Patch(color=GREY, label="interior"), Patch(color=LIGHT, label="mid-season pack"),
+                   Patch(color=PERENNIAL, label="survives the summer"), Patch(color=SWITCH, label="summer ice lost")]
+        ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.01), frameon=False, fontsize=15,
+                  ncol=2, handlelength=1.4, columnspacing=2.5, labelcolor=INK)
+        fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.19)
+    else:
+        fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
+    fig.savefig(a.out, transparent=True); fig.savefig(str(a.out).replace(".png", ".svg"), transparent=True)
+    print("wrote", a.out)
+
+if __name__ == "__main__":
+    main()
+

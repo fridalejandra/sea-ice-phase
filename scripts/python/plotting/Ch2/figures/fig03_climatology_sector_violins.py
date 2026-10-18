@@ -66,13 +66,7 @@ DYN_DIR_MS = DYN_ROOT / "MS"
 SECTOR_FILE = PROJECT_ROOT_CLUSTER / "data" / "canonical_sectors.nc"
 
 # numeric IDs used internally; labels only used for tick text
-sector_labels = {
-    1: "Amundsen–\nBellingshausen",
-    2: "Weddell",
-    3: "King Haakon VII",
-    4: "East Antarctica",
-    5: "Ross–\nAmundsen",
-}
+sector_labels = {1: "ABS", 2: "WS", 3: "KHV", 4: "EA", 5: "RS"}
 sector_ids = [1, 2, 3, 4, 5]
 
 AUG15_DOY = 227  # Aug 15 (non-leap)
@@ -264,6 +258,22 @@ if fs_stat_clim.shape != sector_mask.shape:
 # ---------------------------------------------------------------------
 # Build + plot violins (run for both masking variants)
 # ---------------------------------------------------------------------
+def sector_offsets(phase_name):
+    """Median paired (dynamic - static) difference per sector over active80 pixels."""
+    if phase_name == "FS":
+        sc, dc, act = fs_stat_clim, fs_dyn_clim, fs_active
+    else:
+        sc, dc, act = ms_stat_clim, ms_dyn_clim, ms_active
+    out = {}
+    for sec in sector_ids:
+        m = (sector_mask == sec) & ocean_mask & np.asarray(act.values, dtype=bool)
+        s_vals = sc.where(m).values.ravel()
+        d_vals = dc.where(m).values.ravel()
+        ok = np.isfinite(s_vals) & np.isfinite(d_vals)
+        out[sec] = float(np.nanmedian(d_vals[ok] - s_vals[ok])) if ok.any() else np.nan
+    return out
+
+
 def build_and_plot_violins(variant: str) -> None:
     if variant == "active80":
         fs_stat_clim_v = fs_stat_clim.where(fs_active)
@@ -327,7 +337,7 @@ def build_and_plot_violins(variant: str) -> None:
     # ---------------------------------------------------------------------
     sns.set(style="whitegrid")
 
-    palette = {"Static": "#2166ac", "Dynamic": "#d97a00"}
+    palette = {"Static": "#44AA99", "Dynamic": "#AA4499"}
     sector_order = sector_ids
 
     fig, axes = plt.subplots(2, 1, figsize=(6.9, 5.0), sharex=True, dpi=300)
@@ -361,13 +371,19 @@ def build_and_plot_violins(variant: str) -> None:
         ax.set_title(titles[phase_name], fontweight="bold", pad=8)
 
         if phase_name == "FS":
-            ax.set_ylabel("Freeze start (DOY)", fontsize=8, fontweight="bold", color="0.35")
-            ax.set_ylim(46, 273)
+            ax.set_ylabel("Freeze Start (day of year)", fontsize=8, fontweight="bold", color="0.35")
+            ax.set_ylim(46, 295)
         else:
-            ax.set_ylabel("Melt start (DSA)", fontsize=8, fontweight="bold", color="0.35")
-            ax.set_ylim(0, 210)
+            ax.set_ylabel("Melt Start (days since 15 Aug)", fontsize=8, fontweight="bold", color="0.35")
+            ax.set_ylim(0, 232)
 
         ax.tick_params(axis="x", rotation=0)
+        import matplotlib.transforms as mtransforms
+        _tr = mtransforms.blended_transform_factory(ax.transData, ax.transAxes)
+        _offs = sector_offsets(phase_name)
+        for _i, _sec in enumerate(sector_order):
+            ax.text(_i, 0.965, f"\u0394 {_offs[_sec]:+.1f} d", transform=_tr, ha="center",
+                    va="top", fontsize=7, fontweight="bold", color="0.25")
 
     # Legend once, outside
     handles, labels = axes[0].get_legend_handles_labels()
@@ -386,7 +402,7 @@ def build_and_plot_violins(variant: str) -> None:
         _a.tick_params(axis="x", labelsize=7)
         _a.tick_params(axis="y", labelsize=7)
     for _t in axes[-1].get_xticklabels():
-        _t.set_rotation(20); _t.set_ha("right")
+        _t.set_rotation(0); _t.set_ha("center")
     fig.subplots_adjust(right=0.82)
 
     # ---------------------------------------------------------------------
@@ -395,7 +411,7 @@ def build_and_plot_violins(variant: str) -> None:
     out_path = get_fig_path(
         PROJECT_ROOT_CLUSTER,
         subfolder="",
-        fig_name=f"Fig06_FS_MS_climatology_static_vs_dynamic_violins_{variant}.png",
+        fig_name=f"Fig03_sector_distributions_{variant}.png",
     )
 
     save_and_upload(

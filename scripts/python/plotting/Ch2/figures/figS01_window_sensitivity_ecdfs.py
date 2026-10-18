@@ -53,6 +53,10 @@ INPUT_ROOT = PROJECT_ROOT_CLUSTER / "data" / f"{SENSOR}_phase" / "static"
 # ---------------------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------------------
+
+# Paul Tol "bright" palette (colour-blind safe)
+_TOL_BRIGHT = ["#4477AA", "#EE6677", "#228833", "#CCBB44"]
+
 def _year_from_fname(path: Path) -> int | None:
     try:
         return int(path.name.split("_")[1].split(".")[0])
@@ -148,10 +152,10 @@ def main():
 
     fig, ax = plt.subplots(figsize=(4.2, 3.2), dpi=300)
 
-    sns.ecdfplot(x=fs_3v5, ax=ax, label="FS 3 vs 5 days")
-    sns.ecdfplot(x=fs_7v5, ax=ax, label="FS 7 vs 5 days")
-    sns.ecdfplot(x=ms_3v5, ax=ax, label="MS 3 vs 5 days")
-    sns.ecdfplot(x=ms_7v5, ax=ax, label="MS 7 vs 5 days")
+    sns.ecdfplot(x=fs_3v5, ax=ax, color=_TOL_BRIGHT[0], label="FS 3 vs 5 days")
+    sns.ecdfplot(x=fs_7v5, ax=ax, color=_TOL_BRIGHT[1], label="FS 7 vs 5 days")
+    sns.ecdfplot(x=ms_3v5, ax=ax, color=_TOL_BRIGHT[2], label="MS 3 vs 5 days")
+    sns.ecdfplot(x=ms_7v5, ax=ax, color=_TOL_BRIGHT[3], label="MS 7 vs 5 days")
 
     ax.set_xlim(0, CLIP)
     ax.set_xlabel("|Δ date| (days)", fontweight="bold", color="0.35")

@@ -27,10 +27,10 @@ SWEEP     = f"{ROOT}/data/SMMR_phase_sweepv3/dynamic"
 OUT       = f"{ROOT}/results/Ch2_Figures/FigS07_dynamic_parameter_sweep.png"
 
 RUNS = [
-    ("k5_q60_s02", "Percentiles 0.60 / 0.40", "#4c72b0"),
-    ("k5_q80_s02", "Percentiles 0.80 / 0.20", "#dd8452"),
-    ("k5_q70_s01", "Rate 1% per day",         "#55a868"),
-    ("k5_q70_s04", "Rate 4% per day",         "#c44e52"),
+    ("k5_q60_s02", "Percentiles 0.60 / 0.40", "#4477AA"),
+    ("k5_q80_s02", "Percentiles 0.80 / 0.20", "#EE6677"),
+    ("k5_q70_s01", "Rate 1% per day",         "#228833"),
+    ("k5_q70_s04", "Rate 4% per day",         "#CCBB44"),
 ]
 XMAX = 30
 # =====================================================================
@@ -99,13 +99,13 @@ def main():
     axes[0].set_ylabel("Cumulative fraction of detections", fontsize=8,
                        fontweight="bold", color="0.35")
     for ax, lab in zip(axes, ["a", "b"]):
-        ax.text(-0.14, 1.06, f"({lab})", transform=ax.transAxes,
-                ha="left", va="bottom", fontsize=12, fontweight="bold")
+        pass  # panel letters are added in the S1 composite
     axes[1].legend(frameon=False, fontsize=6.5, loc="lower right",
                    handlelength=1.6, labelspacing=0.4)
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    fig.subplots_adjust(wspace=0.35)
     fig.savefig(OUT, dpi=300, bbox_inches="tight")
     print(f"\n  saved -> {OUT}")
     os.system(f"rclone copy {OUT} gdrive:sea-ice-phase/results/Ch2_Figures")

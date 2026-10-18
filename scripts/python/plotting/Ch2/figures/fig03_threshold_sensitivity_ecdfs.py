@@ -56,6 +56,10 @@ INPUT_ROOT = PROJECT_ROOT_CLUSTER / "data" / f"{SENSOR}_phase" / "static"
 # ---------------------------------------------------------------------
 # HELPERS: loading + wrapped differences
 # ---------------------------------------------------------------------
+
+# Paul Tol "bright" palette (colour-blind safe)
+_TOL_BRIGHT = ["#4477AA", "#EE6677", "#228833", "#CCBB44"]
+
 def _year_from_fname(path: Path) -> int | None:
     """Extract year from 'FS_1979.nc' etc."""
     name = path.name
@@ -185,12 +189,12 @@ def main():
     fig, ax = plt.subplots(figsize=(4.2, 3.2), dpi=300)
 
     # FS curves
-    sns.ecdfplot(x=fs_low_vals,  ax=ax, label=f"FS {THR_LOW} vs {THR_REF}%")
-    sns.ecdfplot(x=fs_high_vals, ax=ax, label=f"FS {THR_HIGH} vs {THR_REF}%")
+    sns.ecdfplot(x=fs_low_vals,  ax=ax, color=_TOL_BRIGHT[0], label=f"FS {THR_LOW} vs {THR_REF}%")
+    sns.ecdfplot(x=fs_high_vals, ax=ax, color=_TOL_BRIGHT[1], label=f"FS {THR_HIGH} vs {THR_REF}%")
 
     # MS curves
-    sns.ecdfplot(x=ms_low_vals,  ax=ax, label=f"MS {THR_LOW} vs {THR_REF}%")
-    sns.ecdfplot(x=ms_high_vals, ax=ax, label=f"MS {THR_HIGH} vs {THR_REF}%")
+    sns.ecdfplot(x=ms_low_vals,  ax=ax, color=_TOL_BRIGHT[2], label=f"MS {THR_LOW} vs {THR_REF}%")
+    sns.ecdfplot(x=ms_high_vals, ax=ax, color=_TOL_BRIGHT[3], label=f"MS {THR_HIGH} vs {THR_REF}%")
 
     ax.set_xlim(0, clip)
     ax.set_xlabel("|Δ date| (days)", fontweight="bold", color="0.35")
