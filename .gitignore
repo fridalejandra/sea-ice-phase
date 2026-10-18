@@ -46,3 +46,4 @@ scripts/R/observations/
 venv/
 *.bak
 *.bak2
+archive_data_old/
