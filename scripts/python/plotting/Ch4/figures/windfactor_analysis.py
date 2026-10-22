@@ -157,7 +157,7 @@ def fig07(t):
          Line2D([0], [0], marker="o", ls="none", color="#666", ms=fs.ms(0.7), label=f"{POST0}–{POST1}"),
          Line2D([0], [0], marker="o", ls="none", color="#666", ms=fs.ms(0.7), alpha=0.45,
                 label="faded: post − pre CI spans 0")]
-    axes[-1].legend(handles=h, loc="lower right")
+    fig.legend(handles=h, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.06), frameon=False)
     for ax in axes:
         ax.tick_params(axis="x", labelsize=plt.rcParams["xtick.labelsize"] * 0.9)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))

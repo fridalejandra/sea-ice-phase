@@ -243,7 +243,7 @@ def fig01():
     b["ratio"] = (pre + b.beta_shift) / pre
     lo, hi = (pre + b.ci_low) / pre, (pre + b.ci_high) / pre
     b["lo"], b["hi"] = np.minimum(lo, hi), np.maximum(lo, hi)
-    qcol = next((c for c in b.columns if c.lower() in ("q", "q_fdr", "qval", "q_value", "fdr_q")), None)
+    qcol = next((c for c in b.columns if c.lower() in ("q", "q_fdr", "qval", "q_value", "fdr_q", "p_value_fdr")), None)
     seasons = ["DJF", "MAM", "JJA", "SON"]
     b = b.set_index(["sector", "season"])
 
@@ -386,9 +386,9 @@ def fig04():
     fig, ax = plt.subplots(figsize=fs.size(1.0, 0.42 if fs.mode() == "manuscript" else 0.48))
     ax.axvspan(POST0 - 0.5, POST1 + 0.5, color=fs.BAND, zorder=0, lw=0)
     ax.axhline(100, color=fs.INK, lw=0.6, zorder=1)
-    c = fs.SECTOR_COLORS["ABS"]
-    yrs, wind, nsidc = normalised_series(joined("NSIDC-0116"), "ABS", "SON")
-    yrs_o, _, osi = normalised_series(joined("OSI-455"), "ABS", "SON")
+    c = fs.SECTOR_COLORS["WS"]
+    yrs, wind, nsidc = normalised_series(joined("NSIDC-0116"), "WS", "SON")
+    yrs_o, _, osi = normalised_series(joined("OSI-455"), "WS", "SON")
     ax.plot(yrs, wind, color=fs.GREY, lw=fs.lw(0.8), label="ERA5 wind speed", zorder=2)
     ax.plot(yrs, nsidc, color=c, lw=fs.lw(1.0), label="Drift speed, NSIDC-0116", zorder=3)
     ax.plot(yrs_o, osi, color=c, lw=fs.lw(0.9), ls=(0, (1.5, 1.5)), label="Drift speed, OSI-455", zorder=3)
@@ -402,9 +402,9 @@ def fig04():
             fontsize=plt.rcParams["legend.fontsize"])
     ax.set_ylabel(f"% of {BASE0}–{BASE1} mean")
     ax.set_xlabel("Year")
-    ax.set_title("Amundsen–Bellingshausen, September–October", loc="left")
+    ax.set_title("Weddell, September–October", loc="left")
     ax.set_xlim(yrs.min() - 0.5, yrs.max() + 0.5)
-    fs.save(fig, "fig04_ab_timeseries")
+    fs.save(fig, "fig04_weddell_timeseries")
 
 
 def fig05():

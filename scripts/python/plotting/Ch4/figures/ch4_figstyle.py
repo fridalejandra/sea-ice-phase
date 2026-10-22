@@ -27,8 +27,8 @@ FIG_ROOT = f"{ROOT}/results/ch4/figures"
 USE_CH3_PALETTE = False
 
 # sector id (as in the sector-daily CSVs) -> short code, long name
-SECTOR_ID = {1: "WS", 2: "ABS", 3: "RA", 4: "EA", 5: "KH"}
-SECTOR_NAME = {"WS": "Weddell", "ABS": "Amundsen–Bellingshausen", "RA": "Ross",
+SECTOR_ID = {1: "ABS", 2: "WS", 3: "KH", 4: "EA", 5: "RA"}   # ids as in canonical_sectors.nc (checked 2026-10-21)
+SECTOR_NAME = {"WS": "Weddell", "ABS": "Amundsen–Bellingshausen", "RA": "Ross–Amundsen",
                "EA": "East Antarctica", "KH": "King Haakon VII"}
 SECTOR_ORDER = ["WS", "KH", "EA", "RA", "ABS"]          # clockwise from Greenwich
 _OKABE = {"WS": "#E69F00", "ABS": "#56B4E9", "RA": "#009E73", "EA": "#D55E00", "KH": "#CC79A7"}
