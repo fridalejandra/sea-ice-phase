@@ -46,3 +46,6 @@ scripts/R/observations/
 venv/
 .RData
 *.bak
+*.bak
+*.bak_*
+*OBSOLETE*
