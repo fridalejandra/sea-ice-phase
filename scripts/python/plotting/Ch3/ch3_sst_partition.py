@@ -13,20 +13,15 @@
 #   results/ch3/tables/ch3_sst_partition_full.csv       # (sector, component, season, r_full)
 #   results/ch3/tables/ch3_sst_partition_prepost.csv   # (sector, component, season, r_pre, r_post, delta_z, p)
 #   results/ch3/tables/ch3_sst_vs_atmos.csv            # (sector, component, best_SST_season, r_SST, atmos_mode, r_atmos)
-#   results/ch3/figures/manuscript/fig_ch3_sst_partition.png
+#   (figure: Ch3/figures/ch3_fig06_sst_components.py reads ch3_sst_partition_full.csv)
 
-import os, sys, urllib.request, gzip, shutil
-import numpy as np, pandas as pd, xarray as xr, matplotlib
-matplotlib.use("Agg"); import matplotlib.pyplot as plt
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import ch4_figstyle as fs
-
-ROOT = "/user/geog/falejandraperez/sea-ice-phase"
-ANNUAL = f"{ROOT}/data/ch3/annual_params.csv"
-LOC = f"{ROOT}/data/ocean/HadISST_sst.nc"
-OUT_TAB = f"{ROOT}/results/ch3/tables"
-OUT_FIG = f"{ROOT}/results/ch3/figures/manuscript"
-os.makedirs(OUT_TAB, exist_ok=True); os.makedirs(OUT_FIG, exist_ok=True)
+import os, sys
+import numpy as np, pandas as pd, xarray as xr
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "figures"))     # ch3_config lives in Ch3/figures/
+from ch3_config import ROOT, ANNUAL_CSV as ANNUAL, TABLES_DIR as OUT_TAB
+LOC = os.path.join(ROOT, "data", "ocean", "HadISST_sst.nc")
+os.makedirs(OUT_TAB, exist_ok=True)
 PRE, POST = (1979, 2015), (2016, 2024)
 LAT = (-65, -55)
 SECTORS = {"WS":(-70,-14,"SIE_Weddell"), "KH":(-14,71,"SIE_King_Haakon"), "EA":(71,162,"SIE_East_Antarctica"), "RA":(162,-110,"SIE_Ross"), "ABS":(-110,-70,"SIE_Amundsen_Bellingshausen")}   # canonical_sectors.nc bounds
@@ -83,7 +78,6 @@ def fisher_z(r1, n1, r2, n2):
 
 
 def main():
-    fs.set_mode("manuscript")
     ds = xr.open_dataset(LOC)
     sst_m = sst_sector_month(ds)
     a = pd.read_csv(ANNUAL)
@@ -149,26 +143,6 @@ def main():
     print("\n=== 3.  Strongest SST season vs the atmospheric mode from Table 3.3 ===")
     print(vs.to_string(index=False))
 
-    # --- figure: heat map of r by sector x season, one panel per component
-    fig, axes = plt.subplots(1, 3, figsize=fs.size(1.0, 0.40), sharey=True)
-    secs = list(SECTORS); seas = list(SEASONS)
-    for ax, (q, qlab) in zip(axes, QUANTS):
-        M = np.array([[full.set_index(["sector","component","season"]).loc[(c,qlab,s),"r"]
-                       for s in seas] for c in secs])
-        im = ax.imshow(M, cmap="RdBu_r", vmin=-0.8, vmax=0.8, aspect="auto")
-        ax.set_title(qlab, loc="left")
-        ax.set_xticks(range(len(seas))); ax.set_xticklabels(seas, rotation=45, ha="right")
-        ax.set_yticks(range(len(secs))); ax.set_yticklabels(secs)
-        for i in range(len(secs)):
-            for j in range(len(seas)):
-                v = M[i, j]
-                if np.isfinite(v):
-                    ax.text(j, i, f"{v:+.2f}", ha="center", va="center",
-                            fontsize=6, color="white" if abs(v) > 0.5 else fs.INK)
-    cb = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.6, pad=0.02)
-    cb.set_label("detrended r")
-    fs.FIG_ROOT = os.path.dirname(OUT_FIG); fs.save(fig, "fig_ch3_sst_partition")
     print(f"\nwrote tables to {OUT_TAB}")
-    print(f"wrote figure {OUT_FIG}/fig_ch3_sst_partition.png")
 
 if __name__ == "__main__": main()
