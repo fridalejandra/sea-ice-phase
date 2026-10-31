@@ -2,12 +2,12 @@
 # make_fig_mean_amp_coupling.py -- Fig. 3.x: annual mean vs amplitude, before and after 2016.
 # One panel per sector + circumpolar total. Each period is detrended within itself (as in the
 # correlations of Sect. 3.3.2), so each cloud is centred on zero and the slope/r is what the text reports.
-# Output: results/ch3/figures/manuscript/fig_mean_amp_coupling.{png,pdf}
+# Output: results/ch3/figures/fig_mean_amp_coupling.{png,pdf}
 import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
 
-ROOT = os.environ.get("SEAICE_ROOT", "/")
+from ch3_config import ROOT
 ANNUAL = f"{ROOT}/data/ch3/annual_params.csv"
-OUT = f"{ROOT}/results/ch3/figures/manuscript"; os.makedirs(OUT, exist_ok=True)
+OUT = f"{ROOT}/results/ch3/figures"; os.makedirs(OUT, exist_ok=True)
 SEC = [("Weddell", "SIE_Weddell"), ("King Haakon VII", "SIE_King_Haakon"),
        ("East Antarctica", "SIE_East_Antarctica"), ("Ross", "SIE_Ross"),
        ("Amundsen–Bellingshausen", "SIE_Amundsen_Bellingshausen"), ("Circumpolar", "SIE_circumpolar")]
